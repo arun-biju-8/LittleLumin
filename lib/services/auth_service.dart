@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter/material.dart';
+import '../models/user_model.dart';
 
 class AuthService extends ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -14,6 +15,7 @@ class AuthService extends ChangeNotifier {
 
   User? get user => _user;
   bool get isLoading => _isLoading;
+  bool get isLoggedIn => _user != null;
 
   AuthService() {
     _auth.authStateChanges().listen((User? user) {
@@ -32,8 +34,10 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      UserCredential userCredential = await _auth
-          .createUserWithEmailAndPassword(email: email, password: password);
+      UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
 
       await _firestore.collection('users').doc(userCredential.user!.uid).set({
         'uid': userCredential.user!.uid,
@@ -93,65 +97,27 @@ class AuthService extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
 
-    await _googleSignIn.signOut();
-
     try {
-      //////////////////////////////
-      print("1. Starting Google Sign-In");
-
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      print("2. Google account selected");
+      if (googleUser == null) {
+        _isLoading = false;
+        notifyListeners();
+        return 'Google sign-in cancelled.';
+      }
 
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser!.authentication;
-      print("3. Google authentication received");
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
 
-      final credential = GoogleAuthProvider.credential(
+      final OAuthCredential credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
-      print("4. Firebase credential created");
-
-      final userCredential = await _auth.signInWithCredential(credential);
-
-      print("5. Firebase sign-in successful");
+      UserCredential userCredential = await _auth.signInWithCredential(credential);
 
       final docSnapshot = await _firestore
           .collection('users')
           .doc(userCredential.user!.uid)
           .get();
-
-      print("6. Firestore read successful");
-      // final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      // if (googleUser == null) {
-      //   _isLoading = false;
-      //   notifyListeners();
-      //   return 'Google sign-in cancelled.';
-      // }
-
-      // final GoogleSignInAuthentication googleAuth =
-      //     await googleUser.authentication;
-
-      // final OAuthCredential credential = GoogleAuthProvider.credential(
-      //   accessToken: googleAuth.accessToken,
-      //   idToken: googleAuth.idToken,
-      // );
-
-      // UserCredential userCredential = await _auth.signInWithCredential(
-      //   credential,
-      // );
-
-      // print("Signed in");
-
-      // final docSnapshot = await _firestore
-      //     .collection('users')
-      //     .doc(userCredential.user!.uid)
-      //     .get();
-
-      // print("Firestore read success");
-
-      /////////////////////////////////
 
       if (!docSnapshot.exists) {
         await _firestore.collection('users').doc(userCredential.user!.uid).set({
@@ -173,15 +139,10 @@ class AuthService extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       return _handleAuthError(e);
-    } catch (e, stack) {
+    } catch (e) {
       _isLoading = false;
       notifyListeners();
-
-      print("=================================");
-      print(e);
-      print(stack);
-
-      return e.toString();
+      return 'Something went wrong. Please try again.';
     }
   }
 
@@ -191,6 +152,16 @@ class AuthService extends ChangeNotifier {
     await _auth.signOut();
     _user = null;
     notifyListeners();
+  }
+
+  // ✅ Get User Role
+  Future<String?> getUserRole(String uid) async {
+    try {
+      DocumentSnapshot doc = await _firestore.collection('users').doc(uid).get();
+      return doc['userType'] as String?;
+    } catch (e) {
+      return null;
+    }
   }
 
   // ✅ Handle Auth Errors

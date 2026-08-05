@@ -1,8 +1,8 @@
 // lib/screens/llg_dashboard.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../utils/constants.dart';
-import 'login_page.dart';
+import '../../utils/constants.dart';
+import '../auth/login_page.dart';
 
 class LLGDashboard extends StatelessWidget {
   const LLGDashboard({super.key});

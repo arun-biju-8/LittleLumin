@@ -1,8 +1,8 @@
 // lib/screens/landing_page.dart
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'signup_page.dart';
-import 'login_page.dart';
+import 'auth/signup_page.dart';
+import 'auth/login_page.dart';
 
 class LandingPage extends StatelessWidget {
   const LandingPage({super.key});

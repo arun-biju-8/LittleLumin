@@ -52,3 +52,10 @@ web/
 # ============================================
 .DS_Store
 Thumbs.db
+
+
+# Firebase config files (contain keys)
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+
+flutter-app\lib\firebase_options.dart

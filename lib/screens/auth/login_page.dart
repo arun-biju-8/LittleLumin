@@ -3,12 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import '../services/auth_service.dart';
-import '../utils/constants.dart';
-import 'parent_dashboard.dart';
+import '../../utils/constants.dart';
+import '../parent/parent_dashboard.dart';
 import 'signup_page.dart';
-import 'admin/admin_dashboard.dart';
-import 'llg_dashboard.dart';
+import '../admin/admin_dashboard.dart';
+import '../llg/llg_dashboard.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 class LoginPage extends StatefulWidget {
@@ -24,12 +23,13 @@ class _LoginPageState extends State<LoginPage> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _isEmailLoading = false;
+  bool _isGoogleLoading = false;
 
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _isLoading = true);
-
+setState(() => _isEmailLoading = true);
     try {
       // ✅ 1. Sign in with Firebase Auth
       UserCredential userCredential = await FirebaseAuth.instance
@@ -98,87 +98,88 @@ class _LoginPageState extends State<LoginPage> {
         SnackBar(content: Text(message), backgroundColor: Colors.red),
       );
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() => _isEmailLoading = false);
     }
   }
 
   // ✅ Google Sign-In with Role-Based Redirection
   // ✅ Google Sign-In with Role-Based Redirection
-Future<void> _signInWithGoogle() async {
-  setState(() => _isLoading = true);
 
-  String userType = ''; // ✅ Declare here
+  Future<void> _signInWithGoogle() async {
+    setState(() => _isGoogleLoading = true);
+    String userType = ''; // ✅ Declare here
 
-  try {
-    final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
-    if (googleUser == null) {
-      setState(() => _isLoading = false);
-      return;
-    }
+    try {
+      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) {
+        setState(() => _isGoogleLoading = false);
+        return;
+      }
 
-    final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
 
-    final OAuthCredential credential = GoogleAuthProvider.credential(
-      accessToken: googleAuth.accessToken,
-      idToken: googleAuth.idToken,
-    );
+      final OAuthCredential credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
 
-    UserCredential userCredential = await FirebaseAuth.instance
-        .signInWithCredential(credential);
+      UserCredential userCredential = await FirebaseAuth.instance
+          .signInWithCredential(credential);
 
-    DocumentSnapshot doc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(userCredential.user!.uid)
-        .get();
-
-    if (!doc.exists) {
-      await FirebaseFirestore.instance
+      DocumentSnapshot doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(userCredential.user!.uid)
-          .set({
-            'uid': userCredential.user!.uid,
-            'name': googleUser.displayName ?? '',
-            'email': googleUser.email,
-            'photoUrl': googleUser.photoUrl ?? '',
-            'userType': 'parent',
-            'status': 'active',
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-      userType = 'parent';
-    } else {
-      userType = doc['userType'] ?? 'parent';
-    }
+          .get();
 
-    // ✅ Redirect based on role
-    if (mounted) {
-      if (userType == 'admin') {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const AdminDashboard()),
-        );
-      } else if (userType == 'llg') {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const LLGDashboard()),
-        );
+      if (!doc.exists) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userCredential.user!.uid)
+            .set({
+              'uid': userCredential.user!.uid,
+              'name': googleUser.displayName ?? '',
+              'email': googleUser.email,
+              'photoUrl': googleUser.photoUrl ?? '',
+              'userType': 'parent',
+              'status': 'active',
+              'createdAt': FieldValue.serverTimestamp(),
+            });
+        userType = 'parent';
       } else {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const ParentDashboard()),
-        );
+        userType = doc['userType'] ?? 'parent';
       }
+
+      // ✅ Redirect based on role
+      if (mounted) {
+        if (userType == 'admin') {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const AdminDashboard()),
+          );
+        } else if (userType == 'llg') {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const LLGDashboard()),
+          );
+        } else {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const ParentDashboard()),
+          );
+        }
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Google Sign-In failed. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isGoogleLoading = false);
     }
-  } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Google Sign-In failed. Please try again.'),
-        backgroundColor: Colors.red,
-      ),
-    );
-  } finally {
-    if (mounted) setState(() => _isLoading = false);
   }
-}
 
   @override
   Widget build(BuildContext context) {
@@ -202,10 +203,7 @@ Future<void> _signInWithGoogle() async {
               children: [
                 SizedBox(height: 20),
 
-                Text(
-                  'Welcome Back!',
-                  style: AppTextStyles.heading1,
-                ),
+                Text('Welcome Back!', style: AppTextStyles.heading1),
                 SizedBox(height: 8),
                 Text(
                   'Login to continue your journey',
@@ -216,7 +214,9 @@ Future<void> _signInWithGoogle() async {
                 // Email
                 Text(
                   'Email',
-                  style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
+                  style: AppTextStyles.body.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
                 SizedBox(height: 6),
                 TextFormField(
@@ -225,14 +225,20 @@ Future<void> _signInWithGoogle() async {
                   decoration: InputDecoration(
                     hintText: 'Enter your email',
                     hintStyle: TextStyle(color: Colors.grey[400]),
-                    prefixIcon: Icon(Icons.email_outlined, color: AppColors.primary),
+                    prefixIcon: Icon(
+                      Icons.email_outlined,
+                      color: AppColors.primary,
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide(color: Colors.grey[300]!),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: AppColors.primary, width: 2),
+                      borderSide: BorderSide(
+                        color: AppColors.primary,
+                        width: 2,
+                      ),
                     ),
                   ),
                   validator: (value) {
@@ -247,7 +253,9 @@ Future<void> _signInWithGoogle() async {
                 // Password
                 Text(
                   'Password',
-                  style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
+                  style: AppTextStyles.body.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
                 SizedBox(height: 6),
                 TextFormField(
@@ -256,10 +264,15 @@ Future<void> _signInWithGoogle() async {
                   decoration: InputDecoration(
                     hintText: 'Enter your password',
                     hintStyle: TextStyle(color: Colors.grey[400]),
-                    prefixIcon: Icon(Icons.lock_outline, color: AppColors.primary),
+                    prefixIcon: Icon(
+                      Icons.lock_outline,
+                      color: AppColors.primary,
+                    ),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                        _obscurePassword
+                            ? Icons.visibility_off
+                            : Icons.visibility,
                         color: Colors.grey[400],
                       ),
                       onPressed: () {
@@ -274,7 +287,10 @@ Future<void> _signInWithGoogle() async {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: AppColors.primary, width: 2),
+                      borderSide: BorderSide(
+                        color: AppColors.primary,
+                        width: 2,
+                      ),
                     ),
                   ),
                   validator: (value) {
@@ -295,7 +311,9 @@ Future<void> _signInWithGoogle() async {
                     },
                     child: Text(
                       'Forgot Password?',
-                      style: AppTextStyles.small.copyWith(color: AppColors.primary),
+                      style: AppTextStyles.small.copyWith(
+                        color: AppColors.primary,
+                      ),
                     ),
                   ),
                 ),
@@ -306,14 +324,14 @@ Future<void> _signInWithGoogle() async {
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton(
-                    onPressed: _isLoading ? null : _login,
+                    onPressed: _isEmailLoading ? null : _login,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: _isLoading
+                    child: _isEmailLoading
                         ? SizedBox(
                             height: 20,
                             width: 20,
@@ -322,10 +340,7 @@ Future<void> _signInWithGoogle() async {
                               strokeWidth: 2,
                             ),
                           )
-                        : Text(
-                            'Login',
-                            style: AppTextStyles.button,
-                          ),
+                        : Text('Login', style: AppTextStyles.button),
                   ),
                 ),
                 SizedBox(height: 16),
@@ -335,7 +350,7 @@ Future<void> _signInWithGoogle() async {
                   width: double.infinity,
                   height: 50,
                   child: OutlinedButton.icon(
-                    onPressed: _signInWithGoogle,
+                    onPressed: _isGoogleLoading ? null : _signInWithGoogle,
                     icon: FaIcon(
                       FontAwesomeIcons.google,
                       color: Color(0xFFDB4437),
@@ -350,7 +365,9 @@ Future<void> _signInWithGoogle() async {
                     style: OutlinedButton.styleFrom(
                       side: BorderSide(color: AppColors.border),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppBorderRadius.medium),
+                        borderRadius: BorderRadius.circular(
+                          AppBorderRadius.medium,
+                        ),
                       ),
                     ),
                   ),
