@@ -1,0 +1,31 @@
+# Flutter
+.dart_tool/
+.build/
+build/
+pubspec.lock
+*.iml
+*.lock
+*.log
+*.pid
+*.tmp
+
+# Android
+android/app/.gradle/
+android/local.properties
+
+# iOS
+ios/Pods/
+ios/.symlinks/
+
+# Web
+web/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
