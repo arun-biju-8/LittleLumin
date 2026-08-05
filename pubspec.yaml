@@ -16,6 +16,7 @@ dependencies:
   firebase_core: ^4.13.0
   firebase_auth: ^6.5.7
   cloud_firestore: ^6.8.0
+  flutter_dotenv: ^5.1.0
 
   # State Management
   provider: ^6.1.2
@@ -33,12 +34,14 @@ dependencies:
 
 
 
+
 flutter:
   uses-material-design: true
 
   assets:
     - assets/logo/logo.png
     - assets/images/
+    - .env
 
 dev_dependencies:
   flutter_test:
