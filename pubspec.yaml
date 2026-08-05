@@ -1,0 +1,64 @@
+name: littlelumin
+description: Growing Child By Growing Parents
+
+publish_to: 'none'
+
+version: 1.0.0+1
+
+# environment section
+environment:
+  sdk: ^3.12.0
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Firebase
+  firebase_core: ^4.13.0
+  firebase_auth: ^6.5.7
+  cloud_firestore: ^6.8.0
+
+  # State Management
+  provider: ^6.1.2
+
+  # UI
+  google_fonts: ^8.2.1
+
+  # Utilities
+  shared_preferences: ^2.5.2
+
+  #google sign in
+  google_sign_in: ^6.2.0
+
+  font_awesome_flutter: ^11.0.0
+
+
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/logo/logo.png
+    - assets/images/
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_launcher_icons: ^0.14.4
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/ic_launcher.png"
+  min_sdk_android: 21
+  web:
+    generate: true
+    image_path: "assets/images/ic_launcher.png"
+  windows:
+    generate: true
+    image_path: "assets/images/ic_launcher.png"
+  macos:
+    generate: true
+    image_path: "assets/images/ic_launcher.png"
+
+
