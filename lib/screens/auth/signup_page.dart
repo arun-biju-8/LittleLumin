@@ -4,10 +4,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import '../services/auth_service.dart';
-import '../utils/constants.dart';
-import 'login_page.dart';
-import 'parent_dashboard.dart';
+import '../../services/auth_service.dart';
+import '../../utils/constants.dart';
+import '../auth/login_page.dart';
+import '../parent/parent_dashboard.dart';
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});

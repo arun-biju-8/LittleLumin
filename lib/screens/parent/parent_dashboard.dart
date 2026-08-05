@@ -1,10 +1,16 @@
-// lib/screens/parent_dashboard.dart
+// lib/screens/parent/parent_dashboard.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../utils/constants.dart';
-import 'login_page.dart';
-import 'activity_view.dart';
+import 'package:provider/provider.dart';
+import '../../utils/constants.dart';
+import '../../services/child_service.dart';
+import '../../models/child_model.dart';
+import '../auth/login_page.dart';
+import '../activity_view.dart';
+import 'add_child_page.dart';
+import 'edit_child_page.dart';
+import 'profile_page.dart';
 
 class ParentDashboard extends StatefulWidget {
   const ParentDashboard({super.key});
@@ -17,6 +23,7 @@ class _ParentDashboardState extends State<ParentDashboard> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   bool _isLoading = true;
+  bool _isDeleting = false;
   Map<String, dynamic>? _childData;
   Map<String, dynamic>? _skillData;
   String _childName = '';
@@ -25,6 +32,7 @@ class _ParentDashboardState extends State<ParentDashboard> {
   int _streak = 0;
   double _overallProgress = 0.0;
   Map<String, double> _skills = {};
+  int _selectedIndex = 0;
 
   @override
   void initState() {
@@ -42,7 +50,6 @@ class _ParentDashboardState extends State<ParentDashboard> {
         return;
       }
 
-      // Fetch child data
       final QuerySnapshot childSnapshot = await _firestore
           .collection('children')
           .where('parentId', isEqualTo: user.uid)
@@ -55,7 +62,6 @@ class _ParentDashboardState extends State<ParentDashboard> {
         _childName = _childData?['name'] ?? 'Child';
         _childAge = _childData?['age'] ?? 0;
 
-        // Fetch skill profile
         final skillDoc = await _firestore
             .collection('skillProfiles')
             .doc(childDoc.id)
@@ -74,7 +80,6 @@ class _ParentDashboardState extends State<ParentDashboard> {
           _overallProgress = _skills.values.reduce((a, b) => a + b) / _skills.length;
         }
 
-        // Fetch rewards
         final rewardsDoc = await _firestore
             .collection('rewards')
             .doc(childDoc.id)
@@ -97,6 +102,81 @@ class _ParentDashboardState extends State<ParentDashboard> {
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (_) => const LoginPage()),
+    );
+  }
+
+  void _confirmDelete(ChildModel child) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text(
+          'Delete Child Profile?',
+          style: TextStyle(color: Colors.red),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to delete ${child.name}\'s profile?',
+              style: AppTextStyles.body,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'This will permanently delete:',
+              style: AppTextStyles.small.copyWith(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text('• All activities for ${child.name}', style: AppTextStyles.small),
+            Text('• All progress data', style: AppTextStyles.small),
+            Text('• All feedback and history', style: AppTextStyles.small),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'This action cannot be undone.',
+              style: AppTextStyles.small.copyWith(
+                color: Colors.red,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              setState(() => _isDeleting = true);
+
+              final error = await ChildService().deleteChild(child.childId);
+
+              setState(() => _isDeleting = false);
+
+              if (error == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('✅ Child profile deleted successfully'),
+                    backgroundColor: AppColors.success,
+                  ),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Error: $error'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -148,6 +228,175 @@ class _ParentDashboardState extends State<ParentDashboard> {
                   ),
                   const SizedBox(height: AppSpacing.lg),
 
+                  // ✅ Children List with Delete Option
+                  StreamBuilder<List<ChildModel>>(
+                    stream: ChildService().getChildren(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (snapshot.hasError) {
+                        return Center(child: Text('Error: ${snapshot.error}'));
+                      }
+                      final children = snapshot.data ?? [];
+                      if (children.isEmpty) {
+                        return Center(
+                          child: Column(
+                            children: [
+                              const SizedBox(height: AppSpacing.lg),
+                              Icon(Icons.child_care, size: 80, color: Colors.grey[300]),
+                              const SizedBox(height: AppSpacing.md),
+                              Text(
+                                'No child added yet',
+                                style: AppTextStyles.bodyLight,
+                              ),
+                              const SizedBox(height: AppSpacing.md),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (_) => const AddChildPage()),
+                                  );
+                                },
+                                icon: const Icon(Icons.add),
+                                label: const Text('Add Child'),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      return ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: children.length,
+                        itemBuilder: (context, index) {
+                          final child = children[index];
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+                            child: ListTile(
+                              leading: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  SizedBox(
+                                    width: 50,
+                                    height: 50,
+                                    child: CircularProgressIndicator(
+                                      value: child.profileCompletion / 100,
+                                      strokeWidth: 4,
+                                      backgroundColor: Colors.grey[200],
+                                      color: child.profileCompletion >= 80
+                                          ? AppColors.success
+                                          : child.profileCompletion >= 50
+                                              ? AppColors.primary
+                                              : AppColors.warning,
+                                    ),
+                                  ),
+                                  CircleAvatar(
+                                    radius: 18,
+                                    backgroundColor: AppColors.primary.withOpacity(0.1),
+                                    child: Text(
+                                      child.name[0].toUpperCase(),
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              title: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      child.name,
+                                      style: AppTextStyles.body
+                                          .copyWith(fontWeight: FontWeight.w600),
+                                    ),
+                                  ),
+                                  if (child.isFlagged)
+                                    const Icon(Icons.flag, color: Colors.red, size: 16),
+                                ],
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('${child.age} years • ${child.gender}'),
+                                  if (child.profileCompletion < 100)
+                                    Text(
+                                      '${child.profileCompletion}% profile complete',
+                                      style: AppTextStyles.small.copyWith(
+                                        color: child.profileCompletion >= 80
+                                            ? AppColors.success
+                                            : AppColors.warning,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              trailing: PopupMenuButton(
+                                icon: Icon(Icons.more_vert, color: Colors.grey[400]),
+                                onSelected: (value) async {
+                                  if (value == 'edit') {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => EditChildPage(child: child),
+                                      ),
+                                    ).then((updated) {
+                                      if (updated == true) setState(() {});
+                                    });
+                                  } else if (value == 'delete') {
+                                    _confirmDelete(child);
+                                  }
+                                },
+                                itemBuilder: (context) => [
+                                  const PopupMenuItem(
+                                    value: 'edit',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.edit, size: 18,
+                                            color: AppColors.primary),
+                                        SizedBox(width: 8),
+                                        Text('Edit Profile'),
+                                      ],
+                                    ),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: 'delete',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.delete_outline, size: 18,
+                                            color: Colors.red),
+                                        SizedBox(width: 8),
+                                        Text('Delete Child',
+                                            style: TextStyle(color: Colors.red)),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => EditChildPage(child: child),
+                                  ),
+                                ).then((updated) {
+                                  if (updated == true) {
+                                    setState(() {});
+                                  }
+                                });
+                              },
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+
+                  const SizedBox(height: AppSpacing.md),
+
                   // Child Profile Card
                   Container(
                     padding: const EdgeInsets.all(AppSpacing.md),
@@ -193,7 +442,8 @@ class _ParentDashboardState extends State<ParentDashboard> {
                                     ),
                                   ),
                                   const SizedBox(width: AppSpacing.md),
-                                  Icon(Icons.local_fire_department, size: 14, color: AppColors.white),
+                                  Icon(Icons.local_fire_department, size: 14,
+                                      color: AppColors.white),
                                   const SizedBox(width: AppSpacing.xs),
                                   Text(
                                     '$_streak day streak',
@@ -314,13 +564,15 @@ class _ParentDashboardState extends State<ParentDashboard> {
                             onPressed: () {
                               Navigator.push(
                                 context,
-                                MaterialPageRoute(builder: (_) => const ActivityView()),
+                                MaterialPageRoute(
+                                    builder: (_) => const ActivityView()),
                               );
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.success,
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(AppBorderRadius.medium),
+                                borderRadius:
+                                    BorderRadius.circular(AppBorderRadius.medium),
                               ),
                             ),
                             child: Text(
@@ -372,13 +624,40 @@ class _ParentDashboardState extends State<ParentDashboard> {
             ),
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
+        currentIndex: _selectedIndex,
         selectedItemColor: AppColors.primary,
         unselectedItemColor: AppColors.textLight,
+        onTap: (index) {
+          if (index == 3) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const ProfilePage(),
+              ),
+            );
+          } else {
+            setState(() {
+              _selectedIndex = index;
+            });
+          }
+        },
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: 'Progress'),
-          BottomNavigationBarItem(icon: Icon(Icons.play_circle), label: 'Activities'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.bar_chart),
+            label: 'Progress',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.play_circle),
+            label: 'Activities',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person),
+            label: 'Profile',
+          ),
         ],
       ),
     );
