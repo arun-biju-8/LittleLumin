@@ -1,14 +1,17 @@
-// lib/screens/login_page.dart
+// lib/screens/auth/login_page.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import '../../services/auth_service.dart';
 import '../../utils/constants.dart';
 import '../parent/parent_dashboard.dart';
-import 'signup_page.dart';
 import '../admin/admin_dashboard.dart';
 import '../llg/llg_dashboard.dart';
-import 'package:google_sign_in/google_sign_in.dart';
+import 'signup_page.dart';
+import '../desktop_redirect_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -23,22 +26,21 @@ class _LoginPageState extends State<LoginPage> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
-  bool _isEmailLoading = false;
-  bool _isGoogleLoading = false;
+
+  final bool isWeb = kIsWeb;
 
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
 
-setState(() => _isEmailLoading = true);
+    setState(() => _isLoading = true);
+
     try {
-      // ✅ 1. Sign in with Firebase Auth
       UserCredential userCredential = await FirebaseAuth.instance
           .signInWithEmailAndPassword(
             email: _emailController.text.trim(),
             password: _passwordController.text.trim(),
           );
 
-      // ✅ 2. Get user role from Firestore
       DocumentSnapshot doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(userCredential.user!.uid)
@@ -46,7 +48,7 @@ setState(() => _isEmailLoading = true);
 
       if (!doc.exists) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text('User not found. Please contact support.'),
             backgroundColor: Colors.red,
           ),
@@ -55,9 +57,9 @@ setState(() => _isEmailLoading = true);
         return;
       }
 
+      // In login_page.dart, inside _login() method
       String userType = doc['userType'] ?? '';
 
-      // ✅ 3. Redirect based on role
       if (mounted) {
         if (userType == 'admin') {
           Navigator.pushReplacement(
@@ -69,20 +71,19 @@ setState(() => _isEmailLoading = true);
             context,
             MaterialPageRoute(builder: (_) => const LLGDashboard()),
           );
-        } else if (userType == 'parent') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const ParentDashboard()),
-          );
         } else {
-          // Unknown role — sign out and show error
-          await FirebaseAuth.instance.signOut();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Invalid user role. Please contact support.'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          // ✅ Parent — Check if on web/desktop
+          if (kIsWeb || MediaQuery.of(context).size.width > 600) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const DesktopRedirectPage()),
+            );
+          } else {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const ParentDashboard()),
+            );
+          }
         }
       }
     } on FirebaseAuthException catch (e) {
@@ -91,28 +92,23 @@ setState(() => _isEmailLoading = true);
         message = 'No account found with this email. Please sign up.';
       } else if (e.code == 'wrong-password') {
         message = 'Incorrect password. Please try again.';
-      } else if (e.code == 'invalid-email') {
-        message = 'Please enter a valid email address.';
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message), backgroundColor: Colors.red),
       );
     } finally {
-      if (mounted) setState(() => _isEmailLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // ✅ Google Sign-In with Role-Based Redirection
-  // ✅ Google Sign-In with Role-Based Redirection
-
   Future<void> _signInWithGoogle() async {
-    setState(() => _isGoogleLoading = true);
-    String userType = ''; // ✅ Declare here
+    setState(() => _isLoading = true);
+    String userType = '';
 
     try {
       final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
       if (googleUser == null) {
-        setState(() => _isGoogleLoading = false);
+        setState(() => _isLoading = false);
         return;
       }
 
@@ -150,7 +146,6 @@ setState(() => _isEmailLoading = true);
         userType = doc['userType'] ?? 'parent';
       }
 
-      // ✅ Redirect based on role
       if (mounted) {
         if (userType == 'admin') {
           Navigator.pushReplacement(
@@ -171,235 +166,240 @@ setState(() => _isEmailLoading = true);
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text('Google Sign-In failed. Please try again.'),
           backgroundColor: Colors.red,
         ),
       );
     } finally {
-      if (mounted) setState(() => _isGoogleLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.white,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Color(0xFF2C3E50)),
+          icon: Icon(Icons.arrow_back, color: AppColors.textDark),
           onPressed: () => Navigator.pop(context),
         ),
       ),
       body: SafeArea(
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 24.0),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(height: 20),
-
-                Text('Welcome Back!', style: AppTextStyles.heading1),
-                SizedBox(height: 8),
-                Text(
-                  'Login to continue your journey',
-                  style: AppTextStyles.bodyLight,
-                ),
-                SizedBox(height: 40),
-
-                // Email
-                Text(
-                  'Email',
-                  style: AppTextStyles.body.copyWith(
-                    fontWeight: FontWeight.w500,
+        child: Center(
+          child: Container(
+            constraints: BoxConstraints(
+              maxWidth: isWeb ? 480 : double.infinity,
+            ),
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    isWeb ? 'Welcome Back!' : 'Welcome Back!',
+                    style: AppTextStyles.heading1,
                   ),
-                ),
-                SizedBox(height: 6),
-                TextFormField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: InputDecoration(
-                    hintText: 'Enter your email',
-                    hintStyle: TextStyle(color: Colors.grey[400]),
-                    prefixIcon: Icon(
-                      Icons.email_outlined,
-                      color: AppColors.primary,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.grey[300]!),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(
-                        color: AppColors.primary,
-                        width: 2,
-                      ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    'Login to continue your journey',
+                    style: AppTextStyles.bodyLight,
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+
+                  // Email
+                  Text(
+                    'Email',
+                    style: AppTextStyles.body.copyWith(
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter your email';
-                    }
-                    return null;
-                  },
-                ),
-                SizedBox(height: 16),
-
-                // Password
-                Text(
-                  'Password',
-                  style: AppTextStyles.body.copyWith(
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                SizedBox(height: 6),
-                TextFormField(
-                  controller: _passwordController,
-                  obscureText: _obscurePassword,
-                  decoration: InputDecoration(
-                    hintText: 'Enter your password',
-                    hintStyle: TextStyle(color: Colors.grey[400]),
-                    prefixIcon: Icon(
-                      Icons.lock_outline,
-                      color: AppColors.primary,
-                    ),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscurePassword
-                            ? Icons.visibility_off
-                            : Icons.visibility,
-                        color: Colors.grey[400],
-                      ),
-                      onPressed: () {
-                        setState(() {
-                          _obscurePassword = !_obscurePassword;
-                        });
-                      },
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.grey[300]!),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(
-                        color: AppColors.primary,
-                        width: 2,
-                      ),
-                    ),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter your password';
-                    }
-                    return null;
-                  },
-                ),
-                SizedBox(height: 8),
-
-                // Forgot Password
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () {
-                      // TODO: Implement forgot password
-                    },
-                    child: Text(
-                      'Forgot Password?',
-                      style: AppTextStyles.small.copyWith(
+                  const SizedBox(height: AppSpacing.xs),
+                  TextFormField(
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: InputDecoration(
+                      hintText: 'Enter your email',
+                      prefixIcon: Icon(
+                        Icons.email_outlined,
                         color: AppColors.primary,
                       ),
-                    ),
-                  ),
-                ),
-                SizedBox(height: 16),
-
-                // Login Button
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    onPressed: _isEmailLoading ? null : _login,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: _isEmailLoading
-                        ? SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : Text('Login', style: AppTextStyles.button),
-                  ),
-                ),
-                SizedBox(height: 16),
-
-                // Google Sign-In Button
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: OutlinedButton.icon(
-                    onPressed: _isGoogleLoading ? null : _signInWithGoogle,
-                    icon: FaIcon(
-                      FontAwesomeIcons.google,
-                      color: Color(0xFFDB4437),
-                      size: 22,
-                    ),
-                    label: Text(
-                      'Sign in with Google',
-                      style: AppTextStyles.body.copyWith(
-                        color: AppColors.textDark,
-                      ),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: AppColors.border),
-                      shape: RoundedRectangleBorder(
+                      border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(
                           AppBorderRadius.medium,
                         ),
+                        borderSide: BorderSide(color: AppColors.border),
                       ),
-                    ),
-                  ),
-                ),
-                SizedBox(height: 16),
-
-                // Sign Up Link
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      "Don't have an account? ",
-                      style: AppTextStyles.bodyLight,
-                    ),
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(builder: (_) => const SignUpPage()),
-                        );
-                      },
-                      child: Text(
-                        'Sign Up',
-                        style: AppTextStyles.button.copyWith(
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(
+                          AppBorderRadius.medium,
+                        ),
+                        borderSide: BorderSide(
                           color: AppColors.primary,
-                          fontSize: 16,
+                          width: 2,
                         ),
                       ),
                     ),
-                  ],
-                ),
-              ],
+                    validator: (v) =>
+                        v!.isEmpty ? 'Please enter your email' : null,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+
+                  // Password
+                  Text(
+                    'Password',
+                    style: AppTextStyles.body.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  TextFormField(
+                    controller: _passwordController,
+                    obscureText: _obscurePassword,
+                    decoration: InputDecoration(
+                      hintText: 'Enter your password',
+                      prefixIcon: Icon(
+                        Icons.lock_outline,
+                        color: AppColors.primary,
+                      ),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                          color: Colors.grey[400],
+                        ),
+                        onPressed: () => setState(
+                          () => _obscurePassword = !_obscurePassword,
+                        ),
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(
+                          AppBorderRadius.medium,
+                        ),
+                        borderSide: BorderSide(color: AppColors.border),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(
+                          AppBorderRadius.medium,
+                        ),
+                        borderSide: BorderSide(
+                          color: AppColors.primary,
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                    validator: (v) =>
+                        v!.isEmpty ? 'Please enter your password' : null,
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+
+                  // Forgot Password
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () {},
+                      child: Text(
+                        'Forgot Password?',
+                        style: AppTextStyles.small.copyWith(
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+
+                  // Login Button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      onPressed: _isLoading ? null : _login,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(
+                            AppBorderRadius.medium,
+                          ),
+                        ),
+                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : Text('Login', style: AppTextStyles.button),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+
+                  // Google Sign-In Button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: OutlinedButton.icon(
+                      onPressed: _signInWithGoogle,
+                      icon: FaIcon(
+                        FontAwesomeIcons.google,
+                        color: Color(0xFFDB4437),
+                        size: 22,
+                      ),
+                      label: Text(
+                        'Sign in with Google',
+                        style: AppTextStyles.body.copyWith(
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: AppColors.border),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(
+                            AppBorderRadius.medium,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+
+                  // Sign Up Link
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        "Don't have an account? ",
+                        style: AppTextStyles.bodyLight,
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const SignUpPage(),
+                            ),
+                          );
+                        },
+                        child: Text(
+                          'Sign Up',
+                          style: AppTextStyles.button.copyWith(
+                            color: AppColors.primary,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
