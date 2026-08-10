@@ -174,4 +174,46 @@ Future<String?> deleteChild(String childId) async {
     return 'Failed to delete child: $e';
   }
 }
+
+// ✅ Get All Flagged Children
+Stream<List<ChildModel>> getFlaggedChildren() {
+  return _firestore
+      .collection('children')
+      .where('isFlagged', isEqualTo: true)
+      .snapshots()
+      .map((snapshot) {
+    return snapshot.docs.map((doc) {
+      return ChildModel.fromMap(doc.data());
+    }).toList();
+  });
+}
+
+// ✅ Get Child with Skill Profile
+Future<Map<String, dynamic>?> getChildWithProfile(String childId) async {
+  try {
+    final childDoc = await _firestore.collection('children').doc(childId).get();
+    if (!childDoc.exists) return null;
+
+    final skillDoc = await _firestore.collection('skillProfiles').doc(childId).get();
+    final childData = childDoc.data()!;
+    final skillData = skillDoc.exists ? skillDoc.data() : null;
+
+    return {
+      'child': childData,
+      'skillProfile': skillData,
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+// ✅ Resolve Flag
+Future<void> resolveFlag(String childId) async {
+  await _firestore.collection('children').doc(childId).update({
+    'isFlagged': false,
+    'flagReason': null,
+    'flaggedAt': null,
+  });
+}
+
 }

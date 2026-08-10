@@ -58,4 +58,4 @@ Thumbs.db
 android/app/google-services.json
 ios/Runner/GoogleService-Info.plist
 
-flutter-app\lib\firebase_options.dart
+flutter-app/lib/firebase_options.dart
