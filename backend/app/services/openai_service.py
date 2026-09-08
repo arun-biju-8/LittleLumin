@@ -22,8 +22,8 @@ class OpenAIService:
         if self.api_key and self.api_key != "GEMINI_API_KEY":
             try:
                 genai.configure(api_key=self.api_key)
-                # self.client = genai.GenerativeModel('gemini-1.5-flash')
-                self.client = genai.GenerativeModel('gemini-pro')
+                # ✅ CORRECT MODEL NAME - working model
+                self.client = genai.GenerativeModel('models/gemini-2.5-flash')
                 logger.info("✅ Gemini client initialized successfully")
             except Exception as e:
                 logger.warning(f"Failed to initialize Gemini client: {e}")
@@ -52,6 +52,8 @@ class OpenAIService:
             # Remove markdown code blocks if present
             if result_text.startswith("```json"):
                 result_text = result_text[7:]
+            elif result_text.startswith("```"):
+                result_text = result_text[3:]
             if result_text.endswith("```"):
                 result_text = result_text[:-3]
             
@@ -101,6 +103,8 @@ class OpenAIService:
             result_text = response.text.strip()
             if result_text.startswith("```json"):
                 result_text = result_text[7:]
+            elif result_text.startswith("```"):
+                result_text = result_text[3:]
             if result_text.endswith("```"):
                 result_text = result_text[:-3]
             
