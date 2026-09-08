@@ -23,7 +23,7 @@ class OpenAIService:
             try:
                 genai.configure(api_key=self.api_key)
                 # ✅ CORRECT MODEL NAME - working model
-                self.client = genai.GenerativeModel('models/gemini-2.5-flash')
+                self.client = genai.GenerativeModel('models/gemini-3.6-flash')
                 logger.info("✅ Gemini client initialized successfully")
             except Exception as e:
                 logger.warning(f"Failed to initialize Gemini client: {e}")
