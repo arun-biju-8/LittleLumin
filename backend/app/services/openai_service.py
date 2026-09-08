@@ -22,7 +22,8 @@ class OpenAIService:
         if self.api_key and self.api_key != "GEMINI_API_KEY":
             try:
                 genai.configure(api_key=self.api_key)
-                self.client = genai.GenerativeModel('gemini-1.5-flash')
+                # self.client = genai.GenerativeModel('gemini-1.5-flash')
+                self.client = genai.GenerativeModel('gemini-pro')
                 logger.info("✅ Gemini client initialized successfully")
             except Exception as e:
                 logger.warning(f"Failed to initialize Gemini client: {e}")
