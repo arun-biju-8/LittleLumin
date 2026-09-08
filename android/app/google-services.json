@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "1083938880859",
+    "firebase_url": "https://littlelumin-e7d26-default-rtdb.firebaseio.com",
+    "project_id": "littlelumin-e7d26",
+    "storage_bucket": "littlelumin-e7d26.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1083938880859:android:ce181dced4a4958bbfae7e",
+        "android_client_info": {
+          "package_name": "com.example.littlelumin"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1083938880859-au7lqil2gtk9qekercfqac1bj758k12l.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.littlelumin",
+            "certificate_hash": "59a7c80e34799d334bb8985b938ecbe67b9fe29e"
+          }
+        },
+        {
+          "client_id": "1083938880859-jb85ivdd7lrkct2uea3f1vnitn1gdadi.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBWGAsKnIPnWm6Cr_qvZdgYR1zavVqa20s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1083938880859-jb85ivdd7lrkct2uea3f1vnitn1gdadi.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1083938880859-0t7ger4anr17h7a4l4m5f0l6kh18ithe.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.littlelumin"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
