@@ -5,6 +5,10 @@
 .env.*
 *.env
 backend/.env
+android/gradle.properties
+gradle.properties
+google-services.json
+GoogleService-Info.plist
 
 # ============================================
 # Python / Backend
@@ -36,8 +40,10 @@ pubspec.lock
 # ============================================
 android/app/.gradle/
 android/local.properties
+android/gradle.properties
 android/**/generated/
 android/app/google-services.json
+google-services.json
 
 # ============================================
 # iOS
@@ -48,6 +54,7 @@ ios/**/generated/
 ios/Flutter/App.framework
 ios/Flutter/Flutter.framework
 ios/Runner/GoogleService-Info.plist
+GoogleService-Info.plist
 
 # ============================================
 # IDE
