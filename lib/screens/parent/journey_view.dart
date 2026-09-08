@@ -5,9 +5,6 @@ import '../../models/journey_model.dart';
 import '../../models/activity_model.dart';
 import '../../services/journey_service.dart';
 import '../../utils/constants.dart';
-import '../../widgets/journey_dialogs.dart';
-import 'activity_view.dart';
-import 'feedback_form.dart';
 import 'journey_activity_detail_page.dart';
 
 class JourneyViewScreen extends StatefulWidget {

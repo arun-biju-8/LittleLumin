@@ -10,14 +10,14 @@ class JourneyActivityDetailPage extends StatefulWidget {
   final VoidCallback? onActivityCompleted;
 
   const JourneyActivityDetailPage({
-    Key? key,
+    super.key,
     required this.activityId,
     required this.childId,
     this.onActivityCompleted,
-  }) : super(key: key);
+  });
 
   @override
-  _JourneyActivityDetailPageState createState() => _JourneyActivityDetailPageState();
+  State<JourneyActivityDetailPage> createState() => _JourneyActivityDetailPageState();
 }
 
 class _JourneyActivityDetailPageState extends State<JourneyActivityDetailPage> {

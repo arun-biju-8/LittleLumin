@@ -1,6 +1,5 @@
 // lib/screens/parent/edit_child_page.dart
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../../models/child_model.dart';
 import '../../services/child_service.dart';
@@ -18,7 +17,7 @@ class EditChildPage extends StatefulWidget {
 class _EditChildPageState extends State<EditChildPage> {
   late ChildModel _child;
   final _formKey = GlobalKey<FormState>();
-  bool _isLoading = false;
+  final bool _isLoading = false;
   bool _isSaving = false;
 
   // Controllers for text fields

@@ -971,7 +971,7 @@ class _AdminLLGVerificationPageState extends State<AdminLLGVerificationPage> {
           const SizedBox(height: 10),
           if (hasLink)
             ElevatedButton.icon(
-              onPressed: () => _launchUrl(link!),
+              onPressed: () => _launchUrl(link),
               icon: const Icon(Icons.open_in_new_rounded, size: 14),
               label: const Text('Inspect Link ↗', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
               style: ElevatedButton.styleFrom(

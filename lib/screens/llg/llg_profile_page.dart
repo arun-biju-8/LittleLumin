@@ -55,7 +55,6 @@ class _LLGProfilePageState extends State<LLGProfilePage> {
               final name = userData['name'] ?? currentUser!.displayName ?? 'LLG Guide';
               final email = userData['email'] ?? currentUser!.email ?? '';
               final isVerified = userData['isVerified'] == true || profileData['isVerified'] == true;
-              final status = userData['status'] ?? profileData['verificationStatus'] ?? 'active';
 
               final qualification = profileData['qualification'] ?? userData['qualification'] ?? 'N/A';
               final license = profileData['license'] ?? userData['license'] ?? 'N/A';
