@@ -4,6 +4,19 @@
 .env
 .env.*
 *.env
+backend/.env
+
+# ============================================
+# Python / Backend
+# ============================================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+*.egg-info/
+venv/
+.venv/
 
 # ============================================
 # Flutter
@@ -24,6 +37,7 @@ pubspec.lock
 android/app/.gradle/
 android/local.properties
 android/**/generated/
+android/app/google-services.json
 
 # ============================================
 # iOS
@@ -33,11 +47,7 @@ ios/.symlinks/
 ios/**/generated/
 ios/Flutter/App.framework
 ios/Flutter/Flutter.framework
-
-# ============================================
-# Web
-# ============================================
-web/
+ios/Runner/GoogleService-Info.plist
 
 # ============================================
 # IDE
@@ -53,8 +63,3 @@ web/
 # ============================================
 .DS_Store
 Thumbs.db
-
-
-# Firebase config files (contain keys)
-android/app/google-services.json
-ios/Runner/GoogleService-Info.plist

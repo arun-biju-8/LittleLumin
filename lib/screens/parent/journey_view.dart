@@ -8,6 +8,7 @@ import '../../utils/constants.dart';
 import '../../widgets/journey_dialogs.dart';
 import 'activity_view.dart';
 import 'feedback_form.dart';
+import 'journey_activity_detail_page.dart';
 
 class JourneyViewScreen extends StatefulWidget {
   final ChildModel activeChild;
@@ -71,93 +72,20 @@ class _JourneyViewScreenState extends State<JourneyViewScreen> {
       return;
     }
 
-    final active = journey.activeActivity;
+    if (activity.id == null) return;
 
-    // SCENARIO A: No active activity or tapping current active activity
-    if (active == null || active.activityId == activity.id) {
-      await _journeyService.startActivity(
-        childId: widget.activeChild.childId,
-        activityId: activity.id!,
-        activityTitle: activity.title,
-        level: level,
-      );
-
-      if (!context.mounted) return;
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ActivityView(
-            activity: activity,
-            childId: widget.activeChild.childId,
-          ),
-        ),
-      );
-      return;
-    }
-
-    // SCENARIO C: Active activity is marked completed but feedback is pending
-    if (active.isCompleted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('📝 Please submit feedback for your active activity to continue!'),
-          backgroundColor: AppColors.primary,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => FeedbackForm(
-            childId: widget.activeChild.childId,
-            activityId: active.activityId,
-            activityTitle: active.activityTitle,
-          ),
-        ),
-      );
-      return;
-    }
-
-    // SCENARIO B: Has active activity in progress, trying to start a DIFFERENT activity
-    if (active.isInProgress && active.activityId != activity.id) {
-      final choice = await JourneyDialogs.showActiveActivityWarningDialog(
-        context: context,
-        activeActivityTitle: active.activityTitle,
-      );
-
-      if (choice == 'complete') {
-        if (!context.mounted) return;
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => FeedbackForm(
-              childId: widget.activeChild.childId,
-              activityId: active.activityId,
-              activityTitle: active.activityTitle,
-            ),
-          ),
-        );
-      } else if (choice == 'discard') {
-        await _journeyService.discardActiveActivity(widget.activeChild.childId);
-        await _journeyService.startActivity(
-          childId: widget.activeChild.childId,
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => JourneyActivityDetailPage(
           activityId: activity.id!,
-          activityTitle: activity.title,
-          level: level,
-        );
-
-        if (!context.mounted) return;
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ActivityView(
-              activity: activity,
-              childId: widget.activeChild.childId,
-            ),
-          ),
-        );
-      }
-    }
+          childId: widget.activeChild.childId,
+          onActivityCompleted: () {
+            _initJourney();
+          },
+        ),
+      ),
+    );
   }
 
   @override

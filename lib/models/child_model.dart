@@ -8,7 +8,7 @@ class ChildModel {
   final DateTime dateOfBirth;
   final String gender;
 
-  // ✅ NEW FIELDS
+  // ✅ Health & Profile Fields
   final String? deliveryType;       // "normal" or "cesarean"
   final String? gestationalAge;     // "full-term" or "premature"
   final double? birthWeight;        // in kg
@@ -24,6 +24,12 @@ class ChildModel {
   final String? mood;               // "happy", "calm", "irritable", "anxious"
   final String? attention;          // "focused", "average", "distracted"
   final String? socialInteraction;  // "responsive", "selective", "avoidant"
+
+  // ✅ VABS-II Assessment Fields
+  final bool? vabsCompleted;
+  final bool? vabsSkipped;
+  final DateTime? vabsCompletedAt;
+  final Map<String, double>? vabsScores;
 
   final bool isFlagged;
   final String? flagReason;
@@ -113,6 +119,10 @@ class ChildModel {
     this.mood,
     this.attention,
     this.socialInteraction,
+    this.vabsCompleted,
+    this.vabsSkipped,
+    this.vabsCompletedAt,
+    this.vabsScores,
     this.isFlagged = false,
     this.flagReason,
     this.flaggedAt,
@@ -142,6 +152,10 @@ class ChildModel {
       'mood': mood,
       'attention': attention,
       'socialInteraction': socialInteraction,
+      'vabsCompleted': vabsCompleted,
+      'vabsSkipped': vabsSkipped,
+      'vabsCompletedAt': vabsCompletedAt != null ? Timestamp.fromDate(vabsCompletedAt!) : null,
+      'vabsScores': vabsScores,
       'isFlagged': isFlagged,
       'flagReason': flagReason,
       'flaggedAt': flaggedAt != null ? Timestamp.fromDate(flaggedAt!) : null,
@@ -161,6 +175,23 @@ class ChildModel {
       parsedDob = DateTime(DateTime.now().year - years, DateTime.now().month, DateTime.now().day);
     } else {
       parsedDob = DateTime.now();
+    }
+
+    Map<String, double>? parseVabsScores(dynamic raw) {
+      if (raw is Map) {
+        Map<String, double> res = {};
+        raw.forEach((key, val) {
+          if (val is num) res[key.toString()] = val.toDouble();
+        });
+        return res;
+      }
+      return null;
+    }
+
+    DateTime? parseDate(dynamic raw) {
+      if (raw is Timestamp) return raw.toDate();
+      if (raw is String) return DateTime.tryParse(raw);
+      return null;
     }
 
     return ChildModel(
@@ -184,11 +215,15 @@ class ChildModel {
       mood: map['mood'],
       attention: map['attention'],
       socialInteraction: map['socialInteraction'],
+      vabsCompleted: map['vabsCompleted'] as bool?,
+      vabsSkipped: map['vabsSkipped'] as bool?,
+      vabsCompletedAt: parseDate(map['vabsCompletedAt']),
+      vabsScores: parseVabsScores(map['vabsScores']),
       isFlagged: map['isFlagged'] ?? false,
       flagReason: map['flagReason'],
-      flaggedAt: (map['flaggedAt'] as Timestamp?)?.toDate(),
-      createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      updatedAt: (map['updatedAt'] as Timestamp?)?.toDate(),
+      flaggedAt: parseDate(map['flaggedAt']),
+      createdAt: parseDate(map['createdAt']) ?? DateTime.now(),
+      updatedAt: parseDate(map['updatedAt']),
     );
   }
 }

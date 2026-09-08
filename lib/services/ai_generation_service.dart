@@ -8,7 +8,7 @@ import '../models/activity_model.dart';
 
 class AIGenerationService {
   // Primary host IP address of computer running backend (Wi-Fi: 192.168.1.2)
-  static const String _hostComputerIp = '192.168.1.2';
+  static const String _hostComputerIp = '192.168.53.228';
 
   /// Dynamically resolves base URL for Web, Desktop, Android Emulator, or Physical Device
   static Future<String> _getBaseUrl() async {

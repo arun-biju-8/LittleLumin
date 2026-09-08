@@ -6,6 +6,7 @@ import '../../utils/constants.dart';
 import '../../services/ai_service.dart';
 import '../../services/journey_service.dart';
 import '../../widgets/journey_dialogs.dart';
+import 'journey_activity_detail_page.dart';
 
 class FeedbackForm extends StatefulWidget {
   final String? activityId;
@@ -75,32 +76,8 @@ class _FeedbackFormState extends State<FeedbackForm> {
       final childId = widget.childId ?? '';
       final activityId = widget.activityId ?? '';
 
-      // 1. Save feedback entry to Firestore
-      await _firestore.collection('feedback').add({
-        'childId': childId,
-        'activityId': activityId,
-        'parentId': currentUserId,
-        'childResponse': _childResponse,
-        'engagement': _engagement,
-        'difficulty': _difficulty,
-        'confidence': _confidence,
-        'timeEstimate': _timeEstimate,
-        'notes': _notesController.text.trim(),
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      // 2. Process feedback through AI Service
-      final result = await _aiService.processFeedback(
-        childId: childId,
-        activityId: activityId,
-        childResponse: _childResponse!,
-        engagement: _engagement!,
-        difficulty: _difficulty!,
-        confidence: _confidence!,
-      );
-
-      // 3. Process Journey progress completion
       final JourneyService journeyService = JourneyService();
+
       int level = 1;
       final journeyDoc = await _firestore.collection('journeyProgress').doc(childId).get();
       if (journeyDoc.exists && journeyDoc.data() != null) {
@@ -109,15 +86,41 @@ class _FeedbackFormState extends State<FeedbackForm> {
             : 1;
       }
 
-      final journeyResult = await journeyService.completeActivity(
-        childId: childId,
-        activityId: activityId,
-        level: level,
-      );
+      // Execute feedback save, AI processing, and activity completion in parallel
+      final results = await Future.wait([
+        _firestore.collection('feedback').add({
+          'childId': childId,
+          'activityId': activityId,
+          'parentId': currentUserId,
+          'childResponse': _childResponse,
+          'engagement': _engagement,
+          'difficulty': _difficulty,
+          'confidence': _confidence,
+          'timeEstimate': _timeEstimate,
+          'notes': _notesController.text.trim(),
+          'createdAt': FieldValue.serverTimestamp(),
+        }),
+        _aiService.processFeedback(
+          childId: childId,
+          activityId: activityId,
+          childResponse: _childResponse!,
+          engagement: _engagement!,
+          difficulty: _difficulty!,
+          confidence: _confidence!,
+        ),
+        journeyService.completeActivity(
+          childId: childId,
+          activityId: activityId,
+          level: level,
+        ),
+      ]);
+
+      final result = results[1] as ProcessFeedbackResult;
+      final journeyResult = results[2] as Map<String, dynamic>;
 
       if (!mounted) return;
 
-      // 4. Check for Level Complete celebration
+      // Check for Level Complete celebration
       if (journeyResult['levelCompleted'] == true) {
         final completedLevel = (journeyResult['completedLevel'] is num)
             ? (journeyResult['completedLevel'] as num).toInt()
@@ -133,16 +136,18 @@ class _FeedbackFormState extends State<FeedbackForm> {
           nextLevel: nextLevel,
           trophyEarned: trophyName,
           onContinueJourney: () {
-            Navigator.of(context).pushNamedAndRemoveUntil('/parent-dashboard', (route) => false);
+            Navigator.of(context).pop();
+            Navigator.of(context).pop();
           },
           onBrowseActivities: () {
-            Navigator.of(context).pushNamedAndRemoveUntil('/parent-dashboard', (route) => false);
+            Navigator.of(context).pop();
+            Navigator.of(context).pop();
           },
         );
         return;
       }
 
-      // 5. Show Flag Alert if child was flagged, or Success SnackBar if not
+      // Show Flag Alert or Toast
       if (result.isFlagged) {
         await showDialog(
           context: context,
@@ -202,24 +207,40 @@ class _FeedbackFormState extends State<FeedbackForm> {
           ),
         );
       } else {
-        final domainName = result.domain[0].toUpperCase() + result.domain.substring(1);
-        final scoreStr = result.scoreChange >= 0
-            ? '+${result.scoreChange.toStringAsFixed(1)}'
-            : result.scoreChange.toStringAsFixed(1);
-
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Activity Completed! 🎉 $domainName score updated: ${result.newScore.toStringAsFixed(1)} ($scoreStr)',
-            ),
+          const SnackBar(
+            content: Text('Activity Completed! 🎉 Opening next activity...'),
             backgroundColor: AppColors.success,
+            duration: Duration(seconds: 2),
             behavior: SnackBarBehavior.floating,
           ),
         );
       }
 
-      // Navigate back to Parent Dashboard
-      Navigator.of(context).pushNamedAndRemoveUntil('/parent-dashboard', (route) => false);
+      // Proceed directly to Next Activity if recommended
+      if (result.nextActivity != null && result.nextActivity!.id != null) {
+        await journeyService.startActivity(
+          childId: childId,
+          activityId: result.nextActivity!.id!,
+          activityTitle: result.nextActivity!.title,
+          level: level,
+        );
+
+        if (!mounted) return;
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => JourneyActivityDetailPage(
+              activityId: result.nextActivity!.id!,
+              childId: childId,
+            ),
+          ),
+        );
+      } else {
+        // Pop back to journey/dashboard if no direct next activity
+        Navigator.of(context).pop();
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
