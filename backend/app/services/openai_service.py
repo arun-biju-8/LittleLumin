@@ -20,7 +20,12 @@ class OpenAIService:
 
         if self.api_key and self.api_key != "OPENAI_API_KEY":
             try:
-                self.client = OpenAI(api_key=self.api_key)
+                # Modern OpenAI initialization with explicit http_client to prevent 'proxies' kwarg errors in httpx
+                try:
+                    import httpx
+                    self.client = OpenAI(api_key=self.api_key, http_client=httpx.Client())
+                except Exception:
+                    self.client = OpenAI(api_key=self.api_key)
                 logger.info("✅ OpenAI client initialized successfully")
             except Exception as e:
                 logger.warning(f"Failed to initialize OpenAI client: {e}")
