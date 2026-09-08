@@ -2,6 +2,7 @@
 import os
 import json
 import logging
+import re
 from typing import Dict, Any, List, Optional
 
 try:
@@ -22,7 +23,6 @@ class OpenAIService:
         if self.api_key and self.api_key != "GEMINI_API_KEY":
             try:
                 genai.configure(api_key=self.api_key)
-                # ✅ CORRECT MODEL NAME - working model
                 self.client = genai.GenerativeModel('models/gemini-3.6-flash')
                 logger.info("✅ Gemini client initialized successfully")
             except Exception as e:
@@ -49,13 +49,17 @@ class OpenAIService:
             
             # Parse the response (Gemini returns text, we need to extract JSON)
             result_text = response.text.strip()
+            
             # Remove markdown code blocks if present
-            if result_text.startswith("```json"):
-                result_text = result_text[7:]
-            elif result_text.startswith("```"):
-                result_text = result_text[3:]
-            if result_text.endswith("```"):
-                result_text = result_text[:-3]
+            if "```json" in result_text:
+                result_text = result_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in result_text:
+                result_text = result_text.split("```")[1].split("```")[0].strip()
+            
+            # Try to find JSON object
+            json_match = re.search(r'\{.*\}', result_text, re.DOTALL)
+            if json_match:
+                result_text = json_match.group(0)
             
             result = json.loads(result_text.strip())
             
@@ -91,22 +95,35 @@ class OpenAIService:
             return self._fallback_story(child_name, theme)
         
         try:
-            prompt = f"""Write a short children's story for {child_name}, age {age_years}.
-            Theme: {theme}
-            {f"Moral: {moral}" if moral else ""}
-            
-            Return JSON with: title, story, characters (list), moral.
-            """
+            prompt = f"""Generate a short children's story for {child_name}, age {age_years}.
+Theme: {theme}
+{f"Moral: {moral}" if moral else ""}
+
+Return ONLY valid JSON with these fields:
+{{
+    "title": "Story title",
+    "story": "Full story text here",
+    "characters": ["Character 1", "Character 2"],
+    "moral": "The moral of the story"
+}}
+DO NOT include any other text, explanation, or markdown. Only the JSON.
+"""
             
             response = self.client.generate_content(prompt)
             
+            # Better JSON extraction
             result_text = response.text.strip()
-            if result_text.startswith("```json"):
-                result_text = result_text[7:]
-            elif result_text.startswith("```"):
-                result_text = result_text[3:]
-            if result_text.endswith("```"):
-                result_text = result_text[:-3]
+            
+            # Remove markdown code blocks if present
+            if "```json" in result_text:
+                result_text = result_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in result_text:
+                result_text = result_text.split("```")[1].split("```")[0].strip()
+            
+            # Try to find JSON object
+            json_match = re.search(r'\{.*\}', result_text, re.DOTALL)
+            if json_match:
+                result_text = json_match.group(0)
             
             result = json.loads(result_text.strip())
             
@@ -114,8 +131,8 @@ class OpenAIService:
                 "success": True,
                 "data": {
                     "title": result.get("title", f"{child_name}'s Adventure"),
-                    "story": result.get("story", ""),
-                    "characters": result.get("characters", []),
+                    "story": result.get("story", f"Once upon a time, {child_name} went on an adventure..."),
+                    "characters": result.get("characters", [child_name]),
                     "moral": result.get("moral", "Be kind and curious"),
                     "readingTime": "5-7 minutes"
                 }
