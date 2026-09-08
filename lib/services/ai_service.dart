@@ -55,11 +55,22 @@ class AIService {
       confidence: confidence,
     );
 
-    // 3. Update Skill Profile in Firestore
-    final double newScore = await _updateSkillProfile(childId, domain, scoreChange);
+    // 3. Parallelize independent steps: update skill profile, check struggle count, & generate next activity
+    final results = await Future.wait([
+      _updateSkillProfile(childId, domain, scoreChange),
+      _getStruggleCount(childId, domain),
+      _generateNextActivity(
+        childId: childId,
+        domain: domain,
+        currentActivityId: activityId,
+        scoreChange: scoreChange,
+      ),
+    ]);
 
-    // 4. Check Struggle Count & Auto-Flagging
-    final int struggleCount = await _getStruggleCount(childId, domain);
+    final double newScore = results[0] as double;
+    final int struggleCount = results[1] as int;
+    final ActivityModel? nextActivity = results[2] as ActivityModel?;
+
     bool isFlagged = false;
     String? flagReason;
 
@@ -67,14 +78,6 @@ class AIService {
       isFlagged = true;
       flagReason = await _flagChild(childId, domain, struggleCount);
     }
-
-    // 5. Generate Next Activity Recommendation
-    final ActivityModel? nextActivity = await _generateNextActivity(
-      childId: childId,
-      domain: domain,
-      currentActivityId: activityId,
-      scoreChange: scoreChange,
-    );
 
     return ProcessFeedbackResult(
       domain: domain,
@@ -132,27 +135,30 @@ class AIService {
   Future<double> _updateSkillProfile(String childId, String domain, double scoreChange) async {
     if (childId.isEmpty) return 50.0;
 
-    final docRef = _firestore.collection('skillProfiles').doc(childId);
-    final docSnap = await docRef.get();
+    try {
+      final docRef = _firestore.collection('skillProfiles').doc(childId);
+      final docSnap = await docRef.get();
 
-    Map<String, dynamic> data = {};
-    if (docSnap.exists && docSnap.data() != null) {
-      data = docSnap.data()!;
+      Map<String, dynamic> data = {};
+      if (docSnap.exists && docSnap.data() != null) {
+        data = docSnap.data()!;
+      }
+
+      double currentScore = (data[domain] as num?)?.toDouble() ?? 50.0;
+      double updatedScore = (currentScore + scoreChange).clamp(0.0, 100.0);
+
+      data[domain] = updatedScore;
+      data['childId'] = childId;
+      data['updatedAt'] = FieldValue.serverTimestamp();
+
+      await docRef.set(data, SetOptions(merge: true));
+      return updatedScore;
+    } catch (_) {
+      return 50.0;
     }
-
-    double currentScore = (data[domain] as num?)?.toDouble() ?? 50.0;
-    double updatedScore = (currentScore + scoreChange).clamp(0.0, 100.0);
-
-    data[domain] = updatedScore;
-    data['childId'] = childId;
-    data['updatedAt'] = FieldValue.serverTimestamp();
-
-    await docRef.set(data, SetOptions(merge: true));
-
-    return updatedScore;
   }
 
-  /// Counts struggles for a child in a specific domain from feedback history
+  /// Counts struggles for a child in a specific domain from feedback history (Optimized parallel fetching)
   Future<int> _getStruggleCount(String childId, String domain) async {
     if (childId.isEmpty) return 0;
 
@@ -162,21 +168,31 @@ class AIService {
           .where('childId', isEqualTo: childId)
           .get();
 
+      if (snapshot.docs.isEmpty) return 0;
+
       int struggles = 0;
+      final List<String> actIds = [];
 
       for (var doc in snapshot.docs) {
         final data = doc.data();
         if (data['childResponse'] == 'Struggled') {
           final actId = data['activityId'] as String?;
           if (actId != null && actId.isNotEmpty) {
-            final actDoc = await _firestore.collection('activities').doc(actId).get();
-            if (actDoc.exists && actDoc.data() != null) {
-              final skillType = actDoc.data()!['skillType'] ?? 'Cognitive';
-              if (_mapSkillToDomain(skillType) == domain) {
-                struggles++;
-              }
-            } else {
-              struggles++; // Default count if activity details deleted
+            actIds.add(actId);
+          } else {
+            struggles++;
+          }
+        }
+      }
+
+      if (actIds.isNotEmpty) {
+        final actFutures = actIds.take(10).map((id) => _firestore.collection('activities').doc(id).get());
+        final actDocs = await Future.wait(actFutures);
+        for (var actDoc in actDocs) {
+          if (actDoc.exists && actDoc.data() != null) {
+            final skillType = actDoc.data()!['skillType'] ?? 'Cognitive';
+            if (_mapSkillToDomain(skillType) == domain) {
+              struggles++;
             }
           } else {
             struggles++;
@@ -204,9 +220,7 @@ class AIService {
         'flaggedAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
-    } catch (_) {
-      // If doc update fails, handle gracefully
-    }
+    } catch (_) {}
 
     return reason;
   }
@@ -222,6 +236,7 @@ class AIService {
       final snapshot = await _firestore
           .collection('activities')
           .where('isActive', isEqualTo: true)
+          .limit(20)
           .get();
 
       if (snapshot.docs.isEmpty) return null;
@@ -238,7 +253,6 @@ class AIService {
       }
 
       if (matches.isEmpty) {
-        // Fallback: pick any active activity that isn't current
         for (var doc in snapshot.docs) {
           if (doc.id != currentActivityId) {
             return ActivityModel.fromMap(doc.id, doc.data());
@@ -247,13 +261,10 @@ class AIService {
         return null;
       }
 
-      // Filter or sort by difficulty depending on score change
       if (scoreChange < 0) {
-        // Struggling -> select Easy / Medium
         final easier = matches.where((a) => a.difficulty.toLowerCase() == 'easy').toList();
         if (easier.isNotEmpty) return easier.first;
       } else {
-        // Doing well -> select Medium / Hard
         final harder = matches.where((a) => a.difficulty.toLowerCase() == 'medium' || a.difficulty.toLowerCase() == 'hard').toList();
         if (harder.isNotEmpty) return harder.first;
       }

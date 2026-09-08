@@ -24,6 +24,9 @@ import '../../services/journey_service.dart';
 import '../../models/journey_model.dart';
 import '../../widgets/journey_card.dart';
 import '../../widgets/active_activity_banner.dart';
+import '../../widgets/vabs_pending_banner.dart';
+import '../../services/vabs_service.dart';
+import 'vabs_survey_page.dart';
 
 class ParentDashboard extends StatefulWidget {
   const ParentDashboard({super.key});
@@ -810,6 +813,29 @@ class _ParentDashboardState extends State<ParentDashboard> {
         _buildAgeGuidanceBanner(activeChild),
         _buildChildListCard(context, children),
         const SizedBox(height: AppSpacing.md),
+
+        // VABS-II Assessment Pending / Completed Banner
+        VABSPendingBanner(
+          child: activeChild,
+          onStartAssessment: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => VABSSurveyPage(
+                  childId: activeChild.childId,
+                  childName: activeChild.name,
+                  onCompletedOrSkipped: () {
+                    setState(() {});
+                  },
+                ),
+              ),
+            );
+          },
+          onSkipForNow: () async {
+            await VABSService().skipSurvey(activeChild.childId);
+            setState(() {});
+          },
+        ),
 
         // Journey Section Stream (Active Activity Banner & Your Journey Card)
         StreamBuilder<JourneyProgress?>(

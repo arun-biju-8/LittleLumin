@@ -86,10 +86,14 @@ class LevelProgress {
       return [];
     }
 
+    final completedList = parseList(map['completed']);
+    final totalCount = (map['total'] is num) ? (map['total'] as num).toInt() : 6;
+    final isUnl = map['isUnlocked'] ?? (completedList.length >= totalCount);
+
     return LevelProgress(
-      completed: parseList(map['completed']),
-      total: (map['total'] is num) ? (map['total'] as num).toInt() : 6,
-      isUnlocked: map['isUnlocked'] ?? false,
+      completed: completedList,
+      total: totalCount,
+      isUnlocked: isUnl,
       activityIds: parseList(map['activityIds']),
     );
   }
@@ -147,6 +151,7 @@ class JourneyProgress {
   final ActiveActivityState? activeActivity;
   final List<String> completedActivities;
   final List<String> unlockedActivities;
+  final List<int> unlockedLevels;
   final DateTime? updatedAt;
 
   JourneyProgress({
@@ -156,6 +161,7 @@ class JourneyProgress {
     this.activeActivity,
     this.completedActivities = const [],
     this.unlockedActivities = const [],
+    this.unlockedLevels = const [1],
     this.updatedAt,
   });
 
@@ -167,6 +173,7 @@ class JourneyProgress {
 
   bool isLevelUnlocked(int level) {
     if (level == 1) return true;
+    if (unlockedLevels.contains(level)) return true;
     return levelProgress[level]?.isUnlocked ?? (level <= currentLevel);
   }
 
@@ -183,6 +190,7 @@ class JourneyProgress {
       'activeActivity': activeActivity?.toMap(),
       'completedActivities': completedActivities,
       'unlockedActivities': unlockedActivities,
+      'unlockedLevels': unlockedLevels,
       'updatedAt': FieldValue.serverTimestamp(),
     };
   }
@@ -193,17 +201,32 @@ class JourneyProgress {
       return [];
     }
 
-    Map<int, LevelProgress> parseLevelProgress(dynamic val) {
+    List<int> parseIntList(dynamic val) {
+      if (val is List) return val.map((e) => int.tryParse(e.toString()) ?? 1).toList();
+      return [1];
+    }
+
+    Map<int, LevelProgress> parseLevelProgress(Map<String, dynamic> rawMap) {
       Map<int, LevelProgress> result = {};
-      if (val is Map) {
-        val.forEach((key, value) {
-          final levelKey = int.tryParse(key.toString()) ?? 1;
+      if (rawMap['levelProgress'] is Map) {
+        (rawMap['levelProgress'] as Map).forEach((key, value) {
+          final levelKey = int.tryParse(key.toString().replaceAll('level_', '')) ?? 1;
           if (value is Map<String, dynamic>) {
             result[levelKey] = LevelProgress.fromMap(value);
           } else if (value is Map) {
             result[levelKey] = LevelProgress.fromMap(Map<String, dynamic>.from(value));
           }
         });
+      }
+      for (int i = 1; i <= 4; i++) {
+        if (!result.containsKey(i) && rawMap.containsKey('level_$i') && rawMap['level_$i'] is Map) {
+          final lData = rawMap['level_$i'];
+          if (lData is Map<String, dynamic>) {
+            result[i] = LevelProgress.fromMap(lData);
+          } else if (lData is Map) {
+            result[i] = LevelProgress.fromMap(Map<String, dynamic>.from(lData));
+          }
+        }
       }
       return result;
     }
@@ -227,10 +250,11 @@ class JourneyProgress {
     return JourneyProgress(
       childId: childId,
       currentLevel: (map['currentLevel'] is num) ? (map['currentLevel'] as num).toInt() : 1,
-      levelProgress: parseLevelProgress(map['levelProgress']),
+      levelProgress: parseLevelProgress(map),
       activeActivity: active,
       completedActivities: parseList(map['completedActivities']),
       unlockedActivities: parseList(map['unlockedActivities']),
+      unlockedLevels: map['unlockedLevels'] != null ? parseIntList(map['unlockedLevels']) : [1],
       updatedAt: parseTime(map['updatedAt']),
     );
   }

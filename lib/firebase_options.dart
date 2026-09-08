@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 /// Default [FirebaseOptions] for use with your Firebase apps.
-/// Reads credentials dynamically from environment configuration (.env).
+/// Reads credentials dynamically from environment configuration (.env) with fallbacks.
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
@@ -32,11 +32,13 @@ class DefaultFirebaseOptions {
     }
   }
 
-  static String _env(String key, [String fallback = '']) {
+  static String _env(String key) {
     try {
-      return dotenv.env[key] ?? fallback;
+      final val = dotenv.env[key];
+      if (val != null && val.trim().isNotEmpty) return val.trim();
+      return '';
     } catch (_) {
-      return fallback;
+      return '';
     }
   }
 

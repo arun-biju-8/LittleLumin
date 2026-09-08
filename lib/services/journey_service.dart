@@ -99,6 +99,7 @@ class JourneyService {
         levelProgress: levelProgress,
         completedActivities: [],
         unlockedActivities: level1Ids,
+        unlockedLevels: [1],
       );
 
       await _firestore.collection(_collection).doc(childId).set(initialJourney.toMap());
@@ -162,7 +163,116 @@ class JourneyService {
         3: LevelProgress(completed: [], total: 6, isUnlocked: false, activityIds: []),
         4: LevelProgress(completed: [], total: 6, isUnlocked: false, activityIds: []),
       },
+      unlockedLevels: [1],
     );
+  }
+
+  // Level Progression helper methods
+  Future<bool> isLevelComplete(String childId, int level) async {
+    final journeyDoc = await _firestore
+        .collection(_collection)
+        .doc(childId)
+        .get();
+
+    if (!journeyDoc.exists || journeyDoc.data() == null) return false;
+
+    final data = journeyDoc.data()!;
+    final levelKey = 'level_$level';
+    Map<String, dynamic>? levelData;
+
+    if (data.containsKey(levelKey) && data[levelKey] is Map) {
+      levelData = Map<String, dynamic>.from(data[levelKey]);
+    } else if (data.containsKey('levelProgress') && data['levelProgress'] is Map) {
+      final lp = data['levelProgress'] as Map;
+      if (lp.containsKey(level.toString()) && lp[level.toString()] is Map) {
+        levelData = Map<String, dynamic>.from(lp[level.toString()]);
+      }
+    }
+
+    if (levelData == null) return false;
+
+    final completed = List<String>.from(levelData['completed'] ?? []);
+    final total = (levelData['total'] is num) ? (levelData['total'] as num).toInt() : 6;
+
+    return completed.length >= total;
+  }
+
+  Future<bool> isLevelUnlocked(String childId, int level) async {
+    if (level == 1) return true;
+    return await isLevelComplete(childId, level - 1);
+  }
+
+  Future<void> markActivityComplete(
+    String childId,
+    String activityId,
+    String skillDomain,
+  ) async {
+    final journeyRef = _firestore.collection(_collection).doc(childId);
+    final doc = await journeyRef.get();
+    Map<String, dynamic> data = doc.data() ?? {};
+
+    int level = 1;
+    if (data.containsKey('currentLevel') && data['currentLevel'] is num) {
+      level = (data['currentLevel'] as num).toInt();
+    }
+
+    String levelKey = 'level_$level';
+
+    Map<String, dynamic> levelData = {};
+    if (data.containsKey(levelKey) && data[levelKey] is Map) {
+      levelData = Map<String, dynamic>.from(data[levelKey]);
+    } else if (data.containsKey('levelProgress') && data['levelProgress'] is Map) {
+      final lpMap = data['levelProgress'] as Map;
+      if (lpMap.containsKey(level.toString()) && lpMap[level.toString()] is Map) {
+        levelData = Map<String, dynamic>.from(lpMap[level.toString()]);
+      }
+    }
+
+    List<String> completed = List<String>.from(levelData['completed'] ?? []);
+    if (!completed.contains(activityId)) {
+      completed.add(activityId);
+      levelData['completed'] = completed;
+      data[levelKey] = levelData;
+
+      // Update nested levelProgress map
+      Map<String, dynamic> levelProgressMap = {};
+      if (data.containsKey('levelProgress') && data['levelProgress'] is Map) {
+        levelProgressMap = Map<String, dynamic>.from(data['levelProgress']);
+      }
+      levelProgressMap[level.toString()] = levelData;
+      data['levelProgress'] = levelProgressMap;
+
+      // Update completedActivities list
+      List<String> overallCompleted = List<String>.from(data['completedActivities'] ?? []);
+      if (!overallCompleted.contains(activityId)) {
+        overallCompleted.add(activityId);
+      }
+      data['completedActivities'] = overallCompleted;
+
+      // Check if level is complete (6 activities completed) -> unlock next level
+      List<int> unlockedLevels = [];
+      if (data.containsKey('unlockedLevels') && data['unlockedLevels'] is List) {
+        unlockedLevels = (data['unlockedLevels'] as List)
+            .map((e) => int.tryParse(e.toString()) ?? 1)
+            .toList();
+      } else {
+        unlockedLevels = [1];
+      }
+
+      int totalForLevel = (levelData['total'] is num) ? (levelData['total'] as num).toInt() : 6;
+      if (completed.length >= totalForLevel) {
+        if (!unlockedLevels.contains(level + 1)) {
+          unlockedLevels.add(level + 1);
+        }
+        if (level < 4) {
+          data['currentLevel'] = level + 1;
+        }
+      }
+      data['unlockedLevels'] = unlockedLevels;
+      data['updatedAt'] = FieldValue.serverTimestamp();
+
+      await journeyRef.set(data, SetOptions(merge: true));
+    }
   }
 
   // 3. Start Activity (sets activeActivity to in_progress)
@@ -241,8 +351,14 @@ class JourneyService {
       int nextLevel = journey.currentLevel;
       String? trophyEarned;
 
+      List<int> unlockedLevels = List<int>.from(journey.unlockedLevels);
+      if (!unlockedLevels.contains(1)) unlockedLevels.add(1);
+
       if (levelJustCompleted && level == journey.currentLevel && level < 4) {
         nextLevel = level + 1;
+        if (!unlockedLevels.contains(nextLevel)) {
+          unlockedLevels.add(nextLevel);
+        }
         // Unlock next level
         final nextLvlProg = updatedLevelProgress[nextLevel];
         if (nextLvlProg != null) {
@@ -282,13 +398,21 @@ class JourneyService {
         levelProgressMap[k.toString()] = v.toMap();
       });
 
-      await _firestore.collection(_collection).doc(childId).update({
+      final Map<String, dynamic> updateData = {
         'completedActivities': updatedCompleted.toList(),
         'levelProgress': levelProgressMap,
         'currentLevel': nextLevel,
+        'unlockedLevels': unlockedLevels,
         'activeActivity': null, // Clear active activity after feedback is completed
         'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      // Also update top-level level_1, level_2 etc.
+      updatedLevelProgress.forEach((lvl, lp) {
+        updateData['level_$lvl'] = lp.toMap();
       });
+
+      await _firestore.collection(_collection).doc(childId).update(updateData);
 
       return {
         'levelCompleted': levelJustCompleted,

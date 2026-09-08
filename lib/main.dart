@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
+import 'screens/auth/splash_screen.dart';
 import 'screens/auth/login_page.dart';
 import 'screens/auth/signup_page.dart';
 import 'screens/landing_page.dart';
@@ -15,14 +16,30 @@ import 'services/auth_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // 1. Load .env FIRST (wrapped in try/catch)
   try {
     await dotenv.load(fileName: ".env");
-  } catch (_) {
-    // If .env fails to load, fallback gracefully
+    debugPrint('✅ .env loaded successfully');
+  } catch (e) {
+    debugPrint('⚠️ .env loading failed: $e');
   }
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  
+  // 2. Initialize Firebase SECOND (safely check if already initialized)
+  try {
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      debugPrint('✅ Firebase initialized');
+    } else {
+      debugPrint('✅ Firebase already initialized');
+    }
+  } catch (e) {
+    debugPrint('⚠️ Firebase initialization warning: $e');
+  }
+  
+  // 3. Run Flutter Application
   runApp(const MyApp());
 }
 
@@ -43,9 +60,10 @@ class MyApp extends StatelessWidget {
           scaffoldBackgroundColor: Colors.white,
           useMaterial3: true,
         ),
-        home: const AuthWrapper(),
+        home: const SplashScreen(),
         routes: {
           '/landing': (context) => const LandingPageWidget(),
+          '/auth-wrapper': (context) => const AuthWrapper(),
           '/login': (context) => const LoginPage(),
           '/signup': (context) => const SignUpPage(),
           '/parent-dashboard': (context) => const ParentDashboard(),

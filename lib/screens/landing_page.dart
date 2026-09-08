@@ -66,12 +66,7 @@ class _LandingPageWidgetState extends State<LandingPageWidget> {
   void _openSplashDemo() {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => SplashScreenWidget(
-          progress: 0.0,
-          onComplete: () {
-            Navigator.of(context).pop();
-          },
-        ),
+        builder: (context) => const SplashScreen(),
       ),
     );
   }
