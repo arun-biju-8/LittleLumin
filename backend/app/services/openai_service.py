@@ -86,12 +86,17 @@ class OpenAIService:
     def generate_story(
         self,
         child_name: str,
-        age_years: int,
+        age_years: int = 4,
         theme: str = "adventure",
-        moral: Optional[str] = None
+        moral: Optional[str] = None,
+        topic_or_moral: Optional[str] = None,
+        **kwargs
     ) -> Dict[str, Any]:
         """Generate a personalized children's story using Gemini"""
         
+        if topic_or_moral and not moral:
+            moral = topic_or_moral
+            
         logger.info(f"📖 Story generation started for {child_name}, age {age_years}")
         
         if not self.client:

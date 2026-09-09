@@ -52,6 +52,7 @@ async def generate_story(req: GenerateStoryRequest) -> Dict[str, Any]:
         res = openai_service.generate_story(
             child_name=req.child_name or "Little Explorer",
             topic_or_moral=req.topic_or_moral or "Sharing and Kindness",
+            moral=req.topic_or_moral or "Sharing and Kindness",
             age_years=req.age_years or 4
         )
         if not res.get("success"):
