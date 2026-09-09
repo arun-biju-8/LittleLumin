@@ -3,6 +3,7 @@ import os
 import json
 import logging
 import re
+import traceback
 from typing import Dict, Any, List, Optional
 
 try:
@@ -91,41 +92,54 @@ class OpenAIService:
     ) -> Dict[str, Any]:
         """Generate a personalized children's story using Gemini"""
         
+        logger.info(f"📖 Story generation started for {child_name}, age {age_years}")
+        
         if not self.client:
+            logger.error("❌ Gemini client not initialized")
             return self._fallback_story(child_name, theme)
         
         try:
-            prompt = f"""Generate a short children's story for {child_name}, age {age_years}.
+            # ✅ Simple, clear prompt
+            prompt = f"""Write a short children's story for {child_name}, age {age_years}.
 Theme: {theme}
-{f"Moral: {moral}" if moral else ""}
+Moral: {moral if moral else 'Be kind and helpful'}
 
-Return ONLY valid JSON with these fields:
+Return ONLY valid JSON with exactly these fields:
 {{
-    "title": "Story title",
+    "title": "Story title here",
     "story": "Full story text here",
     "characters": ["Character 1", "Character 2"],
     "moral": "The moral of the story"
 }}
-DO NOT include any other text, explanation, or markdown. Only the JSON.
-"""
+DO NOT include any other text or markdown formatting. Only the JSON."""
+            
+            logger.info(f"📝 Prompt sent to Gemini: {prompt[:200]}...")
             
             response = self.client.generate_content(prompt)
             
-            # Better JSON extraction
+            logger.info(f"✅ Gemini response received")
+            logger.info(f"📄 Raw response: {response.text[:300]}...")
+            
+            # Clean the response
             result_text = response.text.strip()
             
-            # Remove markdown code blocks if present
+            # Remove markdown code blocks
             if "```json" in result_text:
                 result_text = result_text.split("```json")[1].split("```")[0].strip()
             elif "```" in result_text:
                 result_text = result_text.split("```")[1].split("```")[0].strip()
             
-            # Try to find JSON object
+            # Find JSON object
+            import re
             json_match = re.search(r'\{.*\}', result_text, re.DOTALL)
             if json_match:
                 result_text = json_match.group(0)
             
-            result = json.loads(result_text.strip())
+            logger.info(f"🔍 Extracted JSON: {result_text[:200]}...")
+            
+            result = json.loads(result_text)
+            
+            logger.info(f"✅ Story parsed successfully: {result.get('title', 'No title')}")
             
             return {
                 "success": True,
@@ -133,13 +147,20 @@ DO NOT include any other text, explanation, or markdown. Only the JSON.
                     "title": result.get("title", f"{child_name}'s Adventure"),
                     "story": result.get("story", f"Once upon a time, {child_name} went on an adventure..."),
                     "characters": result.get("characters", [child_name]),
-                    "moral": result.get("moral", "Be kind and curious"),
+                    "moral": result.get("moral", "Be kind and helpful"),
                     "readingTime": "5-7 minutes"
                 }
             }
             
+        except json.JSONDecodeError as e:
+            logger.error(f"❌ JSON decode error: {e}")
+            logger.error(f"❌ Failed text: {result_text[:500] if 'result_text' in locals() else 'No text'}")
+            return self._fallback_story(child_name, theme)
         except Exception as e:
-            logger.error(f"Gemini story generation failed: {e}")
+            logger.error(f"❌ Story generation failed: {e}")
+            logger.error(f"❌ Error type: {type(e).__name__}")
+            import traceback
+            logger.error(f"❌ Traceback: {traceback.format_exc()}")
             return self._fallback_story(child_name, theme)
 
     def _build_activity_prompt(self, skill_domain: str, difficulty: str, age_years: int, child_name: str) -> str:
