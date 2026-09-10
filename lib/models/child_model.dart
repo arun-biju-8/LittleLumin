@@ -1,6 +1,8 @@
 // lib/models/child_model.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+typedef Child = ChildModel;
+
 class ChildModel {
   final String childId;
   final String parentId;
@@ -46,6 +48,8 @@ class ChildModel {
     }
     return years < 0 ? 0 : years;
   }
+
+  int get ageInYears => age;
 
   // ✅ Getter for age display string ("3 years", "4 months", etc.)
   String get ageDisplay {

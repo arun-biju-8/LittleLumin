@@ -4,8 +4,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
+import '../../models/child_model.dart';
 import '../../utils/constants.dart';
 import '../landing_page.dart';
+import 'edit_child_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -307,64 +309,251 @@ class _ProfilePageState extends State<ProfilePage> {
                           'Connected Children',
                           style: AppTextStyles.heading2.copyWith(fontSize: 18),
                         ),
-                        if (_childCount > 0)
-                          Text(
-                            '$_childCount',
-                            style: AppTextStyles.small.copyWith(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.bold,
+                        Row(
+                          children: [
+                            if (_childCount > 0)
+                              Text(
+                                '$_childCount',
+                                style: AppTextStyles.small.copyWith(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: const Icon(Icons.add_circle_outline, color: AppColors.primary),
+                              tooltip: 'Add Child',
+                              onPressed: () async {
+                                final res = await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => const EditChildPage()),
+                                );
+                                if (res == true) {
+                                  _loadUserData();
+                                  _loadChildCount();
+                                }
+                              },
                             ),
-                          ),
+                          ],
+                        ),
                       ],
                     ),
                     const SizedBox(height: AppSpacing.sm),
-                    if (_childCount == 0)
-                      Center(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
-                          child: Text(
-                            'No children added yet',
-                            style: AppTextStyles.bodyLight,
-                          ),
-                        ),
-                      )
-                    else
-                      StreamBuilder<QuerySnapshot>(
-                        stream: FirebaseFirestore.instance
-                            .collection('children')
-                            .where('parentId',
-                                isEqualTo: FirebaseAuth.instance.currentUser?.uid)
-                            .snapshots(),
-                        builder: (context, snapshot) {
-                          if (!snapshot.hasData) {
-                            return const Center(
-                                child: CircularProgressIndicator());
-                          }
-                          final children = snapshot.data!.docs;
-                          return Column(
-                            children: children.map((doc) {
-                              final data = doc.data() as Map<String, dynamic>;
-                              return ListTile(
-                                leading: CircleAvatar(
-                                  backgroundColor:
-                                      AppColors.primary.withOpacity(0.1),
-                                  child: Text(
-                                    data['name']?[0]?.toUpperCase() ?? '?',
-                                    style:
-                                        TextStyle(color: AppColors.primary),
+                    StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('children')
+                          .where('parentId',
+                              isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+                          .snapshots(),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData) {
+                          return const Center(
+                              child: CircularProgressIndicator());
+                        }
+                        final children = snapshot.data!.docs;
+                        if (children.isEmpty) {
+                          return Center(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                              child: Column(
+                                children: [
+                                  Text(
+                                    'No children added yet',
+                                    style: AppTextStyles.bodyLight,
                                   ),
-                                ),
-                                title: Text(data['name'] ?? 'Unknown'),
-                                subtitle: Text('${data['age'] ?? '?'} years'),
-                                trailing: data['isFlagged'] == true
-                                    ? const Icon(Icons.flag,
-                                        color: Colors.red, size: 16)
-                                    : null,
-                              );
-                            }).toList(),
+                                  const SizedBox(height: 8),
+                                  ElevatedButton.icon(
+                                    onPressed: () async {
+                                      final res = await Navigator.push(
+                                        context,
+                                        MaterialPageRoute(builder: (_) => const EditChildPage()),
+                                      );
+                                      if (res == true) {
+                                        _loadUserData();
+                                        _loadChildCount();
+                                      }
+                                    },
+                                    icon: const Icon(Icons.add, size: 18),
+                                    label: const Text('Add First Child'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.primary,
+                                      foregroundColor: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           );
-                        },
+                        }
+
+                        return Column(
+                          children: children.map((doc) {
+                            final data = doc.data() as Map<String, dynamic>;
+                            final childModel = ChildModel.fromMap(data);
+                            return ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: CircleAvatar(
+                                backgroundColor: AppColors.primary.withOpacity(0.1),
+                                child: Text(
+                                  childModel.name.isNotEmpty ? childModel.name[0].toUpperCase() : '?',
+                                  style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              title: Text(childModel.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                              subtitle: Text('${childModel.ageDisplay} • ${childModel.gender}'),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (childModel.isFlagged)
+                                    const Padding(
+                                      padding: EdgeInsets.only(right: 8),
+                                      child: Icon(Icons.flag, color: Colors.red, size: 18),
+                                    ),
+                                  const Icon(Icons.edit_outlined, size: 20, color: AppColors.primary),
+                                ],
+                              ),
+                              onTap: () async {
+                                final res = await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => EditChildPage(child: childModel),
+                                  ),
+                                );
+                                if (res == true) {
+                                  _loadUserData();
+                                  _loadChildCount();
+                                }
+                              },
+                            );
+                          }).toList(),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+
+            // ✅ App Settings Section
+            Card(
+              color: AppColors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppBorderRadius.medium),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Settings & Preferences',
+                      style: AppTextStyles.heading2.copyWith(fontSize: 18),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+
+                    // Notification Preferences
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(Icons.notifications_outlined, color: Colors.blue.shade700),
                       ),
+                      title: const Text('Notification Preferences'),
+                      subtitle: const Text('Activity reminders and milestone updates'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () {
+                        showDialog(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('Notification Settings'),
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SwitchListTile(
+                                  title: const Text('Daily Activity Reminders'),
+                                  value: true,
+                                  onChanged: (val) {},
+                                ),
+                                SwitchListTile(
+                                  title: const Text('LLG Guide Messages'),
+                                  value: true,
+                                  onChanged: (val) {},
+                                ),
+                              ],
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx),
+                                child: const Text('Close'),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+
+                    const Divider(height: 1),
+
+                    // Privacy Settings
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(Icons.lock_outline, color: Colors.green.shade700),
+                      ),
+                      title: const Text('Privacy Settings'),
+                      subtitle: const Text('Data sharing and account privacy'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () {
+                        showDialog(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('Privacy Settings'),
+                            content: const Text(
+                              'LittleLumin protects your child\'s personal data with end-to-end cloud encryption. Only authorized caseworkers and parents can view developmental activity records.',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx),
+                                child: const Text('OK'),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+
+                    const Divider(height: 1),
+
+                    // App Theme
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.purple.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(Icons.palette_outlined, color: Colors.purple.shade700),
+                      ),
+                      title: const Text('App Theme'),
+                      subtitle: const Text('System Light Mode'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('App theme set to System Default (Light)')),
+                        );
+                      },
+                    ),
                   ],
                 ),
               ),

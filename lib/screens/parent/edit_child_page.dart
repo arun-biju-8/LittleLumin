@@ -1,21 +1,23 @@
 // lib/screens/parent/edit_child_page.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/child_model.dart';
 import '../../services/child_service.dart';
 import '../../utils/constants.dart';
 
 class EditChildPage extends StatefulWidget {
-  final ChildModel child;
+  final ChildModel? child;
 
-  const EditChildPage({super.key, required this.child});
+  const EditChildPage({super.key, this.child});
 
   @override
   State<EditChildPage> createState() => _EditChildPageState();
 }
 
 class _EditChildPageState extends State<EditChildPage> {
-  late ChildModel _child;
+  ChildModel? _child;
   final _formKey = GlobalKey<FormState>();
   final bool _isLoading = false;
   bool _isSaving = false;
@@ -55,31 +57,36 @@ class _EditChildPageState extends State<EditChildPage> {
   void initState() {
     super.initState();
     _child = widget.child;
-    _loadData();
+    if (_child != null) {
+      _loadData();
+    } else {
+      _selectedGender = 'Male';
+    }
   }
 
   void _loadData() {
-    _nameController.text = _child.name;
-    _selectedDOB = _child.dateOfBirth;
-    _dobController.text = DateFormat('dd/MM/yyyy').format(_child.dateOfBirth);
-    _selectedGender = _child.gender;
+    if (_child == null) return;
+    _nameController.text = _child!.name;
+    _selectedDOB = _child!.dateOfBirth;
+    _dobController.text = DateFormat('dd/MM/yyyy').format(_child!.dateOfBirth);
+    _selectedGender = _child!.gender;
 
-    _birthWeightController.text = _child.birthWeight?.toString() ?? '';
-    _heightController.text = _child.height?.toString() ?? '';
-    _weightController.text = _child.weight?.toString() ?? '';
-    _sleepDurationController.text = _child.sleepDuration?.toString() ?? '';
-    _nightWakingsController.text = _child.nightWakings?.toString() ?? '';
-    _birthOrderController.text = _child.birthOrder?.toString() ?? '';
-    _motherAgeController.text = _child.motherAgeAtConception?.toString() ?? '';
-    _fatherAgeController.text = _child.fatherAgeAtConception?.toString() ?? '';
-    _complicationsController.text = _child.birthComplications ?? '';
+    _birthWeightController.text = _child!.birthWeight?.toString() ?? '';
+    _heightController.text = _child!.height?.toString() ?? '';
+    _weightController.text = _child!.weight?.toString() ?? '';
+    _sleepDurationController.text = _child!.sleepDuration?.toString() ?? '';
+    _nightWakingsController.text = _child!.nightWakings?.toString() ?? '';
+    _birthOrderController.text = _child!.birthOrder?.toString() ?? '';
+    _motherAgeController.text = _child!.motherAgeAtConception?.toString() ?? '';
+    _fatherAgeController.text = _child!.fatherAgeAtConception?.toString() ?? '';
+    _complicationsController.text = _child!.birthComplications ?? '';
 
-    _selectedDeliveryType = _child.deliveryType;
-    _selectedGestationalAge = _child.gestationalAge;
-    _selectedSleepHabit = _child.sleepHabit;
-    _selectedMood = _child.mood;
-    _selectedAttention = _child.attention;
-    _selectedSocialInteraction = _child.socialInteraction;
+    _selectedDeliveryType = _child!.deliveryType;
+    _selectedGestationalAge = _child!.gestationalAge;
+    _selectedSleepHabit = _child!.sleepHabit;
+    _selectedMood = _child!.mood;
+    _selectedAttention = _child!.attention;
+    _selectedSocialInteraction = _child!.socialInteraction;
   }
 
   Future<void> _selectDate(BuildContext context) async {
@@ -119,85 +126,158 @@ class _EditChildPageState extends State<EditChildPage> {
 
   Future<void> _saveProfile() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_selectedDOB == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select date of birth')),
+      );
+      return;
+    }
 
     setState(() => _isSaving = true);
 
-    final updatedChild = ChildModel(
-      childId: _child.childId,
-      parentId: _child.parentId,
-      name: _nameController.text.trim(),
-      dateOfBirth: _selectedDOB ?? _child.dateOfBirth,
-      gender: _selectedGender ?? _child.gender,
-      deliveryType: _selectedDeliveryType,
-      gestationalAge: _selectedGestationalAge,
-      birthWeight: _birthWeightController.text.isNotEmpty
-          ? double.parse(_birthWeightController.text)
-          : null,
-      birthComplications: _complicationsController.text.isNotEmpty
-          ? _complicationsController.text
-          : null,
-      birthOrder: _birthOrderController.text.isNotEmpty
-          ? int.parse(_birthOrderController.text)
-          : null,
-      motherAgeAtConception: _motherAgeController.text.isNotEmpty
-          ? int.parse(_motherAgeController.text)
-          : null,
-      fatherAgeAtConception: _fatherAgeController.text.isNotEmpty
-          ? int.parse(_fatherAgeController.text)
-          : null,
-      height: _heightController.text.isNotEmpty
-          ? double.parse(_heightController.text)
-          : null,
-      weight: _weightController.text.isNotEmpty
-          ? double.parse(_weightController.text)
-          : null,
-      sleepHabit: _selectedSleepHabit,
-      sleepDuration: _sleepDurationController.text.isNotEmpty
-          ? int.parse(_sleepDurationController.text)
-          : null,
-      nightWakings: _nightWakingsController.text.isNotEmpty
-          ? int.parse(_nightWakingsController.text)
-          : null,
-      mood: _selectedMood,
-      attention: _selectedAttention,
-      socialInteraction: _selectedSocialInteraction,
-      isFlagged: _child.isFlagged,
-      flagReason: _child.flagReason,
-      flaggedAt: _child.flaggedAt,
-      createdAt: _child.createdAt,
-      updatedAt: DateTime.now(),
-    );
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      final parentId = user?.uid ?? '';
 
-    final error = await ChildService().updateChild(updatedChild);
+      if (widget.child == null) {
+        // Adding new child
+        final docRef = FirebaseFirestore.instance.collection('children').doc();
+        final newChild = ChildModel(
+          childId: docRef.id,
+          parentId: parentId,
+          name: _nameController.text.trim(),
+          dateOfBirth: _selectedDOB!,
+          gender: _selectedGender ?? 'Male',
+          deliveryType: _selectedDeliveryType,
+          gestationalAge: _selectedGestationalAge,
+          birthWeight: _birthWeightController.text.isNotEmpty ? double.tryParse(_birthWeightController.text) : null,
+          birthComplications: _complicationsController.text.isNotEmpty ? _complicationsController.text : null,
+          birthOrder: _birthOrderController.text.isNotEmpty ? int.tryParse(_birthOrderController.text) : null,
+          motherAgeAtConception: _motherAgeController.text.isNotEmpty ? int.tryParse(_motherAgeController.text) : null,
+          fatherAgeAtConception: _fatherAgeController.text.isNotEmpty ? int.tryParse(_fatherAgeController.text) : null,
+          height: _heightController.text.isNotEmpty ? double.tryParse(_heightController.text) : null,
+          weight: _weightController.text.isNotEmpty ? double.tryParse(_weightController.text) : null,
+          sleepHabit: _selectedSleepHabit,
+          sleepDuration: _sleepDurationController.text.isNotEmpty ? int.tryParse(_sleepDurationController.text) : null,
+          nightWakings: _nightWakingsController.text.isNotEmpty ? int.tryParse(_nightWakingsController.text) : null,
+          mood: _selectedMood,
+          attention: _selectedAttention,
+          socialInteraction: _selectedSocialInteraction,
+          isFlagged: false,
+          createdAt: DateTime.now(),
+        );
 
-    setState(() => _isSaving = false);
+        final error = await ChildService().addChild(
+          name: newChild.name,
+          dateOfBirth: newChild.dateOfBirth,
+          gender: newChild.gender,
+        );
 
-    if (error == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✅ Profile saved successfully!'),
-          backgroundColor: AppColors.success,
-        ),
-      );
-      Navigator.pop(context, true);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $error'),
-          backgroundColor: Colors.red,
-        ),
-      );
+        if (error == null) {
+          // Save additional fields if provided
+          await FirebaseFirestore.instance.collection('children').doc(newChild.childId).update(newChild.toMap());
+
+          if (mounted) {
+            setState(() => _isSaving = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('✅ Child added successfully!'),
+                backgroundColor: AppColors.success,
+              ),
+            );
+            Navigator.pop(context, true);
+          }
+        } else {
+          throw Exception(error);
+        }
+      } else {
+        // Updating existing child
+        final updatedChild = ChildModel(
+          childId: _child!.childId,
+          parentId: _child!.parentId,
+          name: _nameController.text.trim(),
+          dateOfBirth: _selectedDOB ?? _child!.dateOfBirth,
+          gender: _selectedGender ?? _child!.gender,
+          deliveryType: _selectedDeliveryType,
+          gestationalAge: _selectedGestationalAge,
+          birthWeight: _birthWeightController.text.isNotEmpty
+              ? double.parse(_birthWeightController.text)
+              : null,
+          birthComplications: _complicationsController.text.isNotEmpty
+              ? _complicationsController.text
+              : null,
+          birthOrder: _birthOrderController.text.isNotEmpty
+              ? int.parse(_birthOrderController.text)
+              : null,
+          motherAgeAtConception: _motherAgeController.text.isNotEmpty
+              ? int.parse(_motherAgeController.text)
+              : null,
+          fatherAgeAtConception: _fatherAgeController.text.isNotEmpty
+              ? int.parse(_fatherAgeController.text)
+              : null,
+          height: _heightController.text.isNotEmpty
+              ? double.parse(_heightController.text)
+              : null,
+          weight: _weightController.text.isNotEmpty
+              ? double.parse(_weightController.text)
+              : null,
+          sleepHabit: _selectedSleepHabit,
+          sleepDuration: _sleepDurationController.text.isNotEmpty
+              ? int.parse(_sleepDurationController.text)
+              : null,
+          nightWakings: _nightWakingsController.text.isNotEmpty
+              ? int.parse(_nightWakingsController.text)
+              : null,
+          mood: _selectedMood,
+          attention: _selectedAttention,
+          socialInteraction: _selectedSocialInteraction,
+          isFlagged: _child!.isFlagged,
+          flagReason: _child!.flagReason,
+          flaggedAt: _child!.flaggedAt,
+          createdAt: _child!.createdAt,
+          updatedAt: DateTime.now(),
+        );
+
+        final error = await ChildService().updateChild(updatedChild);
+
+        setState(() => _isSaving = false);
+
+        if (error == null) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('✅ Profile saved successfully!'),
+                backgroundColor: AppColors.success,
+              ),
+            );
+            Navigator.pop(context, true);
+          }
+        } else {
+          throw Exception(error);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString().replaceAll('Exception: ', '')}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final completion = _child.profileCompletion;
+    final completion = _child?.profileCompletion ?? 0;
+    final isNewChild = widget.child == null;
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: Text('Edit ${_child.name}\'s Profile', style: AppTextStyles.heading2),
+        title: Text(isNewChild ? 'Add Child' : 'Edit ${_child?.name ?? 'Child'}\'s Profile', style: AppTextStyles.heading2),
         backgroundColor: AppColors.white,
         elevation: 0,
         actions: [
@@ -252,7 +332,7 @@ class _EditChildPageState extends State<EditChildPage> {
                             radius: 28,
                             backgroundColor: AppColors.primary.withOpacity(0.1),
                             child: Text(
-                              _child.name[0].toUpperCase(),
+                              _child != null && _child!.name.isNotEmpty ? _child!.name[0].toUpperCase() : '👶',
                               style: TextStyle(
                                 fontSize: 24,
                                 fontWeight: FontWeight.bold,
@@ -268,11 +348,11 @@ class _EditChildPageState extends State<EditChildPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              _child.name,
+                              _child?.name ?? 'New Child',
                               style: AppTextStyles.heading2,
                             ),
                             Text(
-                              '${_child.ageDisplay} • ${_child.gender}',
+                              _child != null ? '${_child!.ageDisplay} • ${_child!.gender}' : 'Enter child details below',
                               style: AppTextStyles.bodyLight,
                             ),
                             const SizedBox(height: AppSpacing.xs),

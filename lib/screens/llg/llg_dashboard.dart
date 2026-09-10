@@ -13,7 +13,7 @@ import 'send_recommendation_page.dart';
 import 'llg_activity_management.dart';
 import 'add_activity_page.dart';
 import 'llg_profile_page.dart';
-import '../admin/flagged_children_page.dart';
+import 'flagged_kids_page.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class LLGDashboard extends StatefulWidget {
@@ -46,7 +46,7 @@ class _LLGDashboardState extends State<LLGDashboard> {
           setState(() => _selectedIndex = index);
         },
       ),
-      const FlaggedChildrenPage(),
+      const FlaggedKidsPage(),
       const LLGActivityManagement(),
       AddActivityPage(
         onSuccess: () {
