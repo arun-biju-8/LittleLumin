@@ -161,9 +161,21 @@ class UserModel {
   // ============================================
   // FROM MAP (Firestore)
   // ============================================
-  factory UserModel.fromMap(Map<String, dynamic> data) {
+  factory UserModel.fromMap(dynamic first, [dynamic second]) {
+    final Map<String, dynamic> data;
+    final String uid;
+    if (first is String && second is Map<String, dynamic>) {
+      uid = first;
+      data = second;
+    } else if (first is Map<String, dynamic>) {
+      data = first;
+      uid = (second is String ? second : null) ?? data['uid'] ?? '';
+    } else {
+      data = {};
+      uid = '';
+    }
     return UserModel(
-      uid: data['uid'] ?? '',
+      uid: uid,
       name: data['name'] ?? '',
       email: data['email'] ?? '',
       userType: data['userType'] ?? 'parent',

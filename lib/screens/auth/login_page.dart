@@ -1,18 +1,11 @@
-// lib/screens/auth/login_page.dart
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../utils/constants.dart';
+import '../../services/auth_service.dart';
 import '../parent/parent_dashboard.dart';
-import '../admin/admin_dashboard.dart';
 import '../llg/llg_dashboard.dart';
+import '../admin/admin_dashboard.dart';
 import 'signup_page.dart';
-import '../desktop_redirect_page.dart';
-import '../../widgets/auth_loading_overlay.dart';
+import '../../models/user_model.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -25,490 +18,294 @@ class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _isLoading = false;
-  bool _obscurePassword = true;
-  bool _rememberMe = true;
+  final _authService = AuthService();
 
-  final bool isWeb = kIsWeb;
+  bool _isLoading = false;
+  bool _rememberMe = false;
+  bool _obscurePassword = true;
 
   @override
   void initState() {
     super.initState();
-    _loadRememberMe();
+    _loadRememberedEmail();
   }
 
-  Future<void> _loadRememberMe() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (mounted) {
-      setState(() {
-        _rememberMe = prefs.getBool('remember_me') ?? true;
-      });
+  Future<void> _loadRememberedEmail() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final email = prefs.getString('remembered_email');
+      final remembered = prefs.getBool('remember_me') ?? false;
+      if (email != null && remembered) {
+        setState(() {
+          _emailController.text = email;
+          _rememberMe = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading remembered email: $e');
     }
   }
 
-  Future<void> _saveRememberMe() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('remember_me', _rememberMe);
+  Future<void> _saveRememberedEmail(String email) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (_rememberMe) {
+        await prefs.setString('remembered_email', email);
+        await prefs.setBool('remember_me', true);
+      } else {
+        await prefs.remove('remembered_email');
+        await prefs.setBool('remember_me', false);
+      }
+    } catch (e) {
+      debugPrint('Error saving email: $e');
+    }
   }
 
-  Future<void> _login() async {
+  Future<void> _handleEmailLogin() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
 
     try {
-      UserCredential userCredential = await FirebaseAuth.instance
-          .signInWithEmailAndPassword(
-            email: _emailController.text.trim(),
-            password: _passwordController.text.trim(),
-          );
+      final user = await _authService.signInWithEmail(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
 
-      await _saveRememberMe();
-
-      DocumentSnapshot doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userCredential.user!.uid)
-          .get();
-
-      if (!doc.exists) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('User not found. Please contact support.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        setState(() => _isLoading = false);
-        return;
+      if (user == null) {
+        throw Exception('Invalid credentials');
       }
 
-      // In login_page.dart, inside _login() method
-      String userType = doc['userType'] ?? '';
+      await _saveRememberedEmail(_emailController.text.trim());
 
       if (mounted) {
-        if (userType == 'llg_pending') {
-          await FirebaseAuth.instance.signOut();
-          if (!mounted) return;
-          showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              title: const Row(
-                children: [
-                  Icon(Icons.hourglass_top_rounded, color: Colors.orange, size: 28),
-                  SizedBox(width: 10),
-                  Text('Pending Verification'),
-                ],
-              ),
-              content: const Text(
-                'Your LittleLumin Guide account is currently pending administrator verification.\n\nYou will receive access once an admin approves your professional application.',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
-          );
-        } else if (userType == 'rejected') {
-          await FirebaseAuth.instance.signOut();
-          if (!mounted) return;
-          showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              title: const Row(
-                children: [
-                  Icon(Icons.cancel_rounded, color: Colors.red, size: 28),
-                  SizedBox(width: 10),
-                  Text('Application Status'),
-                ],
-              ),
-              content: const Text(
-                'Your LittleLumin Guide application was not approved.\n\nPlease contact support for details or to re-apply.',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
-          );
-        } else if (userType == 'admin') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const AdminDashboard()),
-          );
-        } else if (userType == 'llg') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const LLGDashboard()),
-          );
-        } else {
-          // ✅ Parent — Check if on web/desktop
-          if (kIsWeb || MediaQuery.of(context).size.width > 600) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => const DesktopRedirectPage()),
-            );
-          } else {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => const ParentDashboard()),
-            );
-          }
-        }
+        _navigateBasedOnUserType(user);
       }
-    } on FirebaseAuthException catch (e) {
-      String message = 'Login failed. Please try again.';
-      if (e.code == 'user-not-found') {
-        message = 'No account found with this email. Please sign up.';
-      } else if (e.code == 'wrong-password') {
-        message = 'Incorrect password. Please try again.';
+    } catch (e) {
+      if (mounted) {
+        _showError(e.toString().replaceAll('Exception: ', ''));
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message), backgroundColor: Colors.red),
-      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _signInWithGoogle() async {
+  Future<void> _handleGoogleLogin() async {
     setState(() => _isLoading = true);
-    String userType = '';
 
     try {
-      final googleSignIn = GoogleSignIn();
-      try {
-        await googleSignIn.signOut();
-      } catch (_) {}
-      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
-      if (googleUser == null) {
+      final user = await _authService.signInWithGoogle();
+
+      if (user == null) {
+        // User cancelled
         setState(() => _isLoading = false);
         return;
       }
 
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
-
-      final OAuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      UserCredential userCredential = await FirebaseAuth.instance
-          .signInWithCredential(credential);
-
-      DocumentSnapshot doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userCredential.user!.uid)
-          .get();
-
-      if (!doc.exists) {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userCredential.user!.uid)
-            .set({
-              'uid': userCredential.user!.uid,
-              'name': googleUser.displayName ?? '',
-              'email': googleUser.email,
-              'photoUrl': googleUser.photoUrl ?? '',
-              'userType': 'parent',
-              'status': 'active',
-              'createdAt': FieldValue.serverTimestamp(),
-            });
-        userType = 'parent';
-      } else {
-        userType = doc['userType'] ?? 'parent';
-      }
-
       if (mounted) {
-        if (userType == 'llg_pending') {
-          await FirebaseAuth.instance.signOut();
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('⏳ Your LLG account is pending administrator verification.'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        } else if (userType == 'rejected') {
-          await FirebaseAuth.instance.signOut();
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('❌ Your LLG application was not approved. Please contact support.'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        } else if (userType == 'admin') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const AdminDashboard()),
-          );
-        } else if (userType == 'llg') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const LLGDashboard()),
-          );
-        } else {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const ParentDashboard()),
-          );
-        }
+        _navigateBasedOnUserType(user);
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Google Sign-In failed. Please try again.'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        _showError(e.toString().replaceAll('Exception: ', ''));
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _navigateBasedOnUserType(UserModel user) {
+    Widget destination;
+    switch (user.userType) {
+      case 'llg':
+      case 'llg_pending':
+        destination = const LLGDashboard();
+        break;
+      case 'admin':
+        destination = const AdminDashboard();
+        break;
+      default:
+        destination = const ParentDashboard();
+    }
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => destination),
+    );
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        Scaffold(
-          backgroundColor: AppColors.white,
-          appBar: AppBar(
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            leading: IconButton(
-              icon: Icon(Icons.arrow_back, color: AppColors.textDark),
-              onPressed: () => Navigator.pop(context),
-            ),
+    return Scaffold(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Colors.purple.shade700, Colors.purple.shade400],
           ),
-          body: SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                child: Container(
-                  constraints: BoxConstraints(
-                    maxWidth: isWeb ? 480 : double.infinity,
-                  ),
-                  padding: const EdgeInsets.all(AppSpacing.lg),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Card(
+                elevation: 8,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
                   child: Form(
                     key: _formKey,
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          isWeb ? 'Welcome Back!' : 'Welcome Back!',
-                          style: AppTextStyles.heading1,
+                        // Logo
+                        Icon(Icons.auto_awesome, size: 64, color: Colors.purple.shade700),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'LittleLumin',
+                          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                         ),
-                        const SizedBox(height: AppSpacing.sm),
+                        const SizedBox(height: 8),
                         Text(
-                          'Login to continue your journey',
-                          style: AppTextStyles.bodyLight,
+                          'Growing Children, Growing Parents',
+                          style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
                         ),
-                        const SizedBox(height: AppSpacing.xl),
+                        const SizedBox(height: 32),
 
                         // Email
-                        Text(
-                          'Email',
-                          style: AppTextStyles.body.copyWith(
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: AppSpacing.xs),
                         TextFormField(
                           controller: _emailController,
                           keyboardType: TextInputType.emailAddress,
                           decoration: InputDecoration(
-                            hintText: 'Enter your email',
-                            prefixIcon: Icon(
-                              Icons.email_outlined,
-                              color: AppColors.primary,
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(
-                                AppBorderRadius.medium,
-                              ),
-                              borderSide: BorderSide(color: AppColors.border),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(
-                                AppBorderRadius.medium,
-                              ),
-                              borderSide: BorderSide(
-                                color: AppColors.primary,
-                                width: 2,
-                              ),
-                            ),
+                            labelText: 'Email',
+                            prefixIcon: const Icon(Icons.email_outlined),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                           ),
-                          validator: (v) =>
-                              v!.isEmpty ? 'Please enter your email' : null,
+                          validator: (val) {
+                            if (val == null || val.isEmpty) return 'Please enter email';
+                            if (!val.contains('@')) return 'Please enter valid email';
+                            return null;
+                          },
                         ),
-                        const SizedBox(height: AppSpacing.md),
+                        const SizedBox(height: 16),
 
                         // Password
-                        Text(
-                          'Password',
-                          style: AppTextStyles.body.copyWith(
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: AppSpacing.xs),
                         TextFormField(
                           controller: _passwordController,
                           obscureText: _obscurePassword,
                           decoration: InputDecoration(
-                            hintText: 'Enter your password',
-                            prefixIcon: Icon(
-                              Icons.lock_outline,
-                              color: AppColors.primary,
-                            ),
+                            labelText: 'Password',
+                            prefixIcon: const Icon(Icons.lock_outline),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                             suffixIcon: IconButton(
-                              icon: Icon(
-                                _obscurePassword
-                                    ? Icons.visibility_off
-                                    : Icons.visibility,
-                                color: Colors.grey[400],
-                              ),
-                              onPressed: () => setState(
-                                () => _obscurePassword = !_obscurePassword,
-                              ),
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(
-                                AppBorderRadius.medium,
-                              ),
-                              borderSide: BorderSide(color: AppColors.border),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(
-                                AppBorderRadius.medium,
-                              ),
-                              borderSide: BorderSide(
-                                color: AppColors.primary,
-                                width: 2,
-                              ),
+                              icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
+                              onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                             ),
                           ),
-                          validator: (v) =>
-                              v!.isEmpty ? 'Please enter your password' : null,
+                          validator: (val) {
+                            if (val == null || val.isEmpty) return 'Please enter password';
+                            if (val.length < 6) return 'Password too short';
+                            return null;
+                          },
                         ),
-                        const SizedBox(height: AppSpacing.sm),
+                        const SizedBox(height: 12),
 
-                        // Remember Me & Forgot Password Row
+                        // Remember Me
                         Row(
                           children: [
                             Checkbox(
                               value: _rememberMe,
-                              activeColor: AppColors.primary,
-                              onChanged: (val) {
-                                setState(() {
-                                  _rememberMe = val ?? false;
-                                });
-                              },
+                              onChanged: (val) => setState(() => _rememberMe = val ?? false),
                             ),
-                            Text(
-                              'Remember Me',
-                              style: AppTextStyles.small.copyWith(color: AppColors.textDark),
-                            ),
-                            const Spacer(),
-                            TextButton(
-                              onPressed: () {},
-                              child: Text(
-                                'Forgot Password?',
-                                style: AppTextStyles.small.copyWith(
-                                  color: AppColors.primary,
-                                ),
-                              ),
-                            ),
+                            const Text('Remember Me'),
                           ],
                         ),
-                        const SizedBox(height: AppSpacing.md),
+                        const SizedBox(height: 16),
 
                         // Login Button
                         SizedBox(
                           width: double.infinity,
                           height: 50,
                           child: ElevatedButton(
-                            onPressed: _isLoading ? null : _login,
+                            onPressed: _isLoading ? null : _handleEmailLogin,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(
-                                  AppBorderRadius.medium,
-                                ),
-                              ),
+                              backgroundColor: Colors.purple.shade700,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             ),
                             child: _isLoading
-                                ? const SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : Text('Login', style: AppTextStyles.button),
+                                ? const CircularProgressIndicator(color: Colors.white)
+                                : const Text('Login', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                           ),
                         ),
-                        const SizedBox(height: AppSpacing.md),
+                        const SizedBox(height: 16),
 
-                        // Google Sign-In Button
+                        // OR Divider
+                        Row(
+                          children: [
+                            const Expanded(child: Divider()),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              child: Text('OR', style: TextStyle(color: Colors.grey.shade600)),
+                            ),
+                            const Expanded(child: Divider()),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Google Sign-In
                         SizedBox(
                           width: double.infinity,
                           height: 50,
                           child: OutlinedButton.icon(
-                            onPressed: _signInWithGoogle,
-                            icon: const FaIcon(
-                              FontAwesomeIcons.google,
-                              color: Color(0xFFDB4437),
-                              size: 22,
+                            onPressed: _isLoading ? null : _handleGoogleLogin,
+                            icon: Image.asset(
+                              'assets/images/google_logo.png',
+                              height: 24,
+                              errorBuilder: (_, _, _) => const Icon(Icons.g_mobiledata, size: 32),
                             ),
-                            label: Text(
-                              'Sign in with Google',
-                              style: AppTextStyles.body.copyWith(
-                                color: AppColors.textDark,
-                              ),
-                            ),
+                            label: const Text('Continue with Google', style: TextStyle(fontSize: 15)),
                             style: OutlinedButton.styleFrom(
-                              side: BorderSide(color: AppColors.border),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(
-                                  AppBorderRadius.medium,
-                                ),
-                              ),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              side: BorderSide(color: Colors.grey.shade300),
                             ),
                           ),
                         ),
-                        const SizedBox(height: AppSpacing.md),
+                        const SizedBox(height: 24),
 
                         // Sign Up Link
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text(
-                              "Don't have an account? ",
-                              style: AppTextStyles.bodyLight,
-                            ),
-                            GestureDetector(
-                              onTap: () {
-                                Navigator.pushReplacement(
+                            const Text("Don't have an account? "),
+                            TextButton(
+                              onPressed: () {
+                                Navigator.push(
                                   context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const SignUpPage(),
-                                  ),
+                                  MaterialPageRoute(builder: (_) => const SignUpPage()),
                                 );
                               },
-                              child: Text(
-                                'Sign Up',
-                                style: AppTextStyles.button.copyWith(
-                                  color: AppColors.primary,
-                                  fontSize: 16,
-                                ),
-                              ),
+                              child: const Text('Sign Up', style: TextStyle(fontWeight: FontWeight.bold)),
                             ),
                           ],
                         ),
@@ -520,11 +317,7 @@ class _LoginPageState extends State<LoginPage> {
             ),
           ),
         ),
-        if (_isLoading)
-          const AuthLoadingOverlay(
-            message: 'Authenticating your account...',
-          ),
-      ],
+      ),
     );
   }
 }

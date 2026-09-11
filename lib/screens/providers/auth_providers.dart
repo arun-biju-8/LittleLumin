@@ -15,25 +15,43 @@ class AuthProvider extends ChangeNotifier {
     required String email,
     required String password,
   }) async {
-    return await _authService.signUpWithEmail(
-      name: name,
-      email: email,
-      password: password,
-    );
+    try {
+      await _authService.signUpWithEmail(
+        name: name,
+        email: email,
+        password: password,
+      );
+      return null;
+    } catch (e) {
+      return e.toString().replaceAll('Exception: ', '');
+    }
   }
 
   Future<String?> signInWithEmail({
     required String email,
     required String password,
   }) async {
-    return await _authService.signInWithEmail(
-      email: email,
-      password: password,
-    );
+    try {
+      await _authService.signInWithEmail(
+        email: email,
+        password: password,
+      );
+      return null;
+    } catch (e) {
+      return e.toString().replaceAll('Exception: ', '');
+    }
   }
 
   Future<String?> signInWithGoogle() async {
-    return await _authService.signInWithGoogle();
+    try {
+      final user = await _authService.signInWithGoogle();
+      if (user == null) {
+        return 'Google sign-in cancelled.';
+      }
+      return null;
+    } catch (e) {
+      return e.toString().replaceAll('Exception: ', '');
+    }
   }
 
   Future<void> signOut() async {
