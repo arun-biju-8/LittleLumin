@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/activity_model.dart';
 import '../../models/child_model.dart';
 import '../../services/ai_generation_service.dart';
+import '../../services/saved_items_service.dart';
 
 class AIActivityGeneratorScreen extends StatefulWidget {
   final ChildModel? child;
@@ -18,6 +17,7 @@ class _AIActivityGeneratorScreenState extends State<AIActivityGeneratorScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final AIGenerationService _aiService = AIGenerationService();
+  final SavedItemsService _savedService = SavedItemsService();
   
   // Activity state
   bool _isGeneratingActivity = false;
@@ -94,41 +94,56 @@ class _AIActivityGeneratorScreenState extends State<AIActivityGeneratorScreen>
   }
 
   Future<void> _saveActivityToFirestore() async {
-    if (_generatedActivity == null || _isSavingActivity) return;
+    if (_generatedActivity == null) {
+      debugPrint('❌ No activity to save');
+      return;
+    }
 
     setState(() => _isSavingActivity = true);
 
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      final mapData = _generatedActivity!.toMap();
-      mapData['createdBy'] = user?.uid ?? 'parent';
-      mapData['createdByName'] = user?.displayName ?? 'Parent';
-      if (widget.child != null) {
-        mapData['childId'] = widget.child!.childId;
-      }
-
-      await FirebaseFirestore.instance.collection('activities').add(mapData);
+      final childId = widget.child?.childId ?? 'unknown';
+      await _savedService.saveActivity(
+        activity: _generatedActivity!,
+        childId: childId,
+      );
 
       if (mounted) {
-        setState(() {
-          _isSavingActivity = false;
-          _isActivitySaved = true;
-        });
-
+        setState(() => _isActivitySaved = true);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Activity saved to your collection!'),
-            backgroundColor: Colors.green,
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 8),
+                const Expanded(child: Text('✅ Activity saved to My Library')),
+              ],
+            ),
+            backgroundColor: Colors.green.shade700,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _isSavingActivity = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving activity: $e'), backgroundColor: Colors.orange),
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(child: Text('❌ Failed to save: $e')),
+              ],
+            ),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+          ),
         );
       }
+    } finally {
+      if (mounted) setState(() => _isSavingActivity = false);
     }
   }
 
@@ -165,42 +180,56 @@ class _AIActivityGeneratorScreenState extends State<AIActivityGeneratorScreen>
   }
 
   Future<void> _saveStoryToFirestore() async {
-    if (_generatedStory == null || _isSavingStory) return;
+    if (_generatedStory == null) {
+      debugPrint('❌ No story to save');
+      return;
+    }
 
     setState(() => _isSavingStory = true);
 
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      await FirebaseFirestore.instance.collection('stories').add({
-        'parentId': user?.uid ?? '',
-        'childName': _childName.isEmpty ? 'Little Explorer' : _childName,
-        'title': _generatedStory!['title'] ?? 'Story',
-        'theme': _selectedStoryTheme,
-        'storyContent': _generatedStory!['story'] ?? _generatedStory!['storyContent'] ?? '',
-        'moral': _generatedStory!['moral'] ?? _generatedStory!['moralLesson'] ?? '',
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+      final childId = widget.child?.childId ?? 'unknown';
+      await _savedService.saveStory(
+        story: _generatedStory!,
+        childId: childId,
+      );
 
       if (mounted) {
-        setState(() {
-          _isSavingStory = false;
-          _isStorySaved = true;
-        });
-
+        setState(() => _isStorySaved = true);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Story saved to your library!'),
-            backgroundColor: Colors.green,
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 8),
+                const Expanded(child: Text('✅ Story saved to My Library')),
+              ],
+            ),
+            backgroundColor: Colors.green.shade700,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _isSavingStory = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving story: $e'), backgroundColor: Colors.orange),
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(child: Text('❌ Failed to save: $e')),
+              ],
+            ),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+          ),
         );
       }
+    } finally {
+      if (mounted) setState(() => _isSavingStory = false);
     }
   }
 

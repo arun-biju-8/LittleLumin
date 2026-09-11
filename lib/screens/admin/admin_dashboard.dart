@@ -11,6 +11,7 @@ import 'llg_management_page.dart';
 import 'user_directory_page.dart';
 import 'flagged_children_page.dart';
 import 'admin_activity_management.dart';
+import 'admin_analytics_page.dart';
 import 'admin_profile_page.dart';
 
 class AdminDashboard extends StatefulWidget {
@@ -36,6 +37,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       const UserDirectoryPage(),
       const FlaggedChildrenPage(),
       const AdminActivityManagement(),
+      const AdminAnalyticsPage(),
       const AdminProfilePage(),
     ];
   }
@@ -47,6 +49,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     'User Directory',
     'Flagged Children',
     'Activities Library',
+    'Platform Analytics',
     'Admin Profile',
   ];
 
@@ -57,6 +60,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     Icons.people_alt_rounded,
     Icons.flag_rounded,
     Icons.auto_stories_rounded,
+    Icons.analytics_rounded,
     Icons.admin_panel_settings_rounded,
   ];
 

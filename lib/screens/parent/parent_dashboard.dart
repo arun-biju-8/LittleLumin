@@ -19,6 +19,7 @@ import 'profile_page.dart';
 import 'parent_activities_tab.dart';
 import 'journey_view.dart';
 import 'activity_view.dart';
+import 'saved_items_page.dart';
 import 'feedback_form.dart';
 import '../../services/journey_service.dart';
 import '../../models/journey_model.dart';
@@ -952,6 +953,28 @@ class _ParentDashboardState extends State<ParentDashboard> {
                 child: const Text('Try Now', style: TextStyle(fontWeight: FontWeight.bold)),
               ),
             ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
+
+        // My Library Card
+        Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: ListTile(
+            leading: CircleAvatar(
+              backgroundColor: Colors.purple.shade100,
+              child: Icon(Icons.collections_bookmark, color: Colors.purple.shade700),
+            ),
+            title: const Text('My Library', style: TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: const Text('Saved activities and stories'),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SavedItemsPage()),
+              );
+            },
           ),
         ),
         const SizedBox(height: AppSpacing.md),

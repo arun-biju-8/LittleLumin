@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../utils/constants.dart';
 import 'create_llg_page.dart';
 import 'llg_detail_page.dart';
+import 'admin_analytics_page.dart';
 
 class AdminHomePage extends StatefulWidget {
   final Function(int)? onNavigate;
@@ -156,6 +157,23 @@ class _AdminHomePageState extends State<AdminHomePage> {
               final isWide = constraints.maxWidth > 700;
               final cards = [
                 _buildQuickActionCard(
+                  title: 'Platform Analytics',
+                  subtitle: 'Real-time metrics, user distribution & live activity feed',
+                  icon: Icons.analytics_rounded,
+                  color: const Color(0xFF6366F1),
+                  buttonText: 'View Analytics',
+                  onTap: () {
+                    if (widget.onNavigate != null) {
+                      widget.onNavigate!(6);
+                    } else {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const AdminAnalyticsPage()),
+                      );
+                    }
+                  },
+                ),
+                _buildQuickActionCard(
                   title: 'Register LLG Guide',
                   subtitle: 'Create & onboard a new LLG Guide practitioner account',
                   icon: Icons.person_add_alt_1_rounded,
@@ -182,15 +200,24 @@ class _AdminHomePageState extends State<AdminHomePage> {
               ];
 
               return isWide
-                  ? Row(
-                      children: cards
-                          .map((c) => Expanded(
-                                child: Padding(
-                                  padding: const EdgeInsets.only(right: AppSpacing.md),
-                                  child: c,
-                                ),
-                              ))
-                          .toList(),
+                  ? Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(child: cards[0]),
+                            const SizedBox(width: AppSpacing.md),
+                            Expanded(child: cards[1]),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        Row(
+                          children: [
+                            Expanded(child: cards[2]),
+                            const SizedBox(width: AppSpacing.md),
+                            Expanded(child: cards[3]),
+                          ],
+                        ),
+                      ],
                     )
                   : Column(
                       children: cards
