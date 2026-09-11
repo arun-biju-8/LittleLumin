@@ -15,28 +15,24 @@
       },
       "oauth_client": [
         {
-          "client_id": "1083938880859-au7lqil2gtk9qekercfqac1bj758k12l.apps.googleusercontent.com",
+          "client_id": "1083938880859-7lafv5g972o7gbg30jnp2lk2psa7km0d.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.example.littlelumin",
-            "certificate_hash": "59a7c80e34799d334bb8985b938ecbe67b9fe29e"
+            "certificate_hash": "4bec7633ba4d3573af85c9593ae1c91277000a2a"
           }
-        },
-        {
-          "client_id": "1083938880859-jb85ivdd7lrkct2uea3f1vnitn1gdadi.apps.googleusercontent.com",
-          "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyBWGAsKnIPnWm6Cr_qvZdgYR1zavVqa20s"
+          "current_key": "AIzaSyD4L_pxswgljgUiHLIHpn230UYoUPmzpak"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "1083938880859-jb85ivdd7lrkct2uea3f1vnitn1gdadi.apps.googleusercontent.com",
+              "client_id": "1083938880859-8linht65le3mmji9r0pv1cjoj0sr1r55.apps.googleusercontent.com",
               "client_type": 3
             },
             {
