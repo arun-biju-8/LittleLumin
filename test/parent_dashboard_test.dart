@@ -25,19 +25,19 @@ void main() {
         ),
       );
 
-      expect(find.text('AI Activity'), findsOneWidget);
-      expect(find.text('AI Story'), findsOneWidget);
-      expect(find.text('All Activities'), findsOneWidget);
+      expect(find.text('Create with AI'), findsOneWidget);
+      expect(find.text('Read a Story'), findsOneWidget);
+      expect(find.text('Activity Library'), findsOneWidget);
 
-      await tester.tap(find.text('AI Activity'));
+      await tester.tap(find.text('Create with AI'));
       await tester.pump();
       expect(aiActTapped, isTrue);
 
-      await tester.tap(find.text('AI Story'));
+      await tester.tap(find.text('Read a Story'));
       await tester.pump();
       expect(aiStoryTapped, isTrue);
 
-      await tester.tap(find.text('All Activities'));
+      await tester.tap(find.text('Activity Library'));
       await tester.pump();
       expect(allActTapped, isTrue);
     });

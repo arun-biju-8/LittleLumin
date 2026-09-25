@@ -1,3 +1,4 @@
+// lib/screens/parent/tabs/stories_tab.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../models/child_model.dart';
@@ -113,7 +114,7 @@ class _StoriesTabState extends State<StoriesTab> {
               shape: BoxShape.circle,
             ),
             alignment: Alignment.center,
-            child: const Icon(Icons.book, color: MeadowColors.gold, size: 22),
+            child: const Icon(Icons.book_rounded, color: MeadowColors.gold, size: 22),
           ),
           title: Text(
             title,
@@ -214,16 +215,20 @@ class _StoriesTabState extends State<StoriesTab> {
 
   @override
   Widget build(BuildContext context) {
+    final kidName = widget.activeChild?.name ?? 'your child';
+
     return Scaffold(
       backgroundColor: MeadowColors.cream,
       appBar: GlobalHeader(
         showBack: false,
         scrollController: _scrollController,
       ),
-      body: ListView(
+      body: SingleChildScrollView(
         controller: _scrollController,
         padding: const EdgeInsets.symmetric(horizontal: MeadowSpacing.screenH, vertical: MeadowSpacing.lg),
-        children: [
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           // Header
           Text('Stories', style: MeadowTypography.display),
           const SizedBox(height: MeadowSpacing.xs),
@@ -233,54 +238,70 @@ class _StoriesTabState extends State<StoriesTab> {
           ),
           const SizedBox(height: MeadowSpacing.xl),
 
-          // Top Card: "✨ Create a Story"
+          // Top Card: "✨ Create a Story" with story_reading.webp illustration
           Container(
-            padding: const EdgeInsets.all(MeadowSpacing.xl),
-            decoration: BoxDecoration(
-              color: MeadowColors.surface,
-              borderRadius: BorderRadius.circular(MeadowRadius.xl),
-              border: Border.all(color: MeadowColors.borderLight),
-              boxShadow: MeadowShadows.card,
-            ),
+            padding: const EdgeInsets.all(MeadowSpacing.cardPadding),
+            decoration: MeadowCards.hero(),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: const BoxDecoration(
-                        color: MeadowColors.goldSurface,
-                        shape: BoxShape.circle,
-                      ),
-                      alignment: Alignment.center,
-                      child: const Text('✨', style: TextStyle(fontSize: 24)),
-                    ),
-                    const SizedBox(width: MeadowSpacing.md),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Create a Story', style: MeadowTypography.h2),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Personalized AI adventures tailored for your child',
-                            style: MeadowTypography.caption.copyWith(color: MeadowColors.textSecondary),
-                          ),
-                        ],
+                    const Text('✨', style: TextStyle(fontSize: 18)),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Create a Story',
+                      style: MeadowTypography.caption.copyWith(
+                        color: MeadowColors.primary,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: MeadowSpacing.lg),
+                const SizedBox(height: 12),
+
+                // Illustration
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(MeadowRadius.md),
+                  child: AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: Image.asset(
+                      'assets/illustrations/story_reading.webp',
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        color: MeadowColors.primarySurface,
+                        child: const Icon(Icons.menu_book_rounded, color: MeadowColors.primary, size: 40),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                Text(
+                  'Personalized stories for $kidName',
+                  style: MeadowTypography.h2,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Generate magical stories featuring values, themes, and characters designed for $kidName.',
+                  style: MeadowTypography.body.copyWith(color: MeadowColors.textSecondary),
+                ),
+                const SizedBox(height: 16),
                 SizedBox(
                   width: double.infinity,
-                  child: ElevatedButton.icon(
+                  child: ElevatedButton(
                     onPressed: _openStoryCreator,
-                    icon: const Icon(Icons.auto_stories, size: 20),
-                    label: const Text('Start Creating'),
                     style: MeadowButtons.primary(),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Open AI Story Creator →',
+                          style: MeadowTypography.button.copyWith(color: MeadowColors.textInverse),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -290,11 +311,13 @@ class _StoriesTabState extends State<StoriesTab> {
           const SizedBox(height: MeadowSpacing.xxl),
 
           // Section Title: My Saved Stories
-          Row(
-            children: [
-              Text('My Saved Stories', style: MeadowTypography.h2),
-              const Spacer(),
-            ],
+          Text(
+            'My Saved Stories',
+            style: MeadowTypography.caption.copyWith(
+              color: MeadowColors.textTertiary,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.2,
+            ),
           ),
           const SizedBox(height: MeadowSpacing.md),
 
@@ -315,11 +338,7 @@ class _StoriesTabState extends State<StoriesTab> {
               if (docs.isEmpty) {
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: MeadowSpacing.xl, vertical: MeadowSpacing.xxxl),
-                  decoration: BoxDecoration(
-                    color: MeadowColors.surface,
-                    borderRadius: BorderRadius.circular(MeadowRadius.lg),
-                    border: Border.all(color: MeadowColors.borderLight),
-                  ),
+                  decoration: MeadowCards.standard(),
                   child: Column(
                     children: [
                       Container(
@@ -351,7 +370,7 @@ class _StoriesTabState extends State<StoriesTab> {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: docs.length,
-                separatorBuilder: (_, _) => const SizedBox(height: MeadowSpacing.md),
+                separatorBuilder: (context, index) => const SizedBox(height: MeadowSpacing.md),
                 itemBuilder: (context, index) {
                   final doc = docs[index];
                   final data = doc.data() as Map<String, dynamic>;
@@ -362,6 +381,7 @@ class _StoriesTabState extends State<StoriesTab> {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 }

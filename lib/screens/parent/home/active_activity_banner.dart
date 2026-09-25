@@ -42,7 +42,11 @@ class _ActiveActivityBannerState extends State<ActiveActivityBanner> {
 
   void _initStream() {
     if (widget.childId.isNotEmpty) {
-      _stream = (widget.service ?? ActivityStateService()).watchActiveActivity(widget.childId);
+      try {
+        _stream = (widget.service ?? ActivityStateService()).watchActiveActivity(widget.childId);
+      } catch (_) {
+        _stream = null;
+      }
     } else {
       _stream = null;
     }

@@ -1,17 +1,24 @@
+// lib/screens/parent/home/home_tab.dart
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import '../../../models/child_model.dart';
 import '../../../widgets/global_header.dart';
 import '../../../services/reminder_service.dart';
 import '../../../services/activity_state_service.dart';
+import '../../../theme/meadow_theme.dart';
 import '../feedback_form.dart';
-import '../parent_theme.dart';
-import 'child_selector_card.dart';
-import 'journey_card.dart';
-import 'quick_actions_row.dart';
-import 'tip_card.dart';
-import 'flagged_alert_card.dart';
+import '../ai_activity_generator.dart';
+import '../growth_analytics_screen.dart';
+import '../widgets/growth_guidance_banner.dart';
+import '../app_shell.dart';
 import 'active_activity_banner.dart';
+import 'flagged_alert_card.dart';
+import 'widgets/greeting_header.dart';
+import 'widgets/child_switcher_card.dart';
+import 'widgets/todays_plan_card.dart';
+import 'widgets/quick_actions_row.dart';
+import 'widgets/growth_snapshot_card.dart';
+import 'widgets/todays_insight_card.dart';
+import 'widgets/recent_activity_card.dart';
 
 class HomeTab extends StatefulWidget {
   final String parentName;
@@ -95,23 +102,33 @@ class _HomeTabState extends State<HomeTab> {
     }
   }
 
+  Future<void> _handleRefresh() async {
+    await Future.delayed(const Duration(milliseconds: 500));
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _navigateToGrowth() {
+    final shell = context.findAncestorStateOfType<AppShellState>();
+    if (shell != null) {
+      shell.setTab(1);
+    } else {
+      widget.onContinueJourney();
+    }
+  }
+
   Widget _buildReminderCard(BuildContext context) {
     if (_reminderMessage == null) return const SizedBox.shrink();
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: MeadowSpacing.md),
+      padding: const EdgeInsets.all(MeadowSpacing.cardPadding),
       decoration: BoxDecoration(
-        color: const Color(0xFFEFF6FF),
-        borderRadius: ParentRadius.card,
-        border: Border.all(color: const Color(0xFF93C5FD), width: 1.2),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF3B82F6).withOpacity(0.08),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
+        color: MeadowColors.languageSurface,
+        borderRadius: BorderRadius.circular(MeadowRadius.lg),
+        border: Border.all(color: MeadowColors.language.withOpacity(0.4), width: 1.2),
+        boxShadow: MeadowShadows.soft,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -122,7 +139,7 @@ class _HomeTabState extends State<HomeTab> {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: const BoxDecoration(
-                  color: Color(0xFFDBEAFE),
+                  color: Colors.white,
                   shape: BoxShape.circle,
                 ),
                 child: const Text('🔔', style: TextStyle(fontSize: 16)),
@@ -134,17 +151,17 @@ class _HomeTabState extends State<HomeTab> {
                   children: [
                     Text(
                       'Friendly Reminder',
-                      style: ParentTypography.caption.copyWith(
-                        color: const Color(0xFF1D4ED8),
+                      style: MeadowTypography.caption.copyWith(
+                        color: MeadowColors.primary,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       _reminderMessage!,
-                      style: ParentTypography.body.copyWith(
+                      style: MeadowTypography.body.copyWith(
                         fontWeight: FontWeight.w600,
-                        color: const Color(0xFF1E3A8A),
+                        color: MeadowColors.textPrimary,
                       ),
                     ),
                   ],
@@ -160,8 +177,8 @@ class _HomeTabState extends State<HomeTab> {
                 onPressed: () => setState(() => _reminderMessage = null),
                 child: Text(
                   'Dismiss',
-                  style: ParentTypography.caption.copyWith(
-                    color: const Color(0xFF6B7280),
+                  style: MeadowTypography.caption.copyWith(
+                    color: MeadowColors.textSecondary,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -185,11 +202,13 @@ class _HomeTabState extends State<HomeTab> {
                   }
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2563EB),
-                  foregroundColor: Colors.white,
+                  backgroundColor: MeadowColors.primary,
+                  foregroundColor: MeadowColors.textInverse,
                   elevation: 0,
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  shape: const RoundedRectangleBorder(borderRadius: ParentRadius.button),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(MeadowRadius.md),
+                  ),
                 ),
                 child: const Text('Complete Now', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
               ),
@@ -197,70 +216,55 @@ class _HomeTabState extends State<HomeTab> {
           ),
         ],
       ),
-    )
-        .animate()
-        .fadeIn(duration: 300.ms)
-        .slideY(begin: 0.05, end: 0, duration: 300.ms);
+    );
   }
 
   Widget _buildEmptyState(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
+        padding: const EdgeInsets.symmetric(horizontal: MeadowSpacing.screenH),
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.all(28),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: ParentRadius.card,
-            boxShadow: ParentShadows.elevated,
-          ),
+          decoration: MeadowCards.standard(),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
                 width: 80,
                 height: 80,
-                decoration: BoxDecoration(
-                  color: ParentColors.primary.withOpacity(0.1),
+                decoration: const BoxDecoration(
+                  color: MeadowColors.primarySurface,
                   shape: BoxShape.circle,
                 ),
                 alignment: Alignment.center,
                 child: const Text('👶', style: TextStyle(fontSize: 40)),
-              )
-                  .animate(onPlay: (c) => c.repeat(reverse: true))
-                  .moveY(begin: 0, end: -6, duration: 1800.ms, curve: Curves.easeInOut),
+              ),
               const SizedBox(height: 20),
               Text(
                 'Welcome to LittleLumin!',
                 textAlign: TextAlign.center,
-                style: ParentTypography.title,
+                style: MeadowTypography.h2,
               ),
               const SizedBox(height: 8),
               Text(
                 'Add your child\'s profile to unlock personalized skill journeys, daily activities, and developmental tracking.',
                 textAlign: TextAlign.center,
-                style: ParentTypography.bodyLight,
+                style: MeadowTypography.body.copyWith(
+                  color: MeadowColors.textSecondary,
+                ),
               ),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
-                height: 52,
                 child: ElevatedButton.icon(
                   onPressed: widget.onAddChild,
                   icon: const Icon(Icons.add_rounded),
                   label: Text(
                     'Add Your First Child',
-                    style: ParentTypography.button.copyWith(fontSize: 16),
+                    style: MeadowTypography.button.copyWith(color: MeadowColors.textInverse),
                   ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: ParentColors.primary,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: ParentRadius.button,
-                    ),
-                  ),
+                  style: MeadowButtons.primary(),
                 ),
               ),
             ],
@@ -273,7 +277,7 @@ class _HomeTabState extends State<HomeTab> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: ParentColors.surfaceAlt,
+      backgroundColor: MeadowColors.cream,
       appBar: GlobalHeader(
         showBack: false,
         scrollController: _scrollController,
@@ -282,56 +286,118 @@ class _HomeTabState extends State<HomeTab> {
       ),
       body: widget.activeChild == null
           ? _buildEmptyState(context)
-          : SingleChildScrollView(
-              controller: _scrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Smart reminder if triggered
-                  _buildReminderCard(context),
+          : RefreshIndicator(
+              color: MeadowColors.primary,
+              backgroundColor: MeadowColors.surface,
+              onRefresh: _handleRefresh,
+              child: SingleChildScrollView(
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: MeadowSpacing.screenH,
+                  vertical: 16,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Smart reminder if triggered
+                    _buildReminderCard(context),
 
-                  // Prominent Activity In Progress banner
-                  ActiveActivityBanner(
-                    childId: widget.activeChild!.childId,
-                  ),
+                    // Prominent Activity In Progress banner (if active)
+                    ActiveActivityBanner(
+                      childId: widget.activeChild!.childId,
+                    ),
 
-                  ChildSelectorCard(
-                    child: widget.activeChild!,
-                    children: widget.children,
-                    onChildSelected: widget.onChildSelected,
-                    onAddChild: widget.onAddChild,
-                  )
-                      .animate()
-                      .fadeIn(duration: 300.ms)
-                      .slideY(begin: 0.05, end: 0, duration: 300.ms),
-                  const SizedBox(height: 16),
-                  JourneyCard(
-                    child: widget.activeChild!,
-                    onContinueJourney: widget.onContinueJourney,
-                  )
-                      .animate()
-                      .fadeIn(delay: 80.ms, duration: 350.ms)
-                      .slideY(begin: 0.05, end: 0, duration: 350.ms),
-                  const SizedBox(height: 16),
-                  QuickActionsRow(
-                    onAIActivity: widget.onAIActivity,
-                    onAIStory: widget.onAIStory,
-                    onAllActivities: widget.onAllActivities,
-                  ),
-                  const SizedBox(height: 16),
-                  const TipCard()
-                      .animate()
-                      .fadeIn(delay: 200.ms, duration: 350.ms)
-                      .slideY(begin: 0.05, end: 0, duration: 350.ms),
-                  if (widget.activeChild!.isFlagged) ...[
-                    const SizedBox(height: 16),
-                    FlaggedAlertCard(child: widget.activeChild!)
-                        .animate()
-                        .fadeIn(delay: 280.ms, duration: 350.ms)
-                        .slideY(begin: 0.05, end: 0, duration: 350.ms),
+                    // Post-feedback guidance (if recent activity feedback)
+                    GrowthGuidanceBanner(
+                      activeChild: widget.activeChild!,
+                      onViewFullGrowth: _navigateToGrowth,
+                    ),
+
+                    // 1. Greeting Section
+                    GreetingHeader(parentName: widget.parentName),
+                    const SizedBox(height: MeadowSpacing.lg),
+
+                    // 2. Child Switcher Card
+                    ChildSwitcherCard(
+                      child: widget.activeChild!,
+                      children: widget.children,
+                      onChildSelected: widget.onChildSelected,
+                      onAddChild: widget.onAddChild,
+                    ),
+                    const SizedBox(height: MeadowSpacing.lg),
+
+                    // 3. Today's Plan Hero Card
+                    TodaysPlanCard(
+                      child: widget.activeChild!,
+                      onAIActivity: widget.onAIActivity,
+                      onContinueJourney: _navigateToGrowth,
+                    ),
+                    const SizedBox(height: MeadowSpacing.lg),
+
+                    // 4. Quick Actions Row (3 tiles)
+                    QuickActionsRow(
+                      onAIActivity: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => AIActivityGeneratorScreen(
+                              child: widget.activeChild,
+                              initialTabIndex: 0,
+                            ),
+                          ),
+                        );
+                      },
+                      onAIStory: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => AIActivityGeneratorScreen(
+                              child: widget.activeChild,
+                              initialTabIndex: 1,
+                            ),
+                          ),
+                        );
+                      },
+                      onAllActivities: widget.onAllActivities,
+                    ),
+                    const SizedBox(height: MeadowSpacing.lg),
+
+                    // 5. Growth Snapshot Card
+                    GrowthSnapshotCard(
+                      child: widget.activeChild!,
+                      onViewGrowth: _navigateToGrowth,
+                    ),
+                    const SizedBox(height: MeadowSpacing.lg),
+
+                    // 6. Today's Insight Card
+                    const TodaysInsightCard(),
+                    const SizedBox(height: MeadowSpacing.lg),
+
+                    // 7. Recent Activity Card
+                    RecentActivityCard(
+                      child: widget.activeChild!,
+                      onViewHistory: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => GrowthAnalyticsScreen(
+                              activeChild: widget.activeChild!,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+
+                    // 8. Support / Flagged Alert Card (if flagged)
+                    if (widget.activeChild!.isFlagged) ...[
+                      const SizedBox(height: MeadowSpacing.lg),
+                      FlaggedAlertCard(child: widget.activeChild!),
+                    ],
+
+                    const SizedBox(height: MeadowSpacing.xxxl),
                   ],
-                ],
+                ),
               ),
             ),
     );
