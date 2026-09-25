@@ -1,11 +1,12 @@
-// lib/screens/parent/profile_page.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
 import '../../models/child_model.dart';
 import '../../utils/constants.dart';
+import '../../utils/validators.dart';
 import '../landing_page.dart';
 import 'edit_child_page.dart';
 
@@ -67,7 +68,15 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _updateProfile() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please correct errors before saving.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
     setState(() => _isLoading = true);
 
@@ -235,6 +244,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         controller: _nameController,
                         icon: Icons.person_outline,
                         enabled: _isEditing,
+                        validator: Validators.name,
                       ),
                       const SizedBox(height: AppSpacing.md),
 
@@ -253,6 +263,9 @@ class _ProfilePageState extends State<ProfilePage> {
                         controller: _phoneController,
                         icon: Icons.phone_outlined,
                         enabled: _isEditing,
+                        keyboardType: TextInputType.phone,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        validator: (v) => (v != null && v.trim().isNotEmpty) ? Validators.phone(v) : null,
                       ),
                       const SizedBox(height: AppSpacing.md),
 
@@ -670,6 +683,9 @@ class _ProfilePageState extends State<ProfilePage> {
     required TextEditingController controller,
     required IconData icon,
     required bool enabled,
+    String? Function(String?)? validator,
+    TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -685,15 +701,13 @@ class _ProfilePageState extends State<ProfilePage> {
         TextFormField(
           controller: controller,
           enabled: enabled,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          keyboardType: keyboardType,
+          inputFormatters: inputFormatters,
           style: TextStyle(
             color: enabled ? AppColors.textDark : Colors.grey[600],
           ),
-          validator: (v) {
-            if (label == 'Full Name' && (v == null || v.isEmpty)) {
-              return 'Please enter your name';
-            }
-            return null;
-          },
+          validator: validator,
           decoration: InputDecoration(
             prefixIcon: Icon(icon, color: AppColors.primary, size: 20),
             border: OutlineInputBorder(

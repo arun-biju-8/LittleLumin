@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import '../../models/vabs_question.dart';
 import '../../services/vabs_service.dart';
+import '../../widgets/global_header.dart';
 
 class VABSSurveyPage extends StatefulWidget {
   final String childId;
@@ -160,20 +161,7 @@ class _VABSSurveyPageState extends State<VABSSurveyPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
-      appBar: AppBar(
-        title: const Text('VABS-II Assessment'),
-        backgroundColor: Colors.purple.shade700,
-        foregroundColor: Colors.white,
-        actions: [
-          TextButton(
-            onPressed: _handleSkip,
-            child: const Text(
-              'Skip',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
-            ),
-          ),
-        ],
-      ),
+      appBar: const GlobalHeader(showBack: true),
       body: Column(
         children: [
           // Progress Header
@@ -183,6 +171,31 @@ class _VABSSurveyPageState extends State<VABSSurveyPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'VABS-II Assessment',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1E293B),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _handleSkip,
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.purple.shade700,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      child: const Text(
+                        'Skip',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [

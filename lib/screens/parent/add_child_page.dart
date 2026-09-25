@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../services/child_service.dart';
 import '../../utils/constants.dart';
+import '../../utils/validators.dart';
+import '../../widgets/global_header.dart';
 import 'parent_dashboard.dart';
 
 class AddChildPage extends StatefulWidget {
@@ -33,13 +35,17 @@ class _AddChildPageState extends State<AddChildPage> {
 
   Future<void> _selectDate(BuildContext context) async {
     final now = DateTime.now();
-    final initialDate = _selectedDOB ?? DateTime(now.year - 3, now.month, now.day);
+    final initialDate = _selectedDOB ?? DateTime(now.year - 4, now.month, now.day);
+    final firstDate = DateTime(now.year - 10, now.month, now.day);
+    final lastDate = DateTime(now.year - 2, now.month, now.day);
 
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: initialDate,
-      firstDate: DateTime(now.year - 18, now.month, now.day),
-      lastDate: now,
+      initialDate: initialDate.isBefore(firstDate)
+          ? firstDate
+          : (initialDate.isAfter(lastDate) ? lastDate : initialDate),
+      firstDate: firstDate,
+      lastDate: lastDate,
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -55,6 +61,15 @@ class _AddChildPageState extends State<AddChildPage> {
     );
 
     if (picked != null) {
+      final err = Validators.dateOfBirth(picked);
+      if (err != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(err), backgroundColor: Colors.red),
+          );
+        }
+        return;
+      }
       setState(() {
         _selectedDOB = picked;
         _dobController.text = DateFormat('dd/MM/yyyy').format(picked);
@@ -251,10 +266,8 @@ class _AddChildPageState extends State<AddChildPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.white,
-      appBar: AppBar(
-        title: Text('Add Child', style: AppTextStyles.heading2),
-        backgroundColor: AppColors.white,
-        elevation: 0,
+      appBar: const GlobalHeader(
+        showBack: true,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -283,6 +296,7 @@ class _AddChildPageState extends State<AddChildPage> {
                 const SizedBox(height: AppSpacing.xs),
                 TextFormField(
                   controller: _nameController,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   decoration: InputDecoration(
                     hintText: 'Enter child\'s name',
                     prefixIcon: Icon(Icons.person_outline, color: AppColors.primary),
@@ -295,7 +309,7 @@ class _AddChildPageState extends State<AddChildPage> {
                       borderSide: BorderSide(color: AppColors.primary, width: 2),
                     ),
                   ),
-                  validator: (v) => v!.isEmpty ? 'Please enter a name' : null,
+                  validator: Validators.name,
                 ),
                 const SizedBox(height: AppSpacing.md),
 
@@ -308,6 +322,7 @@ class _AddChildPageState extends State<AddChildPage> {
                 TextFormField(
                   controller: _dobController,
                   readOnly: true,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   onTap: () => _selectDate(context),
                   decoration: InputDecoration(
                     hintText: 'DD/MM/YYYY',
@@ -325,12 +340,7 @@ class _AddChildPageState extends State<AddChildPage> {
                       borderSide: BorderSide(color: AppColors.primary, width: 2),
                     ),
                   ),
-                  validator: (v) {
-                    if (_selectedDOB == null || v == null || v.isEmpty) {
-                      return 'Please select Date of Birth';
-                    }
-                    return null;
-                  },
+                  validator: (v) => Validators.dateOfBirth(_selectedDOB),
                 ),
                 const SizedBox(height: AppSpacing.md),
 
@@ -340,29 +350,34 @@ class _AddChildPageState extends State<AddChildPage> {
                   style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: AppSpacing.xs),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: AppColors.border),
-                    borderRadius: BorderRadius.circular(AppBorderRadius.medium),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: _selectedGender,
-                      isExpanded: true,
-                      items: _genders.map((gender) {
-                        return DropdownMenuItem(
-                          value: gender,
-                          child: Text(gender),
-                        );
-                      }).toList(),
-                      onChanged: (value) {
-                        setState(() {
-                          _selectedGender = value!;
-                        });
-                      },
+                DropdownButtonFormField<String>(
+                  value: _selectedGender,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  decoration: InputDecoration(
+                    prefixIcon: Icon(Icons.people_outline, color: AppColors.primary),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppBorderRadius.medium),
+                      borderSide: BorderSide(color: AppColors.border),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppBorderRadius.medium),
+                      borderSide: BorderSide(color: AppColors.primary, width: 2),
                     ),
                   ),
+                  items: _genders.map((gender) {
+                    return DropdownMenuItem(
+                      value: gender,
+                      child: Text(gender),
+                    );
+                  }).toList(),
+                  validator: Validators.gender,
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() {
+                        _selectedGender = value;
+                      });
+                    }
+                  },
                 ),
                 const SizedBox(height: AppSpacing.lg),
 

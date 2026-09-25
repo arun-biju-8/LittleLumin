@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/activity_model.dart';
 import '../../services/journey_service.dart';
+import '../../services/activity_state_service.dart';
+import '../../widgets/global_header.dart';
 import 'feedback_form.dart';
 
 class JourneyActivityDetailPage extends StatefulWidget {
@@ -60,12 +62,13 @@ class _JourneyActivityDetailPageState extends State<JourneyActivityDetailPage> {
   void _onComplete() async {
     if (_activity == null) return;
 
-    // Mark activity as complete in journey
+    // Mark activity as complete in journey and state machine
     await _journeyService.markActivityComplete(
       widget.childId,
       widget.activityId,
       _activity!.skillType,
     );
+    await ActivityStateService().markCompleted(widget.childId);
 
     if (!mounted) return;
 
@@ -88,23 +91,31 @@ class _JourneyActivityDetailPageState extends State<JourneyActivityDetailPage> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Loading...')),
+        appBar: GlobalHeader(
+          showBack: true,
+          title: 'Loading...',
+          onBackTap: () => Navigator.pop(context),
+        ),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_activity == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Activity Not Found')),
+        appBar: GlobalHeader(
+          showBack: true,
+          title: 'Not Found',
+          onBackTap: () => Navigator.pop(context),
+        ),
         body: const Center(child: Text('This activity could not be loaded.')),
       );
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_activity!.title),
-        backgroundColor: Colors.purple.shade700,
-        foregroundColor: Colors.white,
+      appBar: GlobalHeader(
+        showBack: true,
+        title: _activity!.title,
+        onBackTap: () => Navigator.pop(context),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),

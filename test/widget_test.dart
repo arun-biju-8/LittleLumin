@@ -1,30 +1,54 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:littlelumin/main.dart';
+import 'package:littlelumin/widgets/mobile_only_gate.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(MyApp());
+  group('MobileOnlyGate Widget Tests', () {
+    testWidgets('LLG users always see the destination child widget', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: MobileOnlyGate(
+            userType: 'llg',
+            child: Text('LLG Specialist Portal Content'),
+          ),
+        ),
+      );
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+      expect(find.text('LLG Specialist Portal Content'), findsOneWidget);
+    });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    testWidgets('Admin users always see the destination child widget', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: MobileOnlyGate(
+            userType: 'admin',
+            child: Text('Admin Portal Content'),
+          ),
+        ),
+      );
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+      expect(find.text('Admin Portal Content'), findsOneWidget);
+    });
+
+    testWidgets('Parent user on desktop test environment sees mobile-only gate', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: MobileOnlyGate(
+              userType: 'parent',
+              child: Text('Parent Private Home Content'),
+            ),
+          ),
+        );
+
+        // In Flutter test desktop environment (Windows/Linux/macOS), parents should be blocked
+        expect(find.text('LittleLumin is Mobile-Only for Parents'), findsOneWidget);
+        expect(find.text('Parent Private Home Content'), findsNothing);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
   });
 }

@@ -1,3 +1,4 @@
+// ignore_for_file: constant_identifier_names
 // lib/services/journey_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
@@ -6,9 +7,213 @@ import '../models/activity_model.dart';
 
 class JourneyService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final String _collection = 'journeyProgress';
+  static const String _collection = 'journeyProgress';
 
-  // 1. Stream journey progress for a child
+  static const int PASSING_SCORE = 70;
+  static const int MAX_LEVEL = 4;
+  static const List<String> DOMAINS = [
+    'cognitive',
+    'language',
+    'motor',
+    'social',
+    'emotional',
+    'creative',
+  ];
+
+  /// Initialize journeyProgress for a new child
+  Future<void> initializeJourney(String childId) async {
+    if (childId.trim().isEmpty) throw ArgumentError('childId cannot be empty');
+    try {
+      final ref = _firestore.collection(_collection).doc(childId);
+      final doc = await ref.get();
+      if (doc.exists) return;
+
+      final domains = <String, dynamic>{};
+      for (var d in DOMAINS) {
+        domains[d] = {'score': 0.0, 'completed': false, 'activitiesDone': 0};
+      }
+
+      await ref.set({
+        'childId': childId,
+        'currentLevel': 1,
+        'unlockedLevels': [1],
+        'levels': {
+          '1': {
+            'domains': domains,
+            'isCompleted': false,
+            'completedAt': null,
+          }
+        },
+        'completedActivities': <String>[],
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      debugPrint('✅ Initialized journeyProgress for child $childId');
+    } catch (e, stack) {
+      debugPrint('❌ Failed to initialize journey for $childId: $e\n$stack');
+      rethrow;
+    }
+  }
+
+  /// Process after a score event is recorded.
+  /// Returns { nextAction, currentLevel, domainScore, domainCompleted, levelCompleted, allDomainsStatus }
+  Future<Map<String, dynamic>> processActivityCompletion({
+    required String childId,
+    required String skillDomain,
+    required double newDomainScore,
+  }) async {
+    if (childId.trim().isEmpty) {
+      throw ArgumentError('childId cannot be empty');
+    }
+    if (skillDomain.trim().isEmpty) {
+      throw ArgumentError('skillDomain cannot be empty');
+    }
+    final normalizedDomain = skillDomain.trim().toLowerCase();
+    if (!DOMAINS.contains(normalizedDomain)) {
+      throw ArgumentError('Invalid skill domain: $skillDomain');
+    }
+    if (newDomainScore.isNaN || newDomainScore.isInfinite || newDomainScore < 0.0 || newDomainScore > 100.0) {
+      throw ArgumentError('newDomainScore must be between 0 and 100');
+    }
+
+    final ref = _firestore.collection(_collection).doc(childId);
+
+    try {
+      // Ensure journey document exists
+      await initializeJourney(childId);
+
+      final doc = await ref.get();
+      final data = Map<String, dynamic>.from(doc.data() ?? {});
+      final currentLevel = (data['currentLevel'] is num) ? (data['currentLevel'] as num).toInt() : 1;
+      final levelKey = '$currentLevel';
+      final levels = Map<String, dynamic>.from(data['levels'] ?? {});
+      final levelData = Map<String, dynamic>.from(levels[levelKey] ?? {});
+      final domains = Map<String, dynamic>.from(levelData['domains'] ?? {});
+
+      // Ensure all 6 domains exist in domain map
+      for (var d in DOMAINS) {
+        if (!domains.containsKey(d) || domains[d] is! Map) {
+          domains[d] = {'score': 0.0, 'completed': false, 'activitiesDone': 0};
+        }
+      }
+
+      final domainData = Map<String, dynamic>.from(domains[normalizedDomain] ?? {});
+      domainData['score'] = newDomainScore;
+      domainData['activitiesDone'] = ((domainData['activitiesDone'] as num?)?.toInt() ?? 0) + 1;
+
+      final wasCompleted = domainData['completed'] as bool? ?? false;
+      final isNowComplete = newDomainScore >= PASSING_SCORE;
+      domainData['completed'] = isNowComplete;
+      domains[normalizedDomain] = domainData;
+      levelData['domains'] = domains;
+
+      // Check if whole level is complete (all 6 domains score >= 70)
+      final allComplete = DOMAINS.every((d) {
+        final dd = domains[d] as Map<String, dynamic>?;
+        return dd?['completed'] == true;
+      });
+
+      bool levelJustCompleted = false;
+      if (allComplete && !(levelData['isCompleted'] as bool? ?? false)) {
+        levelData['isCompleted'] = true;
+        levelData['completedAt'] = FieldValue.serverTimestamp();
+        levelJustCompleted = true;
+
+        final unlockedRaw = data['unlockedLevels'];
+        final unlocked = (unlockedRaw is List)
+            ? unlockedRaw.map((e) => int.tryParse(e.toString()) ?? 1).toList()
+            : <int>[1];
+
+        final nextLevel = currentLevel + 1;
+        if (!unlocked.contains(nextLevel) && nextLevel <= MAX_LEVEL) {
+          unlocked.add(nextLevel);
+          final nextDomains = <String, dynamic>{};
+          for (var d in DOMAINS) {
+            nextDomains[d] = {'score': 0.0, 'completed': false, 'activitiesDone': 0};
+          }
+          levels['$nextLevel'] = {
+            'domains': nextDomains,
+            'isCompleted': false,
+            'completedAt': null,
+          };
+          data['currentLevel'] = nextLevel;
+        }
+        data['unlockedLevels'] = unlocked;
+      }
+
+      levels[levelKey] = levelData;
+      data['levels'] = levels;
+      data['updatedAt'] = FieldValue.serverTimestamp();
+
+      await ref.set(data, SetOptions(merge: true));
+
+      String nextAction;
+      if (levelJustCompleted) {
+        nextAction = 'level_complete';
+      } else if (isNowComplete && !wasCompleted) {
+        nextAction = 'domain_complete';
+      } else if (!isNowComplete) {
+        nextAction = 'generate_new_activity';
+      } else {
+        nextAction = 'continue';
+      }
+
+      debugPrint(
+        '✅ processActivityCompletion for $childId: domain=$normalizedDomain score=$newDomainScore action=$nextAction levelCompleted=$levelJustCompleted',
+      );
+
+      return {
+        'nextAction': nextAction,
+        'currentLevel': currentLevel,
+        'domainScore': newDomainScore,
+        'domainCompleted': isNowComplete,
+        'levelCompleted': levelJustCompleted,
+        'allDomainsStatus': domains,
+      };
+    } catch (e, stack) {
+      debugPrint('❌ Failed processActivityCompletion for $childId: $e\n$stack');
+      rethrow;
+    }
+  }
+
+  /// Read current journeyProgress doc data
+  Future<Map<String, dynamic>?> getProgress(String childId) async {
+    if (childId.isEmpty) return null;
+    try {
+      final doc = await _firestore.collection(_collection).doc(childId).get();
+      return doc.data();
+    } catch (e, stack) {
+      debugPrint('❌ Failed to get progress for $childId: $e\n$stack');
+      return null;
+    }
+  }
+
+  /// Get domains that have not yet reached PASSING_SCORE (70)
+  Future<List<String>> getPendingDomains(String childId) async {
+    final data = await getProgress(childId);
+    if (data == null) return DOMAINS;
+
+    final currentLevel = (data['currentLevel'] is num) ? (data['currentLevel'] as num).toInt() : 1;
+    final levels = data['levels'] as Map?;
+    if (levels == null) return DOMAINS;
+
+    final levelData = levels[currentLevel.toString()] as Map?;
+    if (levelData == null) return DOMAINS;
+
+    final domains = levelData['domains'] as Map?;
+    if (domains == null) return DOMAINS;
+
+    return DOMAINS.where((d) {
+      final dd = domains[d] as Map?;
+      return dd?['completed'] != true;
+    }).toList();
+  }
+
+  // =========================================================================
+  // COMPATIBILITY METHODS (for existing screens: journey_view, activities)
+  // =========================================================================
+
+  /// Stream journey progress for child
   Stream<JourneyProgress?> getJourneyProgress(String childId) {
     if (childId.isEmpty) return Stream.value(null);
 
@@ -20,268 +225,34 @@ class JourneyService {
     });
   }
 
-  // 2. Fetch or initialize journey progress for a child
+  /// Fetch or initialize journey progress for a child (compatible model)
   Future<JourneyProgress> getOrInitializeJourney(String childId, {int age = 4}) async {
     try {
       final doc = await _firestore.collection(_collection).doc(childId).get();
-
       if (doc.exists && doc.data() != null) {
         return JourneyProgress.fromMap(childId, doc.data()!);
       }
 
-      // Initialize default journey structure using available activities from Firestore
-      return await _initializeJourneyData(childId, age);
-    } catch (e) {
-      debugPrint('Error in getOrInitializeJourney: $e');
-      return _buildFallbackJourney(childId);
+      await initializeJourney(childId);
+      final newDoc = await _firestore.collection(_collection).doc(childId).get();
+      return JourneyProgress.fromMap(childId, newDoc.data() ?? {});
+    } catch (e, stack) {
+      debugPrint('❌ Error in getOrInitializeJourney: $e\n$stack');
+      return JourneyProgress(childId: childId, levelProgress: {});
     }
   }
 
-  // Helper: Initialize journey with activities across domains for levels 1-4
-  Future<JourneyProgress> _initializeJourneyData(String childId, int age) async {
-    final Map<int, LevelProgress> levelProgress = {};
-
-    try {
-      final snapshot = await _firestore
-          .collection('activities')
-          .where('isActive', isEqualTo: true)
-          .get();
-
-      final List<ActivityModel> allActivities = snapshot.docs
-          .map((doc) => ActivityModel.fromMap(doc.id, doc.data()))
-          .toList();
-
-      final List<String> domains = ['Cognitive', 'Language', 'Motor', 'Social', 'Emotional', 'Creative'];
-
-      // Level 1: Easy difficulty
-      final level1Ids = _selectActivitiesForLevel(allActivities, difficulty: 'Easy', domains: domains);
-
-      // Level 2: Medium difficulty
-      final level2Ids = _selectActivitiesForLevel(allActivities, difficulty: 'Medium', domains: domains);
-
-      // Level 3: Hard difficulty
-      final level3Ids = _selectActivitiesForLevel(allActivities, difficulty: 'Hard', domains: domains);
-
-      // Level 4: Complex / Remaining activities
-      final level4Ids = _selectActivitiesForLevel(allActivities, difficulty: 'Hard', domains: domains, offset: 1);
-
-      levelProgress[1] = LevelProgress(
-        completed: [],
-        total: level1Ids.isNotEmpty ? level1Ids.length : 6,
-        isUnlocked: true,
-        activityIds: level1Ids,
-      );
-
-      levelProgress[2] = LevelProgress(
-        completed: [],
-        total: level2Ids.isNotEmpty ? level2Ids.length : 6,
-        isUnlocked: false,
-        activityIds: level2Ids,
-      );
-
-      levelProgress[3] = LevelProgress(
-        completed: [],
-        total: level3Ids.isNotEmpty ? level3Ids.length : 6,
-        isUnlocked: false,
-        activityIds: level3Ids,
-      );
-
-      levelProgress[4] = LevelProgress(
-        completed: [],
-        total: level4Ids.isNotEmpty ? level4Ids.length : 6,
-        isUnlocked: false,
-        activityIds: level4Ids,
-      );
-
-      final initialJourney = JourneyProgress(
-        childId: childId,
-        currentLevel: 1,
-        levelProgress: levelProgress,
-        completedActivities: [],
-        unlockedActivities: level1Ids,
-        unlockedLevels: [1],
-      );
-
-      await _firestore.collection(_collection).doc(childId).set(initialJourney.toMap());
-      return initialJourney;
-    } catch (e) {
-      debugPrint('Error populating journey data: $e');
-      final fallback = _buildFallbackJourney(childId);
-      await _firestore.collection(_collection).doc(childId).set(fallback.toMap());
-      return fallback;
-    }
-  }
-
-  List<String> _selectActivitiesForLevel(
-    List<ActivityModel> activities, {
-    required String difficulty,
-    required List<String> domains,
-    int offset = 0,
-  }) {
-    final List<String> selectedIds = [];
-
-    for (final domain in domains) {
-      final domainMatches = activities.where((a) {
-        final matchesDifficulty = a.difficulty.toLowerCase() == difficulty.toLowerCase() ||
-            (difficulty == 'Hard' && a.difficulty == 'Medium');
-        return a.skillType.toLowerCase() == domain.toLowerCase() && matchesDifficulty;
-      }).toList();
-
-      if (domainMatches.length > offset) {
-        final act = domainMatches[offset];
-        if (act.id != null && !selectedIds.contains(act.id)) {
-          selectedIds.add(act.id!);
-        }
-      } else if (domainMatches.isNotEmpty) {
-        final act = domainMatches.first;
-        if (act.id != null && !selectedIds.contains(act.id)) {
-          selectedIds.add(act.id!);
-        }
-      }
-    }
-
-    // Fill remaining if less than 6
-    if (selectedIds.length < 6) {
-      for (final act in activities) {
-        if (act.id != null && !selectedIds.contains(act.id)) {
-          selectedIds.add(act.id!);
-          if (selectedIds.length == 6) break;
-        }
-      }
-    }
-
-    return selectedIds;
-  }
-
-  JourneyProgress _buildFallbackJourney(String childId) {
-    return JourneyProgress(
-      childId: childId,
-      currentLevel: 1,
-      levelProgress: {
-        1: LevelProgress(completed: [], total: 6, isUnlocked: true, activityIds: []),
-        2: LevelProgress(completed: [], total: 6, isUnlocked: false, activityIds: []),
-        3: LevelProgress(completed: [], total: 6, isUnlocked: false, activityIds: []),
-        4: LevelProgress(completed: [], total: 6, isUnlocked: false, activityIds: []),
-      },
-      unlockedLevels: [1],
-    );
-  }
-
-  // Level Progression helper methods
-  Future<bool> isLevelComplete(String childId, int level) async {
-    final journeyDoc = await _firestore
-        .collection(_collection)
-        .doc(childId)
-        .get();
-
-    if (!journeyDoc.exists || journeyDoc.data() == null) return false;
-
-    final data = journeyDoc.data()!;
-    final levelKey = 'level_$level';
-    Map<String, dynamic>? levelData;
-
-    if (data.containsKey(levelKey) && data[levelKey] is Map) {
-      levelData = Map<String, dynamic>.from(data[levelKey]);
-    } else if (data.containsKey('levelProgress') && data['levelProgress'] is Map) {
-      final lp = data['levelProgress'] as Map;
-      if (lp.containsKey(level.toString()) && lp[level.toString()] is Map) {
-        levelData = Map<String, dynamic>.from(lp[level.toString()]);
-      }
-    }
-
-    if (levelData == null) return false;
-
-    final completed = List<String>.from(levelData['completed'] ?? []);
-    final total = (levelData['total'] is num) ? (levelData['total'] as num).toInt() : 6;
-
-    return completed.length >= total;
-  }
-
-  Future<bool> isLevelUnlocked(String childId, int level) async {
-    if (level == 1) return true;
-    return await isLevelComplete(childId, level - 1);
-  }
-
-  Future<void> markActivityComplete(
-    String childId,
-    String activityId,
-    String skillDomain,
-  ) async {
-    final journeyRef = _firestore.collection(_collection).doc(childId);
-    final doc = await journeyRef.get();
-    Map<String, dynamic> data = doc.data() ?? {};
-
-    int level = 1;
-    if (data.containsKey('currentLevel') && data['currentLevel'] is num) {
-      level = (data['currentLevel'] as num).toInt();
-    }
-
-    String levelKey = 'level_$level';
-
-    Map<String, dynamic> levelData = {};
-    if (data.containsKey(levelKey) && data[levelKey] is Map) {
-      levelData = Map<String, dynamic>.from(data[levelKey]);
-    } else if (data.containsKey('levelProgress') && data['levelProgress'] is Map) {
-      final lpMap = data['levelProgress'] as Map;
-      if (lpMap.containsKey(level.toString()) && lpMap[level.toString()] is Map) {
-        levelData = Map<String, dynamic>.from(lpMap[level.toString()]);
-      }
-    }
-
-    List<String> completed = List<String>.from(levelData['completed'] ?? []);
-    if (!completed.contains(activityId)) {
-      completed.add(activityId);
-      levelData['completed'] = completed;
-      data[levelKey] = levelData;
-
-      // Update nested levelProgress map
-      Map<String, dynamic> levelProgressMap = {};
-      if (data.containsKey('levelProgress') && data['levelProgress'] is Map) {
-        levelProgressMap = Map<String, dynamic>.from(data['levelProgress']);
-      }
-      levelProgressMap[level.toString()] = levelData;
-      data['levelProgress'] = levelProgressMap;
-
-      // Update completedActivities list
-      List<String> overallCompleted = List<String>.from(data['completedActivities'] ?? []);
-      if (!overallCompleted.contains(activityId)) {
-        overallCompleted.add(activityId);
-      }
-      data['completedActivities'] = overallCompleted;
-
-      // Check if level is complete (6 activities completed) -> unlock next level
-      List<int> unlockedLevels = [];
-      if (data.containsKey('unlockedLevels') && data['unlockedLevels'] is List) {
-        unlockedLevels = (data['unlockedLevels'] as List)
-            .map((e) => int.tryParse(e.toString()) ?? 1)
-            .toList();
-      } else {
-        unlockedLevels = [1];
-      }
-
-      int totalForLevel = (levelData['total'] is num) ? (levelData['total'] as num).toInt() : 6;
-      if (completed.length >= totalForLevel) {
-        if (!unlockedLevels.contains(level + 1)) {
-          unlockedLevels.add(level + 1);
-        }
-        if (level < 4) {
-          data['currentLevel'] = level + 1;
-        }
-      }
-      data['unlockedLevels'] = unlockedLevels;
-      data['updatedAt'] = FieldValue.serverTimestamp();
-
-      await journeyRef.set(data, SetOptions(merge: true));
-    }
-  }
-
-  // 3. Start Activity (sets activeActivity to in_progress)
+  /// Start Activity (sets activeActivity in journey doc)
   Future<bool> startActivity({
     required String childId,
     required String activityId,
     required String activityTitle,
     required int level,
   }) async {
+    if (childId.trim().isEmpty) throw ArgumentError('childId cannot be empty');
+    if (activityId.trim().isEmpty) throw ArgumentError('activityId cannot be empty');
+    if (level < 1 || level > MAX_LEVEL) throw ArgumentError('Invalid level: $level');
+
     try {
       final activeState = ActiveActivityState(
         activityId: activityId,
@@ -297,13 +268,13 @@ class JourneyService {
       }, SetOptions(merge: true));
 
       return true;
-    } catch (e) {
-      debugPrint('Error starting activity in JourneyService: $e');
+    } catch (e, stack) {
+      debugPrint('❌ Error starting activity: $e\n$stack');
       return false;
     }
   }
 
-  // 4. Discard active activity
+  /// Discard active activity
   Future<bool> discardActiveActivity(String childId) async {
     try {
       await _firestore.collection(_collection).doc(childId).update({
@@ -311,146 +282,47 @@ class JourneyService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
       return true;
-    } catch (e) {
-      debugPrint('Error discarding active activity: $e');
+    } catch (e, stack) {
+      debugPrint('❌ Error discarding active activity: $e\n$stack');
       return false;
     }
   }
 
-  // 5. Complete Activity & check for Level Up
+  /// Complete Activity helper (clears activeActivity and tracks activity ID)
   Future<Map<String, dynamic>> completeActivity({
     required String childId,
     required String activityId,
     required int level,
   }) async {
+    if (childId.trim().isEmpty) throw ArgumentError('childId cannot be empty');
+    if (activityId.trim().isEmpty) throw ArgumentError('activityId cannot be empty');
+
     try {
-      final doc = await _firestore.collection(_collection).doc(childId).get();
-      if (!doc.exists || doc.data() == null) {
-        return {'levelCompleted': false};
+      final docRef = _firestore.collection(_collection).doc(childId);
+      final doc = await docRef.get();
+      if (!doc.exists) {
+        await initializeJourney(childId);
       }
 
-      final journey = JourneyProgress.fromMap(childId, doc.data()!);
-
-      // 1. Update completed activities list
-      final Set<String> updatedCompleted = Set<String>.from(journey.completedActivities)..add(activityId);
-
-      // 2. Update level progress for the specified level
-      final Map<int, LevelProgress> updatedLevelProgress = Map<int, LevelProgress>.from(journey.levelProgress);
-      final currentLvlProg = updatedLevelProgress[level] ?? LevelProgress(completed: []);
-
-      final Set<String> lvlCompleted = Set<String>.from(currentLvlProg.completed)..add(activityId);
-
-      updatedLevelProgress[level] = LevelProgress(
-        completed: lvlCompleted.toList(),
-        total: currentLvlProg.total,
-        isUnlocked: currentLvlProg.isUnlocked,
-        activityIds: currentLvlProg.activityIds,
-      );
-
-      bool levelJustCompleted = lvlCompleted.length >= currentLvlProg.total;
-      int nextLevel = journey.currentLevel;
-      String? trophyEarned;
-
-      List<int> unlockedLevels = List<int>.from(journey.unlockedLevels);
-      if (!unlockedLevels.contains(1)) unlockedLevels.add(1);
-
-      if (levelJustCompleted && level == journey.currentLevel && level < 4) {
-        nextLevel = level + 1;
-        if (!unlockedLevels.contains(nextLevel)) {
-          unlockedLevels.add(nextLevel);
-        }
-        // Unlock next level
-        final nextLvlProg = updatedLevelProgress[nextLevel];
-        if (nextLvlProg != null) {
-          updatedLevelProgress[nextLevel] = LevelProgress(
-            completed: nextLvlProg.completed,
-            total: nextLvlProg.total,
-            isUnlocked: true,
-            activityIds: nextLvlProg.activityIds,
-          );
-        }
-
-        // Determine trophy name
-        switch (level) {
-          case 1:
-            trophyEarned = 'Foundation Builder 🏆';
-            break;
-          case 2:
-            trophyEarned = 'Skill Builder 🌟';
-            break;
-          case 3:
-            trophyEarned = 'Advanced Explorer 🚀';
-            break;
-          case 4:
-            trophyEarned = 'Mastery Champion 👑';
-            break;
-        }
-
-        // Save trophy to rewards collection
-        if (trophyEarned != null) {
-          await _addBadgeToRewards(childId, trophyEarned);
-        }
-      }
-
-      // Convert updatedLevelProgress map to firestore format
-      final Map<String, dynamic> levelProgressMap = {};
-      updatedLevelProgress.forEach((k, v) {
-        levelProgressMap[k.toString()] = v.toMap();
-      });
-
-      final Map<String, dynamic> updateData = {
-        'completedActivities': updatedCompleted.toList(),
-        'levelProgress': levelProgressMap,
-        'currentLevel': nextLevel,
-        'unlockedLevels': unlockedLevels,
-        'activeActivity': null, // Clear active activity after feedback is completed
+      await docRef.set({
+        'completedActivities': FieldValue.arrayUnion([activityId]),
+        'activeActivity': null,
         'updatedAt': FieldValue.serverTimestamp(),
-      };
+      }, SetOptions(merge: true));
 
-      // Also update top-level level_1, level_2 etc.
-      updatedLevelProgress.forEach((lvl, lp) {
-        updateData['level_$lvl'] = lp.toMap();
-      });
-
-      await _firestore.collection(_collection).doc(childId).update(updateData);
-
-      return {
-        'levelCompleted': levelJustCompleted,
-        'completedLevel': level,
-        'nextLevel': nextLevel,
-        'trophyEarned': trophyEarned,
-      };
-    } catch (e) {
-      debugPrint('Error completing activity in JourneyService: $e');
+      return {'levelCompleted': false};
+    } catch (e, stack) {
+      debugPrint('❌ Error completing activity: $e\n$stack');
       return {'levelCompleted': false};
     }
   }
 
-  // Helper to add badge to child rewards in Firestore
-  Future<void> _addBadgeToRewards(String childId, String badgeName) async {
-    try {
-      final rewardRef = _firestore.collection('rewards').doc(childId);
-      final doc = await rewardRef.get();
-
-      if (doc.exists) {
-        await rewardRef.update({
-          'badges': FieldValue.arrayUnion([badgeName]),
-          'stars': FieldValue.increment(20), // 20 bonus stars for level complete
-        });
-      } else {
-        await rewardRef.set({
-          'childId': childId,
-          'stars': 20,
-          'streak': 1,
-          'badges': [badgeName],
-        });
-      }
-    } catch (e) {
-      debugPrint('Error adding badge to rewards: $e');
-    }
+  /// Backward-compatibility helper for journey_activity_detail_page
+  Future<void> markActivityComplete(String childId, String activityId, String skillType) async {
+    await completeActivity(childId: childId, activityId: activityId, level: 1);
   }
 
-  // 6. Fetch full ActivityModel list for level activity IDs
+  /// Fetch full ActivityModel list for level activity IDs
   Future<List<ActivityModel>> getActivitiesForLevel(List<String> activityIds) async {
     if (activityIds.isEmpty) return [];
 
@@ -463,9 +335,47 @@ class JourneyService {
         }
       }
       return activities;
-    } catch (e) {
-      debugPrint('Error fetching activities for level: $e');
+    } catch (e, stack) {
+      debugPrint('❌ Error fetching activities for level: $e\n$stack');
       return [];
     }
+  }
+
+  /// Fetch activities for a level configuration when explicit IDs are not stored
+  Future<List<ActivityModel>> getActivitiesForLevelConfig(JourneyLevelConfig config, {int? age}) async {
+    final diff = config.difficulty.toLowerCase().trim() == 'complex'
+        ? 'hard'
+        : config.difficulty.toLowerCase().trim();
+
+    final List<ActivityModel> activities = [];
+    for (final domain in config.domainRequirements) {
+      try {
+        final snapshot = await _firestore
+            .collection('activities')
+            .where('skillType', isEqualTo: domain.toLowerCase().trim())
+            .where('difficulty', isEqualTo: diff)
+            .where('isActive', isEqualTo: true)
+            .get();
+
+        if (snapshot.docs.isNotEmpty) {
+          final list = snapshot.docs.map((doc) => ActivityModel.fromMap(doc.id, doc.data())).toList();
+          final matched = age != null ? list.where((a) => a.ageGroup.contains(age)).toList() : list;
+          activities.add(matched.isNotEmpty ? matched.first : list.first);
+        } else {
+          final fallbackSnapshot = await _firestore
+              .collection('activities')
+              .where('skillType', isEqualTo: domain.toLowerCase().trim())
+              .where('difficulty', isEqualTo: 'medium')
+              .where('isActive', isEqualTo: true)
+              .get();
+          if (fallbackSnapshot.docs.isNotEmpty) {
+            activities.add(ActivityModel.fromMap(fallbackSnapshot.docs.first.id, fallbackSnapshot.docs.first.data()));
+          }
+        }
+      } catch (e) {
+        debugPrint('Error getting activity for domain $domain: $e');
+      }
+    }
+    return activities;
   }
 }

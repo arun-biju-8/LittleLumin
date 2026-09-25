@@ -20,7 +20,7 @@ class GenerateStoryRequest(BaseModel):
 @router.post("/generate-activity", status_code=status.HTTP_200_OK)
 async def generate_activity(req: GenerateActivityRequest) -> Dict[str, Any]:
     """
-    Generate an age-appropriate, screen-free activity using OpenAI.
+    Generate an age-appropriate, screen-free activity using OpenAI/Gemini.
     """
     try:
         res = openai_service.generate_activity(
@@ -31,22 +31,22 @@ async def generate_activity(req: GenerateActivityRequest) -> Dict[str, Any]:
         )
         if not res.get("success"):
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=res.get("error", "AI activity generation failed")
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="AI activity generation service is temporarily busy. Please try again in a moment."
             )
         return {"status": "success", "data": res.get("data")}
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Failed to generate activity: {str(e)}"
         )
 
 @router.post("/generate-story", status_code=status.HTTP_200_OK)
 async def generate_story(req: GenerateStoryRequest) -> Dict[str, Any]:
     """
-    Generate a personalized story with a moral lesson using OpenAI.
+    Generate a personalized story with a moral lesson using OpenAI/Gemini.
     """
     try:
         res = openai_service.generate_story(
@@ -57,14 +57,14 @@ async def generate_story(req: GenerateStoryRequest) -> Dict[str, Any]:
         )
         if not res.get("success"):
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=res.get("error", "AI story generation failed")
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="AI story generation service is temporarily busy. Please try again in a moment."
             )
         return {"status": "success", "data": res.get("data")}
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Failed to generate story: {str(e)}"
         )

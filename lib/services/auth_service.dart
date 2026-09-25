@@ -32,6 +32,10 @@ class AuthService extends ChangeNotifier {
     String phone = '',
     String userType = 'parent',
   }) async {
+    if (name.trim().isEmpty) throw ArgumentError('Name cannot be empty');
+    if (email.trim().isEmpty) throw ArgumentError('Email cannot be empty');
+    if (password.isEmpty) throw ArgumentError('Password cannot be empty');
+
     _isLoading = true;
     notifyListeners();
     try {

@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/child_model.dart';
 import '../models/skill_profile_model.dart';
+import 'journey_service.dart';
 
 class ChildService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -14,6 +15,10 @@ class ChildService {
     required DateTime dateOfBirth,
     required String gender,
   }) async {
+    if (name.trim().isEmpty) throw ArgumentError('Child name cannot be empty');
+    if (dateOfBirth.isAfter(DateTime.now())) throw ArgumentError('Date of birth cannot be in the future');
+    if (gender.trim().isEmpty) throw ArgumentError('Gender cannot be empty');
+
     try {
       final user = _auth.currentUser;
       if (user == null) return 'User not logged in';
@@ -44,6 +49,9 @@ class ChildService {
         'creative': 0.0,
         'updatedAt': FieldValue.serverTimestamp(),
       });
+
+      // Auto-initialize Journey Progress
+      await JourneyService().initializeJourney(childId);
 
       return null; // Success
     } catch (e) {
@@ -101,6 +109,12 @@ class ChildService {
     String childId,
     Map<String, double> skills,
   ) async {
+    if (childId.trim().isEmpty) throw ArgumentError('childId cannot be empty');
+    for (final entry in skills.entries) {
+      if (entry.value.isNaN || entry.value.isInfinite || entry.value < 0.0 || entry.value > 100.0) {
+        throw ArgumentError('Skill score for ${entry.key} must be between 0 and 100');
+      }
+    }
     await _firestore.collection('skillProfiles').doc(childId).update({
       ...skills,
       'updatedAt': FieldValue.serverTimestamp(),
@@ -109,11 +123,31 @@ class ChildService {
 
   // ✅ Flag Child
   Future<void> flagChild(String childId, String reason) async {
+    if (childId.trim().isEmpty) throw ArgumentError('childId cannot be empty');
+    if (reason.trim().isEmpty) throw ArgumentError('Flag reason cannot be empty');
+    final childDoc = await _firestore.collection('children').doc(childId).get();
+    final childData = childDoc.data() ?? {};
+    final parentId = childData['parentId'] ?? '';
+    final childName = childData['name'] ?? 'Your child';
+
     await _firestore.collection('children').doc(childId).update({
       'isFlagged': true,
       'flagReason': reason,
       'flaggedAt': FieldValue.serverTimestamp(),
     });
+
+    if (parentId.isNotEmpty) {
+      await _firestore.collection('notifications').add({
+        'userId': parentId,
+        'type': 'child_flagged',
+        'childId': childId,
+        'title': '$childName needs extra support',
+        'body': 'An LLG specialist can help you create a personalized plan.',
+        'actionRoute': '/llg-connect',
+        'readAt': null,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
   }
 
   // ✅ Unflag Child
@@ -127,6 +161,16 @@ class ChildService {
 
   //update child details
   Future<String?> updateChild(ChildModel child) async {
+    if (child.childId.trim().isEmpty) throw ArgumentError('childId cannot be empty');
+    if (child.name.trim().isEmpty) throw ArgumentError('Child name cannot be empty');
+    if (child.dateOfBirth.isAfter(DateTime.now())) throw ArgumentError('Date of birth cannot be in the future');
+    if (child.height != null && (child.height! < 30 || child.height! > 200)) {
+      throw ArgumentError('Height must be between 30 and 200 cm');
+    }
+    if (child.weight != null && (child.weight! < 2 || child.weight! > 100)) {
+      throw ArgumentError('Weight must be between 2 and 100 kg');
+    }
+
     try {
       await _firestore.collection('children').doc(child.childId).update({
         ...child.toMap(),
@@ -140,8 +184,9 @@ class ChildService {
 
 
   // ✅ Delete Child and all associated data
-Future<String?> deleteChild(String childId) async {
-  try {
+  Future<String?> deleteChild(String childId) async {
+    if (childId.trim().isEmpty) throw ArgumentError('childId cannot be empty');
+    try {
     final user = _auth.currentUser;
     if (user == null) return 'User not logged in';
 

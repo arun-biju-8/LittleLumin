@@ -14,8 +14,8 @@ class FlaggedKidsPage extends StatelessWidget {
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
-            .collection('children')
-            .where('isFlagged', isEqualTo: true)
+            .collection('flagState')
+            .where('hasApprovedFlag', isEqualTo: true)
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -29,9 +29,9 @@ class FlaggedKidsPage extends StatelessWidget {
                 children: [
                   Icon(Icons.check_circle_outline, size: 64, color: Colors.green.shade400),
                   const SizedBox(height: 16),
-                  const Text('No flagged children', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const Text('No pending review cases', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
-                  Text('All children are on track!', style: TextStyle(color: Colors.grey.shade600)),
+                  Text('All parent-consented cases are reviewed!', style: TextStyle(color: Colors.grey.shade600)),
                 ],
               ),
             );
@@ -43,36 +43,51 @@ class FlaggedKidsPage extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             itemCount: flagged.length,
             itemBuilder: (context, index) {
-              final data = flagged[index].data() as Map<String, dynamic>;
-              return Card(
-                margin: const EdgeInsets.only(bottom: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: Colors.red.shade100,
-                    child: Icon(Icons.flag, color: Colors.red.shade700),
-                  ),
-                  title: Text(data['name'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 4),
-                      Text('Reason: ${data['flagReason'] ?? 'N/A'}'),
-                      if (data['flagDomain'] != null) ...[
-                        const SizedBox(height: 4),
-                        Chip(
-                          label: Text(data['flagDomain']),
-                          backgroundColor: Colors.amber.shade100,
-                          labelStyle: const TextStyle(fontSize: 11),
-                        ),
-                      ],
-                    ],
-                  ),
-                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                  onTap: () {
-                    // Child detail action
-                  },
-                ),
+              final doc = flagged[index];
+              final data = doc.data() as Map<String, dynamic>;
+              final childId = doc.id;
+              final domains = (data['domains'] as Map<String, dynamic>?) ?? {};
+              final approvedDomains = domains.entries
+                  .where((e) => e.value is Map && e.value['parentResponse'] == 'approved')
+                  .map((e) => e.key)
+                  .toList();
+
+              return FutureBuilder<DocumentSnapshot>(
+                future: FirebaseFirestore.instance.collection('children').doc(childId).get(),
+                builder: (context, childSnap) {
+                  final cData = childSnap.data?.data() as Map<String, dynamic>?;
+                  final childName = cData?['name'] ?? 'Child ($childId)';
+
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: Colors.purple.shade100,
+                        child: Icon(Icons.support_agent, color: Colors.purple.shade700),
+                      ),
+                      title: Text(childName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 4),
+                          Text('Parent Approved: ${approvedDomains.join(', ')}'),
+                          const SizedBox(height: 4),
+                          Wrap(
+                            spacing: 6,
+                            children: approvedDomains.map((d) => Chip(
+                              label: Text(d),
+                              backgroundColor: Colors.amber.shade100,
+                              labelStyle: const TextStyle(fontSize: 11),
+                            )).toList(),
+                          ),
+                        ],
+                      ),
+                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                      onTap: () {},
+                    ),
+                  );
+                },
               );
             },
           );

@@ -73,8 +73,6 @@ Thumbs.db
 
 
 # Firebase config files (contain API keys)
-google-services.json
-**/google-services.json
-GoogleService-Info.plist
-**/GoogleService-Info.plist
+
 android/app/google-services.json
+backend/firebase-admin-key.json

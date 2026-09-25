@@ -3,6 +3,13 @@ import 'package:flutter/material.dart';
 import '../models/activity_model.dart';
 import '../utils/constants.dart';
 
+enum ActivityButtonState {
+  start,
+  continueActivity,
+  submitFeedback,
+  view,
+}
+
 class ActivityCard extends StatelessWidget {
   final ActivityModel activity;
   final VoidCallback? onTap;
@@ -11,6 +18,8 @@ class ActivityCard extends StatelessWidget {
   final VoidCallback? onToggleStatus;
   final bool showAdminControls;
   final bool compact;
+  final ActivityButtonState? buttonState;
+  final VoidCallback? onActionButtonTap;
 
   const ActivityCard({
     super.key,
@@ -21,6 +30,8 @@ class ActivityCard extends StatelessWidget {
     this.onToggleStatus,
     this.showAdminControls = false,
     this.compact = false,
+    this.buttonState,
+    this.onActionButtonTap,
   });
 
   /// Emoji icon mapping per skill type
@@ -67,6 +78,55 @@ class ActivityCard extends StatelessWidget {
     }
   }
 
+  static Color getButtonColor(ActivityButtonState state) {
+    switch (state) {
+      case ActivityButtonState.start:
+        return const Color(0xFF6C4AB6); // Primary purple
+      case ActivityButtonState.continueActivity:
+        return const Color(0xFFD97706); // Amber
+      case ActivityButtonState.submitFeedback:
+        return const Color(0xFFDC2626); // Red
+      case ActivityButtonState.view:
+        return const Color(0xFF6B7280); // Grey
+    }
+  }
+
+  static String getButtonLabel(ActivityButtonState state) {
+    switch (state) {
+      case ActivityButtonState.start:
+        return 'Start Activity';
+      case ActivityButtonState.continueActivity:
+        return 'Continue Activity';
+      case ActivityButtonState.submitFeedback:
+        return 'Submit Feedback';
+      case ActivityButtonState.view:
+        return 'View';
+    }
+  }
+
+  static ActivityButtonState resolveButtonState({
+    required String? activityId,
+    required Map<String, dynamic>? activeActivity,
+    bool isCompletedInJourney = false,
+  }) {
+    if (activeActivity != null && activeActivity['activityId'] == activityId) {
+      final status = activeActivity['status'] as String? ?? 'in_progress';
+      if (status == 'in_progress') {
+        return ActivityButtonState.continueActivity;
+      } else if (status == 'completed_pending_feedback') {
+        return ActivityButtonState.submitFeedback;
+      } else if (status == 'completed') {
+        return ActivityButtonState.view;
+      }
+    }
+
+    if (isCompletedInJourney) {
+      return ActivityButtonState.view;
+    }
+
+    return ActivityButtonState.start;
+  }
+
   @override
   Widget build(BuildContext context) {
     return compact ? _buildCompactGridCard(context) : _buildFullListCard(context);
@@ -76,9 +136,10 @@ class ActivityCard extends StatelessWidget {
   Widget _buildCompactGridCard(BuildContext context) {
     final emoji = getSkillEmoji(activity.skillType);
     final skillColor = getSkillColor(activity.skillType);
-    final difficultyColor = activity.difficulty == 'Easy'
+    final diffLower = activity.difficulty.toLowerCase().trim();
+    final difficultyColor = diffLower == 'easy'
         ? AppColors.success
-        : activity.difficulty == 'Medium'
+        : diffLower == 'medium'
             ? AppColors.primary
             : AppColors.warning;
 
@@ -219,7 +280,9 @@ class ActivityCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
-                        activity.difficulty,
+                        activity.difficulty.isNotEmpty
+                            ? activity.difficulty[0].toUpperCase() + activity.difficulty.substring(1)
+                            : '',
                         style: TextStyle(
                           fontSize: 9,
                           fontWeight: FontWeight.bold,
@@ -229,6 +292,29 @@ class ActivityCard extends StatelessWidget {
                     ),
                   ],
                 ),
+                if (buttonState != null) ...[
+                  const SizedBox(height: 6),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 28,
+                    child: ElevatedButton(
+                      onPressed: onActionButtonTap ?? onTap,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: getButtonColor(buttonState!),
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.zero,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ),
+                      child: Text(
+                        getButtonLabel(buttonState!),
+                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -241,9 +327,10 @@ class ActivityCard extends StatelessWidget {
   Widget _buildFullListCard(BuildContext context) {
     final emoji = getSkillEmoji(activity.skillType);
     final skillColor = getSkillColor(activity.skillType);
-    final difficultyColor = activity.difficulty == 'Easy'
+    final diffLower = activity.difficulty.toLowerCase().trim();
+    final difficultyColor = diffLower == 'easy'
         ? AppColors.success
-        : activity.difficulty == 'Medium'
+        : diffLower == 'medium'
             ? AppColors.primary
             : AppColors.warning;
 
@@ -375,7 +462,7 @@ class ActivityCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    '${activity.difficultyIcon} ${activity.difficulty}',
+                    '${activity.difficultyIcon} ${activity.difficulty.isNotEmpty ? activity.difficulty[0].toUpperCase() + activity.difficulty.substring(1) : ''}',
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
@@ -384,6 +471,29 @@ class ActivityCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
+
+                // Action Button (Start / Continue / Submit / View)
+                if (buttonState != null) ...[
+                  ElevatedButton(
+                    onPressed: onActionButtonTap ?? onTap,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: getButtonColor(buttonState!),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                    child: Text(
+                      getButtonLabel(buttonState!),
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
 
                 // 4. Active/Inactive Status Badge (Admin/LLG View)
                 if (showAdminControls) ...[

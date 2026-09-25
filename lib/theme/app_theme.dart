@@ -1,5 +1,63 @@
 // lib/theme/app_theme.dart
 import 'package:flutter/material.dart';
+import 'package:littlelumin/theme/meadow_theme.dart';
+
+ThemeData getMeadowTheme() {
+  return ThemeData(
+    useMaterial3: true,
+    scaffoldBackgroundColor: MeadowColors.cream,
+    colorScheme: const ColorScheme(
+      brightness: Brightness.light,
+      primary: MeadowColors.primary,
+      onPrimary: MeadowColors.textInverse,
+      primaryContainer: MeadowColors.primarySurface,
+      onPrimaryContainer: MeadowColors.primaryDark,
+      secondary: MeadowColors.sage,
+      onSecondary: MeadowColors.textPrimary,
+      secondaryContainer: MeadowColors.sageLight,
+      onSecondaryContainer: MeadowColors.primaryDark,
+      tertiary: MeadowColors.gold,
+      onTertiary: MeadowColors.textPrimary,
+      tertiaryContainer: MeadowColors.goldSurface,
+      onTertiaryContainer: MeadowColors.textPrimary,
+      error: MeadowColors.error,
+      onError: MeadowColors.textInverse,
+      surface: MeadowColors.surface,
+      onSurface: MeadowColors.textPrimary,
+    ),
+    textTheme: TextTheme(
+      displayLarge: MeadowTypography.display,
+      headlineLarge: MeadowTypography.h1,
+      headlineMedium: MeadowTypography.h2,
+      headlineSmall: MeadowTypography.h3,
+      bodyLarge: MeadowTypography.bodyLarge,
+      bodyMedium: MeadowTypography.body,
+      bodySmall: MeadowTypography.caption,
+      labelLarge: MeadowTypography.button,
+      labelMedium: MeadowTypography.label,
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: MeadowButtons.primary(),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: MeadowButtons.secondary(),
+    ),
+    cardTheme: CardThemeData(
+      color: MeadowColors.surface,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(MeadowRadius.lg),
+        side: const BorderSide(color: MeadowColors.borderLight, width: 1),
+      ),
+    ),
+    appBarTheme: const AppBarTheme(
+      backgroundColor: MeadowColors.cream,
+      foregroundColor: MeadowColors.textPrimary,
+      elevation: 0,
+      centerTitle: true,
+    ),
+  );
+}
 
 class AppTheme {
   // Color Tokens

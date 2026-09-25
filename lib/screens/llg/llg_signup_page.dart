@@ -1,10 +1,12 @@
 // lib/screens/llg/llg_signup_page.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../services/llg_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/background_shapes.dart';
 import '../../widgets/logo_widget.dart';
 import '../auth/login_page.dart';
+import '../../utils/validators.dart';
 
 class LLGSignUpPage extends StatefulWidget {
   const LLGSignUpPage({super.key});
@@ -69,7 +71,15 @@ class _LLGSignUpPageState extends State<LLGSignUpPage> {
   }
 
   Future<void> _submitApplication() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please correct the highlighted errors before submitting.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
 
     setState(() => _isLoading = true);
 
@@ -232,9 +242,10 @@ class _LLGSignUpPageState extends State<LLGSignUpPage> {
                             const SizedBox(height: 12),
                             TextFormField(
                               controller: _nameController,
+                              autovalidateMode: AutovalidateMode.onUserInteraction,
                               style: const TextStyle(color: Colors.white),
                               decoration: _inputDecoration('Full Name *', Icons.badge_outlined),
-                              validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter your full name' : null,
+                              validator: Validators.name,
                             ),
                             const SizedBox(height: 14),
                             Row(
@@ -242,23 +253,23 @@ class _LLGSignUpPageState extends State<LLGSignUpPage> {
                                 Expanded(
                                   child: TextFormField(
                                     controller: _emailController,
+                                    autovalidateMode: AutovalidateMode.onUserInteraction,
                                     keyboardType: TextInputType.emailAddress,
                                     style: const TextStyle(color: Colors.white),
                                     decoration: _inputDecoration('Email Address *', Icons.email_outlined),
-                                    validator: (v) {
-                                      if (v == null || v.trim().isEmpty) return 'Please enter an email';
-                                      if (!v.contains('@') || !v.contains('.')) return 'Enter a valid email address';
-                                      return null;
-                                    },
+                                    validator: Validators.email,
                                   ),
                                 ),
                                 const SizedBox(width: 14),
                                 Expanded(
                                   child: TextFormField(
                                     controller: _phoneController,
+                                    autovalidateMode: AutovalidateMode.onUserInteraction,
                                     keyboardType: TextInputType.phone,
+                                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                                     style: const TextStyle(color: Colors.white),
                                     decoration: _inputDecoration('Phone Number', Icons.phone_outlined),
+                                    validator: (v) => (v != null && v.trim().isNotEmpty) ? Validators.phone(v) : null,
                                   ),
                                 ),
                               ],
@@ -269,6 +280,7 @@ class _LLGSignUpPageState extends State<LLGSignUpPage> {
                                 Expanded(
                                   child: TextFormField(
                                     controller: _passwordController,
+                                    autovalidateMode: AutovalidateMode.onUserInteraction,
                                     obscureText: _obscurePassword,
                                     style: const TextStyle(color: Colors.white),
                                     decoration: _inputDecoration('Password *', Icons.lock_outline).copyWith(
@@ -277,16 +289,14 @@ class _LLGSignUpPageState extends State<LLGSignUpPage> {
                                         onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                                       ),
                                     ),
-                                    validator: (v) {
-                                      if (v == null || v.length < 6) return 'Minimum 6 characters';
-                                      return null;
-                                    },
+                                    validator: Validators.strongPassword,
                                   ),
                                 ),
                                 const SizedBox(width: 14),
                                 Expanded(
                                   child: TextFormField(
                                     controller: _confirmPasswordController,
+                                    autovalidateMode: AutovalidateMode.onUserInteraction,
                                     obscureText: _obscureConfirmPassword,
                                     style: const TextStyle(color: Colors.white),
                                     decoration: _inputDecoration('Confirm Password *', Icons.lock_reset).copyWith(
@@ -295,10 +305,7 @@ class _LLGSignUpPageState extends State<LLGSignUpPage> {
                                         onPressed: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
                                       ),
                                     ),
-                                    validator: (v) {
-                                      if (v != _passwordController.text) return 'Passwords do not match';
-                                      return null;
-                                    },
+                                    validator: (v) => Validators.confirmPassword(v, _passwordController.text),
                                   ),
                                 ),
                               ],
@@ -313,18 +320,20 @@ class _LLGSignUpPageState extends State<LLGSignUpPage> {
                                 Expanded(
                                   child: TextFormField(
                                     controller: _qualificationController,
+                                    autovalidateMode: AutovalidateMode.onUserInteraction,
                                     style: const TextStyle(color: Colors.white),
                                     decoration: _inputDecoration('Qualification * (e.g. M.Ed, Child Psychologist)', Icons.workspace_premium_outlined),
-                                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                                    validator: (v) => Validators.safeText(v, 'Qualification', min: 2, max: 200),
                                   ),
                                 ),
                                 const SizedBox(width: 14),
                                 Expanded(
                                   child: TextFormField(
                                     controller: _licenseController,
+                                    autovalidateMode: AutovalidateMode.onUserInteraction,
                                     style: const TextStyle(color: Colors.white),
                                     decoration: _inputDecoration('License / Certification No. *', Icons.card_membership_outlined),
-                                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                                    validator: (v) => Validators.safeText(v, 'License / Certification No.', min: 2, max: 100),
                                   ),
                                 ),
                               ],
@@ -335,18 +344,22 @@ class _LLGSignUpPageState extends State<LLGSignUpPage> {
                                 Expanded(
                                   child: TextFormField(
                                     controller: _experienceController,
+                                    autovalidateMode: AutovalidateMode.onUserInteraction,
+                                    keyboardType: TextInputType.number,
+                                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                                     style: const TextStyle(color: Colors.white),
-                                    decoration: _inputDecoration('Years of Experience * (e.g. 5 Years)', Icons.history_edu_outlined),
-                                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                                    decoration: _inputDecoration('Years of Experience * (in years)', Icons.history_edu_outlined).copyWith(hintText: 'e.g. 5'),
+                                    validator: (v) => Validators.integer(v, 'Years of experience', min: 0, max: 60),
                                   ),
                                 ),
                                 const SizedBox(width: 14),
                                 Expanded(
                                   child: TextFormField(
                                     controller: _specializationController,
+                                    autovalidateMode: AutovalidateMode.onUserInteraction,
                                     style: const TextStyle(color: Colors.white),
                                     decoration: _inputDecoration('Specialization * (e.g. Ages 3-6 Early Years)', Icons.psychology_outlined),
-                                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                                    validator: (v) => Validators.safeText(v, 'Specialization', min: 2, max: 200),
                                   ),
                                 ),
                               ],
@@ -354,17 +367,19 @@ class _LLGSignUpPageState extends State<LLGSignUpPage> {
                             const SizedBox(height: 14),
                             TextFormField(
                               controller: _organizationController,
+                              autovalidateMode: AutovalidateMode.onUserInteraction,
                               style: const TextStyle(color: Colors.white),
                               decoration: _inputDecoration('Organization / Affiliation *', Icons.business_outlined),
-                              validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                              validator: (v) => Validators.safeText(v, 'Organization / Affiliation', min: 2, max: 200),
                             ),
                             const SizedBox(height: 14),
                             TextFormField(
                               controller: _bioController,
+                              autovalidateMode: AutovalidateMode.onUserInteraction,
                               maxLines: 3,
                               style: const TextStyle(color: Colors.white),
                               decoration: _inputDecoration('Short Professional Bio / Philosophy *', Icons.description_outlined),
-                              validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter a short bio' : null,
+                              validator: (v) => Validators.safeText(v, 'Professional Bio', min: 10, max: 1000),
                             ),
                             const SizedBox(height: 28),
 
@@ -376,18 +391,20 @@ class _LLGSignUpPageState extends State<LLGSignUpPage> {
                                 Expanded(
                                   child: TextFormField(
                                     controller: _regionController,
+                                    autovalidateMode: AutovalidateMode.onUserInteraction,
                                     style: const TextStyle(color: Colors.white),
                                     decoration: _inputDecoration('Region / City *', Icons.map_outlined),
-                                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                                    validator: (v) => Validators.safeText(v, 'Region / City', min: 2, max: 100),
                                   ),
                                 ),
                                 const SizedBox(width: 14),
                                 Expanded(
                                   child: TextFormField(
                                     controller: _languagesController,
+                                    autovalidateMode: AutovalidateMode.onUserInteraction,
                                     style: const TextStyle(color: Colors.white),
                                     decoration: _inputDecoration('Languages Spoken * (e.g. English, Spanish)', Icons.translate_outlined),
-                                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                                    validator: (v) => Validators.safeText(v, 'Languages spoken', min: 2, max: 150),
                                   ),
                                 ),
                               ],
@@ -395,9 +412,11 @@ class _LLGSignUpPageState extends State<LLGSignUpPage> {
                             const SizedBox(height: 14),
                             DropdownButtonFormField<String>(
                               value: _consultationMode,
+                              autovalidateMode: AutovalidateMode.onUserInteraction,
                               dropdownColor: AppTheme.darkSlate,
                               style: const TextStyle(color: Colors.white),
                               decoration: _inputDecoration('Consultation Mode', Icons.video_call_outlined),
+                              validator: (v) => Validators.requiredDropdown(v, 'Consultation mode'),
                               items: const [
                                 DropdownMenuItem(value: 'Online', child: Text('Online Only')),
                                 DropdownMenuItem(value: 'In-Person', child: Text('In-Person Only')),
@@ -419,51 +438,59 @@ class _LLGSignUpPageState extends State<LLGSignUpPage> {
                             const SizedBox(height: 14),
                             TextFormField(
                               controller: _qualificationCertificateController,
+                              autovalidateMode: AutovalidateMode.onUserInteraction,
                               style: const TextStyle(color: Colors.white),
                               decoration: _inputDecoration(
                                 '🎓 Qualification Certificate Link *',
                                 Icons.link_rounded,
                               ).copyWith(hintText: 'Google Drive / DigiLocker / University verification link'),
-                              validator: (v) => (v == null || v.trim().isEmpty) ? 'Please provide qualification certificate link' : null,
+                              validator: (v) => Validators.certificateUrl(v, 'Qualification certificate link'),
                             ),
                             const SizedBox(height: 14),
                             TextFormField(
                               controller: _licenseCertificateController,
+                              autovalidateMode: AutovalidateMode.onUserInteraction,
                               style: const TextStyle(color: Colors.white),
                               decoration: _inputDecoration(
                                 '📜 License Certificate Link *',
                                 Icons.link_rounded,
                               ).copyWith(hintText: 'RCI / State board / Professional license verification link'),
-                              validator: (v) => (v == null || v.trim().isEmpty) ? 'Please provide license certificate link' : null,
+                              validator: (v) => Validators.certificateUrl(v, 'License certificate link'),
                             ),
                             const SizedBox(height: 14),
                             TextFormField(
                               controller: _experienceCertificateController,
+                              autovalidateMode: AutovalidateMode.onUserInteraction,
                               style: const TextStyle(color: Colors.white),
                               decoration: _inputDecoration(
                                 '💼 Experience Certificate Link *',
                                 Icons.link_rounded,
                               ).copyWith(hintText: 'Employer verification link / LinkedIn profile'),
-                              validator: (v) => (v == null || v.trim().isEmpty) ? 'Please provide experience proof link' : null,
+                              validator: (v) => Validators.certificateUrl(v, 'Experience certificate link'),
                             ),
                             const SizedBox(height: 14),
                             TextFormField(
                               controller: _identityProofController,
+                              autovalidateMode: AutovalidateMode.onUserInteraction,
                               style: const TextStyle(color: Colors.white),
                               decoration: _inputDecoration(
                                 '🪪 Identity Proof Link *',
                                 Icons.link_rounded,
                               ).copyWith(hintText: 'Aadhaar / PAN / Passport link (masked)'),
-                              validator: (v) => (v == null || v.trim().isEmpty) ? 'Please provide identity proof link' : null,
+                              validator: (v) => Validators.certificateUrl(v, 'Identity proof link'),
                             ),
                             const SizedBox(height: 14),
                             TextFormField(
                               controller: _associationController,
+                              autovalidateMode: AutovalidateMode.onUserInteraction,
                               style: const TextStyle(color: Colors.white),
                               decoration: _inputDecoration(
                                 '🤝 Professional Association Link (Optional)',
                                 Icons.link_rounded,
                               ).copyWith(hintText: 'IPA / APA membership verification link'),
+                              validator: (v) => (v != null && v.trim().isNotEmpty)
+                                  ? Validators.certificateUrl(v, 'Professional association link')
+                                  : null,
                             ),
                             const SizedBox(height: 32),
 

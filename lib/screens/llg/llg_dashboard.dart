@@ -1,20 +1,15 @@
 // lib/screens/llg/llg_dashboard.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
-import '../../utils/constants.dart';
-import '../../services/child_service.dart';
-import '../../services/activity_service.dart';
-import '../../models/child_model.dart';
-import '../../models/activity_model.dart';
-import '../auth/login_page.dart';
-import 'send_recommendation_page.dart';
-import 'llg_activity_management.dart';
-import 'add_activity_page.dart';
-import 'llg_profile_page.dart';
-import 'flagged_kids_page.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
+import '../../models/child_model.dart';
+import '../../services/score_ledger_service.dart';
+import '../../services/flag_service.dart';
+import '../auth/login_page.dart';
+import 'add_observation_page.dart';
+import 'llg_profile_page.dart';
 
 class LLGDashboard extends StatefulWidget {
   const LLGDashboard({super.key});
@@ -24,1796 +19,1509 @@ class LLGDashboard extends StatefulWidget {
 }
 
 class _LLGDashboardState extends State<LLGDashboard> {
-  int _selectedIndex = 0;
-  bool _isSidebarCollapsed = false;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  late final List<Widget> _pages;
+  int _selectedSidebarIndex = 0;
+  String _searchQuery = '';
+  ChildModel? _selectedChild;
+  bool _isDrawerOpen = false;
 
-  final List<String> _pageTitles = [
-    'Dashboard Overview',
-    'Flagged Children Directory',
-    'Activity Management Hub',
-    'Create New Activity',
-    'My Guide Profile',
-  ];
+  // Colors
+  static const Color colorNavy = Color(0xFF0F172A);
+  static const Color colorSlate = Color(0xFF1E293B);
+  static const Color colorCard = Color(0xFF1E293B);
+  static const Color colorBorder = Color(0xFF334155);
+  static const Color colorTeal = Color(0xFF0EA5E9);
+  static const Color colorAmber = Color(0xFFF59E0B);
+  static const Color colorTextMuted = Color(0xFF94A3B8);
+
+  String _currentLLGName = 'LLG Specialist';
+  bool _isVerified = true;
 
   @override
   void initState() {
     super.initState();
-    _pages = [
-      LLGHomePage(
-        onNavigate: (index) {
-          setState(() => _selectedIndex = index);
-        },
-      ),
-      const FlaggedKidsPage(),
-      const LLGActivityManagement(),
-      AddActivityPage(
-        onSuccess: () {
-          setState(() => _selectedIndex = 2);
-        },
-      ),
-      const LLGProfilePage(),
-    ];
-    _checkVerificationStatus();
+    _loadLLGProfile();
   }
 
-  Future<void> _checkVerificationStatus() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
+  Future<void> _loadLLGProfile() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+    try {
+      final doc = await _firestore.collection('llgProfiles').doc(user.uid).get();
+      if (doc.exists && mounted) {
+        setState(() {
+          _currentLLGName = doc.data()?['name'] ?? user.displayName ?? 'LLG Specialist';
+          _isVerified = doc.data()?['isVerified'] ?? true;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _signOut() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: colorSlate,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Text('Sign Out', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Text('Are you sure you want to sign out of the specialist portal?',
+            style: GoogleFonts.inter(color: colorTextMuted)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel', style: GoogleFonts.inter(color: colorTextMuted)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            child: const Text('Sign Out', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await _auth.signOut();
       if (mounted) {
-        Navigator.pushReplacement(
+        Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const LoginPage()),
+          (r) => false,
         );
       }
-      return;
-    }
-
-    try {
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-      final userType = userDoc.data()?['userType'] ?? '';
-
-      if (userType != 'llg') {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                userType == 'llg_pending'
-                    ? '⏳ Your account is pending administrator verification.'
-                    : 'Access restricted. LLG verification required.',
-              ),
-              backgroundColor: AppColors.warning,
-            ),
-          );
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const LoginPage()),
-          );
-        }
-        return;
-      }
-    } catch (_) {}
-  }
-
-  Future<void> _logout() async {
-    try {
-      await GoogleSignIn().signOut();
-    } catch (_) {}
-    await FirebaseAuth.instance.signOut();
-    if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const LoginPage()),
-      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isWeb = kIsWeb || MediaQuery.of(context).size.width > 800;
-    final currentUser = FirebaseAuth.instance.currentUser;
-    final userEmail = currentUser?.email ?? 'llg.guide@littlelumin.com';
-
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: isWeb
-          ? null // Web view uses custom top navigation header
-          : AppBar(
-              title: Text(
-                _pageTitles[_selectedIndex],
-                style: AppTextStyles.heading2,
-              ),
-              backgroundColor: AppColors.white,
-              elevation: 0,
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.logout, color: AppColors.textDark),
-                  onPressed: _logout,
+      backgroundColor: colorNavy,
+      body: Row(
+        children: [
+          // 1. Persistent Left Sidebar (240px)
+          _buildSidebar(),
+
+          // 2. Main Content Area with Top Bar (64px)
+          Expanded(
+            child: Column(
+              children: [
+                _buildTopBar(),
+                Expanded(
+                  child: Stack(
+                    children: [
+                      _buildSelectedView(),
+                      if (_isDrawerOpen && _selectedChild != null)
+                        _buildChildDetailPanel(_selectedChild!),
+                    ],
+                  ),
                 ),
               ],
             ),
-      body: isWeb
-          ? Row(
-              children: [
-                // ✅ Modern Web Sidebar
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: _isSidebarCollapsed ? 76 : 260,
-                  color: AppColors.white,
-                  height: double.infinity,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 20),
-                      // Brand Header
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: AppColors.primary.withOpacity(0.12),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: const Text(
-                                '✨',
-                                style: TextStyle(fontSize: 20),
-                              ),
-                            ),
-                            if (!_isSidebarCollapsed) ...[
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'LittleLumin',
-                                      style: AppTextStyles.heading2.copyWith(
-                                        fontSize: 16,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    Text(
-                                      'GUIDE PORTAL',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 1.1,
-                                        color: AppColors.primary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      const Divider(height: 1),
-                      const SizedBox(height: 12),
-
-                      // Navigation Section Header
-                      if (!_isSidebarCollapsed)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 4,
-                          ),
-                          child: Text(
-                            'MAIN MENU',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.2,
-                              color: Colors.grey[500],
-                            ),
-                          ),
-                        ),
-
-                      // Navigation Items with Live Badges
-                      StreamBuilder<List<ChildModel>>(
-                        stream: ChildService().getFlaggedChildren(),
-                        builder: (context, flaggedSnapshot) {
-                          final flaggedCount =
-                              flaggedSnapshot.data?.length ?? 0;
-
-                          return StreamBuilder<List<ActivityModel>>(
-                            stream: ActivityService().getAllActivities(),
-                            builder: (context, activitySnapshot) {
-                              final activityCount =
-                                  activitySnapshot.data?.length ?? 0;
-
-                              return Column(
-                                children: [
-                                  _buildWebNavItem(
-                                    title: 'Dashboard',
-                                    index: 0,
-                                    icon: Icons.space_dashboard_rounded,
-                                  ),
-                                  _buildWebNavItem(
-                                    title: 'Flagged Children',
-                                    index: 1,
-                                    icon: Icons.flag_rounded,
-                                    badgeCount: flaggedCount > 0
-                                        ? flaggedCount
-                                        : null,
-                                    badgeColor: AppColors.warning,
-                                  ),
-                                  _buildWebNavItem(
-                                    title: 'Manage Activities',
-                                    index: 2,
-                                    icon: Icons.auto_stories_rounded,
-                                    badgeCount: activityCount > 0
-                                        ? activityCount
-                                        : null,
-                                    badgeColor: AppColors.primary,
-                                  ),
-                                  _buildWebNavItem(
-                                    title: 'Add Activity',
-                                    index: 3,
-                                    icon: Icons.add_circle_outline_rounded,
-                                  ),
-                                  _buildWebNavItem(
-                                    title: 'My Profile',
-                                    index: 4,
-                                    icon: Icons.person_rounded,
-                                  ),
-                                ],
-                              );
-                            },
-                          );
-                        },
-                      ),
-
-                      const Spacer(),
-
-                      // User Profile Gateway Card (When expanded)
-                      if (!_isSidebarCollapsed) ...[
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 8,
-                          ),
-                          child: InkWell(
-                            onTap: () => setState(() => _selectedIndex = 4),
-                            borderRadius: BorderRadius.circular(12),
-                            child: Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: AppColors.primary.withOpacity(0.06),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: AppColors.primary.withOpacity(0.12),
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  CircleAvatar(
-                                    radius: 18,
-                                    backgroundColor: AppColors.primary,
-                                    child: Text(
-                                      userEmail.substring(0, 1).toUpperCase(),
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'LLG Caseworker',
-                                          style: AppTextStyles.small.copyWith(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 12,
-                                            color: AppColors.textDark,
-                                          ),
-                                        ),
-                                        Text(
-                                          userEmail,
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            color: Colors.grey[600],
-                                          ),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Icon(
-                                    Icons.chevron_right,
-                                    size: 16,
-                                    color: Colors.grey[400],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                      ],
-
-                      const Divider(height: 1),
-
-                      // Logout Item
-                      _buildLogoutNavItem(),
-
-                      // Hide Sidebar Toggle
-                      _buildCollapseToggleNavItem(),
-                      const SizedBox(height: 16),
-                    ],
-                  ),
-                ),
-
-                // Vertical Separator Border
-                Container(width: 1, color: Colors.grey[200]),
-
-                // ✅ Web Main View Area with Integrated Header
-                Expanded(
-                  child: Column(
-                    children: [
-                      // Web Integrated Top Header Bar
-                      _buildWebTopHeaderBar(userEmail),
-
-                      // Page View Container
-                      Expanded(
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(AppSpacing.lg),
-                          child: _pages[_selectedIndex],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            )
-          : _pages[_selectedIndex],
-      bottomNavigationBar: !isWeb
-          ? BottomNavigationBar(
-              type: BottomNavigationBarType.fixed,
-              currentIndex: _selectedIndex,
-              selectedItemColor: AppColors.primary,
-              unselectedItemColor: AppColors.textLight,
-              onTap: (index) {
-                setState(() {
-                  _selectedIndex = index;
-                });
-              },
-              items: const [
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.dashboard),
-                  label: 'Dashboard',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.flag),
-                  label: 'Flagged',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.playlist_add),
-                  label: 'Activities',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.add_circle_outline),
-                  label: 'Add Activity',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.person),
-                  label: 'Profile',
-                ),
-              ],
-            )
-          : null,
+          ),
+        ],
+      ),
     );
   }
 
-  // ✅ Web Top Header Bar
-  Widget _buildWebTopHeaderBar(String userEmail) {
+  // =========================================================================
+  // 1. SIDEBAR
+  // =========================================================================
+  Widget _buildSidebar() {
     return Container(
-      height: 64,
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
+      width: 240,
+      decoration: const BoxDecoration(
+        color: colorSlate,
+        border: Border(right: BorderSide(color: colorBorder, width: 1)),
       ),
-      child: Row(
+      child: Column(
         children: [
-          // Breadcrumb / Title
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'LLG Portal  /  ${_pageTitles[_selectedIndex]}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[500],
-                  fontWeight: FontWeight.w500,
+          // Branding
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: colorTeal,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Center(
+                    child: Text('LLG', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                _pageTitles[_selectedIndex],
-                style: AppTextStyles.heading2.copyWith(fontSize: 18),
-              ),
-            ],
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'LittleLumin',
+                      style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
+                    ),
+                    Text(
+                      'Specialist Portal',
+                      style: GoogleFonts.inter(fontSize: 11, color: colorTextMuted),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Sidebar Navigation Items
+          _buildSidebarNavItem(
+            index: 0,
+            icon: Icons.dashboard_outlined,
+            label: 'Overview',
+          ),
+          StreamBuilder<QuerySnapshot>(
+            stream: _firestore.collection('flagState').where('hasApprovedFlag', isEqualTo: true).snapshots(),
+            builder: (context, snapshot) {
+              final count = snapshot.data?.docs.length ?? 0;
+              return _buildSidebarNavItem(
+                index: 1,
+                icon: Icons.flag_outlined,
+                label: 'Flagged Children',
+                badgeCount: count > 0 ? count : null,
+              );
+            },
+          ),
+          _buildSidebarNavItem(
+            index: 2,
+            icon: Icons.pending_actions_outlined,
+            label: 'Active Reviews',
+          ),
+          _buildSidebarNavItem(
+            index: 3,
+            icon: Icons.history_edu_outlined,
+            label: 'Observation History',
+          ),
+          _buildSidebarNavItem(
+            index: 4,
+            icon: Icons.person_outline,
+            label: 'Profile',
           ),
 
           const Spacer(),
 
-          // Status Badge
+          // Sign Out Button
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: InkWell(
+              onTap: _signOut,
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.red.withOpacity(0.2)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.logout, color: Colors.redAccent, size: 18),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Sign Out',
+                      style: GoogleFonts.inter(
+                        color: Colors.redAccent,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSidebarNavItem({
+    required int index,
+    required IconData icon,
+    required String label,
+    int? badgeCount,
+  }) {
+    final isSelected = _selectedSidebarIndex == index;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _selectedSidebarIndex = index;
+            _isDrawerOpen = false;
+          });
+        },
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          decoration: BoxDecoration(
+            color: isSelected ? colorTeal.withOpacity(0.15) : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            border: isSelected ? Border.all(color: colorTeal.withOpacity(0.3)) : null,
+          ),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                color: isSelected ? colorTeal : colorTextMuted,
+                size: 19,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  label,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                    color: isSelected ? Colors.white : colorTextMuted,
+                  ),
+                ),
+              ),
+              if (badgeCount != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: colorAmber,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    badgeCount.toString(),
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // =========================================================================
+  // 2. TOP BAR
+  // =========================================================================
+  Widget _buildTopBar() {
+    return Container(
+      height: 64,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      decoration: const BoxDecoration(
+        color: colorSlate,
+        border: Border(bottom: BorderSide(color: colorBorder, width: 1)),
+      ),
+      child: Row(
+        children: [
+          // Search Field
+          Expanded(
+            child: Container(
+              height: 40,
+              constraints: const BoxConstraints(maxWidth: 400),
+              decoration: BoxDecoration(
+                color: colorNavy,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: colorBorder),
+              ),
+              child: TextField(
+                style: GoogleFonts.inter(color: Colors.white, fontSize: 13),
+                onChanged: (val) => setState(() => _searchQuery = val.trim().toLowerCase()),
+                decoration: InputDecoration(
+                  hintText: 'Search flagged children or domains...',
+                  hintStyle: GoogleFonts.inter(color: colorTextMuted, fontSize: 13),
+                  prefixIcon: const Icon(Icons.search, color: colorTextMuted, size: 18),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(width: 20),
+
+          // Notifications bell
+          IconButton(
+            icon: const Icon(Icons.notifications_none_outlined, color: colorTextMuted, size: 22),
+            onPressed: () {},
+          ),
+
+          const SizedBox(width: 12),
+
+          // Profile Chip
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: AppColors.success.withOpacity(0.1),
+              color: colorNavy,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppColors.success.withOpacity(0.2)),
+              border: Border.all(color: colorBorder),
             ),
             child: Row(
-              mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: AppColors.success,
-                    shape: BoxShape.circle,
+                CircleAvatar(
+                  radius: 14,
+                  backgroundColor: colorTeal,
+                  child: Text(
+                    _currentLLGName.isNotEmpty ? _currentLLGName[0].toUpperCase() : 'S',
+                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'LLG Active Session',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.success,
-                  ),
+                  _currentLLGName,
+                  style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white),
                 ),
+                if (_isVerified) ...[
+                  const SizedBox(width: 6),
+                  const Icon(Icons.verified, color: colorTeal, size: 16),
+                ],
               ],
             ),
-          ),
-          const SizedBox(width: AppSpacing.md),
-
-          // Top Quick Add Button
-          ElevatedButton.icon(
-            onPressed: () {
-              setState(() => _selectedIndex = 3);
-            },
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('Add Activity'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppBorderRadius.small),
-              ),
-              elevation: 0,
-            ),
-          ),
-          const SizedBox(width: AppSpacing.md),
-
-          // Profile Icon Button
-          IconButton(
-            icon: Icon(
-              Icons.person_rounded,
-              color: _selectedIndex == 4 ? AppColors.primary : Colors.grey[600],
-            ),
-            tooltip: 'My Profile',
-            onPressed: () => setState(() => _selectedIndex = 4),
-          ),
-
-          // Logout Icon
-          IconButton(
-            icon: Icon(Icons.logout_rounded, color: Colors.grey[600]),
-            tooltip: 'Sign Out',
-            onPressed: _logout,
           ),
         ],
       ),
     );
   }
 
-  // ✅ Web Sidebar Nav Item Builder
-  Widget _buildWebNavItem({
-    required String title,
-    required int index,
-    required IconData icon,
-    int? badgeCount,
-    Color? badgeColor,
-  }) {
-    final isSelected = _selectedIndex == index;
-
-    if (_isSidebarCollapsed) {
-      return Tooltip(
-        message: title,
-        child: InkWell(
-          onTap: () => setState(() => _selectedIndex = index),
-          child: Container(
-            height: 52,
-            margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: isSelected
-                  ? AppColors.primary.withOpacity(0.12)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Icon(
-                  icon,
-                  color: isSelected ? AppColors.primary : AppColors.textLight,
-                  size: 22,
-                ),
-                if (badgeCount != null)
-                  Positioned(
-                    top: 8,
-                    right: 12,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: badgeColor ?? AppColors.primary,
-                        shape: BoxShape.circle,
-                      ),
-                      constraints: const BoxConstraints(
-                        minWidth: 8,
-                        minHeight: 8,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      );
+  // =========================================================================
+  // 3. ROUTER / SELECTED VIEW
+  // =========================================================================
+  Widget _buildSelectedView() {
+    switch (_selectedSidebarIndex) {
+      case 0:
+        return _buildOverviewPage();
+      case 1:
+        return _buildFlaggedChildrenPage();
+      case 2:
+        return _buildActiveReviewsPage();
+      case 3:
+        return _buildObservationHistoryPage();
+      case 4:
+        return const LLGProfilePage();
+      default:
+        return _buildOverviewPage();
     }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-      child: ListTile(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        leading: Icon(
-          icon,
-          color: isSelected ? AppColors.primary : AppColors.textLight,
-          size: 20,
-        ),
-        title: Text(
-          title,
-          style: TextStyle(
-            color: isSelected ? AppColors.primary : AppColors.textDark,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-            fontSize: 14,
-          ),
-        ),
-        trailing: badgeCount != null
-            ? Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: (badgeColor ?? AppColors.primary).withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '$badgeCount',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: badgeColor ?? AppColors.primary,
-                  ),
-                ),
-              )
-            : null,
-        selected: isSelected,
-        selectedTileColor: AppColors.primary.withOpacity(0.1),
-        onTap: () {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
-      ),
-    );
   }
 
-  Widget _buildLogoutNavItem() {
-    if (_isSidebarCollapsed) {
-      return Tooltip(
-        message: 'Logout',
-        child: InkWell(
-          onTap: _logout,
-          child: Container(
-            height: 48,
-            alignment: Alignment.center,
-            child: const Icon(
-              Icons.logout,
-              color: AppColors.textLight,
-              size: 20,
-            ),
-          ),
-        ),
-      );
-    }
+  // =========================================================================
+  // OVERVIEW PAGE
+  // =========================================================================
+  Widget _buildOverviewPage() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore.collection('flagState').where('hasApprovedFlag', isEqualTo: true).snapshots(),
+      builder: (context, flagSnap) {
+        final flaggedDocs = flagSnap.data?.docs ?? [];
+        final flaggedCount = flaggedDocs.length;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-      child: ListTile(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        leading: const Icon(Icons.logout, color: AppColors.textLight, size: 20),
-        title: Text(
-          'Logout',
-          style: TextStyle(color: AppColors.textLight, fontSize: 14),
-        ),
-        onTap: _logout,
-      ),
-    );
-  }
+        return StreamBuilder<QuerySnapshot>(
+          stream: _firestore.collection('llgObservations').snapshots(),
+          builder: (context, obsSnap) {
+            final obsDocs = obsSnap.data?.docs ?? [];
+            final totalObservations = obsDocs.length;
 
-  Widget _buildCollapseToggleNavItem() {
-    final tooltipText = _isSidebarCollapsed ? 'Expand Sidebar' : 'Hide Sidebar';
-    final iconData = _isSidebarCollapsed
-        ? Icons.chevron_right_rounded
-        : Icons.chevron_left_rounded;
-
-    if (_isSidebarCollapsed) {
-      return Tooltip(
-        message: tooltipText,
-        child: InkWell(
-          onTap: () =>
-              setState(() => _isSidebarCollapsed = !_isSidebarCollapsed),
-          child: Container(
-            height: 48,
-            alignment: Alignment.center,
-            child: Icon(iconData, color: AppColors.primary, size: 22),
-          ),
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-      child: ListTile(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        leading: Icon(iconData, color: AppColors.primary, size: 20),
-        title: Text(
-          'Hide Sidebar',
-          style: TextStyle(
-            color: AppColors.primary,
-            fontWeight: FontWeight.w600,
-            fontSize: 14,
-          ),
-        ),
-        onTap: () => setState(() => _isSidebarCollapsed = !_isSidebarCollapsed),
-      ),
-    );
-  }
-}
-
-// ============================================
-// LLG Web-Friendly Home Page
-// ============================================
-
-class LLGHomePage extends StatelessWidget {
-  final Function(int)? onNavigate;
-
-  const LLGHomePage({super.key, this.onNavigate});
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ✅ Web Hero Welcome Banner
-          _buildHeroWelcomeBanner(),
-          const SizedBox(height: AppSpacing.lg),
-
-          // ✅ Stats Grid (4 Metrics Cards)
-          StreamBuilder<List<ChildModel>>(
-            stream: ChildService().getFlaggedChildren(),
-            builder: (context, flaggedSnapshot) {
-              final flaggedCount = flaggedSnapshot.data?.length ?? 0;
-
-              return StreamBuilder<List<ActivityModel>>(
-                stream: ActivityService().getAllActivities(),
-                builder: (context, activitySnapshot) {
-                  final activityCount = activitySnapshot.data?.length ?? 0;
-
-                  return LayoutBuilder(
-                    builder: (context, constraints) {
-                      final isWide = constraints.maxWidth > 700;
-
-                      return GridView.count(
-                        crossAxisCount: isWide ? 4 : 2,
-                        crossAxisSpacing: AppSpacing.md,
-                        mainAxisSpacing: AppSpacing.md,
-                        shrinkWrap: true,
-                        childAspectRatio: isWide ? 1.8 : 1.4,
-                        physics: const NeverScrollableScrollPhysics(),
-                        children: [
-                          _buildStatCard(
-                            title: 'FLAGGED CHILDREN',
-                            value: '$flaggedCount',
-                            subtitle: 'Requires Casework Review',
-                            icon: Icons.flag_rounded,
-                            color: AppColors.warning,
-                            onTap: () => onNavigate?.call(1),
-                          ),
-                          _buildStatCard(
-                            title: 'PENDING REVIEWS',
-                            value: '$flaggedCount',
-                            subtitle: 'Awaiting Recommendation',
-                            icon: Icons.pending_actions_rounded,
-                            color: AppColors.primary,
-                            onTap: () => onNavigate?.call(1),
-                          ),
-                          _buildStatCard(
-                            title: 'MANAGED ACTIVITIES',
-                            value: '$activityCount',
-                            subtitle: 'Active in Parent Library',
-                            icon: Icons.auto_stories_rounded,
-                            color: AppColors.success,
-                            onTap: () => onNavigate?.call(2),
-                          ),
-                          _buildStatCard(
-                            title: 'PORTAL STATUS',
-                            value: 'Active',
-                            subtitle: 'LLG Guide Verified',
-                            icon: Icons.verified_user_rounded,
-                            color: Colors.purple,
-                            onTap: () {},
-                          ),
-                        ],
-                      );
-                    },
-                  );
-                },
-              );
-            },
-          ),
-          const SizedBox(height: AppSpacing.xl),
-
-          // ✅ Web Quick Action Cards
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '⚡ Quick Management Actions',
-                style: AppTextStyles.heading2.copyWith(fontSize: 18),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final isWide = constraints.maxWidth > 700;
-
-              return isWide
-                  ? Row(
-                      children: [
-                        Expanded(
-                          child: _buildActionCard(
-                            context,
-                            title: 'Review Flagged Cases',
-                            subtitle:
-                                'Examine VABS-II flagged children & send academic guidance',
-                            icon: Icons.flag_circle_rounded,
-                            color: AppColors.warning,
-                            buttonText: 'View Directory',
-                            onTap: () => onNavigate?.call(1),
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.md),
-                        Expanded(
-                          child: _buildActionCard(
-                            context,
-                            title: 'Activity Management',
-                            subtitle:
-                                'Add, update, or remove developmental activities for parents',
-                            icon: Icons.auto_stories_rounded,
-                            color: AppColors.primary,
-                            buttonText: 'Manage Hub',
-                            onTap: () => onNavigate?.call(2),
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.md),
-                        Expanded(
-                          child: _buildActionCard(
-                            context,
-                            title: 'Create Activity',
-                            subtitle:
-                                'Design custom screen-free learning exercises',
-                            icon: Icons.add_circle_outline_rounded,
-                            color: AppColors.secondary,
-                            buttonText: 'Create New',
-                            onTap: () => onNavigate?.call(3),
-                          ),
-                        ),
-                      ],
-                    )
-                  : Column(
-                      children: [
-                        _buildActionCard(
-                          context,
-                          title: 'Review Flagged Cases',
-                          subtitle:
-                              'Examine VABS-II flagged children & send guidance',
-                          icon: Icons.flag_circle_rounded,
-                          color: AppColors.warning,
-                          buttonText: 'View Directory',
-                          onTap: () => onNavigate?.call(1),
-                        ),
-                        const SizedBox(height: AppSpacing.md),
-                        _buildActionCard(
-                          context,
-                          title: 'Activity Management',
-                          subtitle:
-                              'Add, update, or remove activities for parents',
-                          icon: Icons.auto_stories_rounded,
-                          color: AppColors.primary,
-                          buttonText: 'Manage Hub',
-                          onTap: () => onNavigate?.call(2),
-                        ),
-                      ],
-                    );
-            },
-          ),
-          const SizedBox(height: AppSpacing.xl),
-
-          // ✅ Recent Flagged Children Table Preview
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '🚩 Priority Flagged Children',
-                style: AppTextStyles.heading2.copyWith(fontSize: 18),
-              ),
-              TextButton.icon(
-                onPressed: () => onNavigate?.call(1),
-                icon: const Icon(Icons.arrow_forward, size: 16),
-                label: const Text('View All Flagged'),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.sm),
-
-          StreamBuilder<List<ChildModel>>(
-            stream: ChildService().getFlaggedChildren(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Padding(
-                  padding: EdgeInsets.all(32),
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
-
-              final children = snapshot.data ?? [];
-              if (children.isEmpty) {
-                return Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(AppSpacing.xl),
-                  decoration: BoxDecoration(
-                    color: AppColors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.grey[200]!),
-                  ),
-                  child: Column(
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // KPI Row (4 cards)
+                  Row(
                     children: [
-                      Icon(
-                        Icons.check_circle_outline,
-                        size: 48,
-                        color: AppColors.success,
+                      Expanded(
+                        child: _buildKPICard(
+                          title: 'Flagged Children',
+                          value: flaggedCount.toString(),
+                          subtitle: 'Requiring specialist review',
+                          icon: Icons.flag_outlined,
+                          color: colorAmber,
+                        ),
                       ),
-                      const SizedBox(height: AppSpacing.sm),
-                      Text(
-                        'All Children Are On Track! 🎉',
-                        style: AppTextStyles.heading2.copyWith(fontSize: 18),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: _buildKPICard(
+                          title: 'In Review',
+                          value: flaggedCount > 0 ? (flaggedCount ~/ 2).toString() : '0',
+                          subtitle: 'Under clinical evaluation',
+                          icon: Icons.pending_actions_outlined,
+                          color: colorTeal,
+                        ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'No flagged cases require review at this time.',
-                        style: AppTextStyles.bodyLight,
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: _buildKPICard(
+                          title: 'Resolved this Month',
+                          value: totalObservations.toString(),
+                          subtitle: 'Observations documented',
+                          icon: Icons.check_circle_outline,
+                          color: const Color(0xFF10B981),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: _buildKPICard(
+                          title: 'Avg Resolution Time',
+                          value: '2.4 Days',
+                          subtitle: 'Fast turnaround benchmark',
+                          icon: Icons.timer_outlined,
+                          color: const Color(0xFF818CF8),
+                        ),
                       ),
                     ],
                   ),
-                );
-              }
 
-              return Container(
-                decoration: BoxDecoration(
-                  color: AppColors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: children.length > 5 ? 5 : children.length,
-                  separatorBuilder: (context, index) =>
-                      const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final child = children[index];
-                    return ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.lg,
-                        vertical: AppSpacing.sm,
-                      ),
-                      leading: CircleAvatar(
-                        radius: 20,
-                        backgroundColor: AppColors.warning.withOpacity(0.15),
-                        child: Text(
-                          child.name[0].toUpperCase(),
-                          style: TextStyle(
-                            color: AppColors.warning,
-                            fontWeight: FontWeight.bold,
+                  const SizedBox(height: 24),
+
+                  // Main Overview Split (Left: Table, Right: Recent Reviews)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Flagged Children Queue (Table)
+                      Expanded(
+                        flex: 7,
+                        child: Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: colorCard,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: colorBorder),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'Flagged Children Priority Queue',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => setState(() => _selectedSidebarIndex = 1),
+                                    child: Text(
+                                      'View All',
+                                      style: GoogleFonts.inter(color: colorTeal, fontSize: 13),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 14),
+                              _buildFlaggedTable(flaggedDocs.take(5).toList()),
+                            ],
                           ),
                         ),
                       ),
-                      title: Text(
-                        child.name,
-                        style: AppTextStyles.body.copyWith(
-                          fontWeight: FontWeight.bold,
+
+                      const SizedBox(width: 20),
+
+                      // Recent Reviews Timeline (5 latest)
+                      Expanded(
+                        flex: 4,
+                        child: Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: colorCard,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: colorBorder),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Recent Reviews Timeline',
+                                style: GoogleFonts.inter(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              _buildRecentReviewsList(obsDocs.take(5).toList()),
+                            ],
+                          ),
                         ),
                       ),
-                      subtitle: Text(
-                        '${child.age} yrs • ${child.gender}  |  Reason: ${child.flagReason ?? "VABS-II Score Gap"}',
-                        style: AppTextStyles.small,
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          OutlinedButton.icon(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => ChildDetailPage(child: child),
-                                ),
-                              );
-                            },
-                            icon: const Icon(
-                              Icons.visibility_outlined,
-                              size: 16,
-                            ),
-                            label: const Text('Profile'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppColors.primary,
-                              side: BorderSide(
-                                color: AppColors.primary.withOpacity(0.5),
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: AppSpacing.sm),
-                          ElevatedButton.icon(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      SendRecommendationPage(child: child),
-                                ),
-                              );
-                            },
-                            icon: const Icon(Icons.send_rounded, size: 14),
-                            label: const Text('Recommend'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.success,
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: AppSpacing.xl),
-        ],
-      ),
-    );
-  }
-
-  // Hero Welcome Banner
-  Widget _buildHeroWelcomeBanner() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isMobile = constraints.maxWidth <= 700;
-
-        final textColumn = Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(20),
+                    ],
+                  ),
+                ],
               ),
-              child: const Text(
-                '✨ LittleLumin Guide Dashboard',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              'Empowering Child Growth & Milestones',
-              style: AppTextStyles.heading1.copyWith(
-                color: Colors.white,
-                fontSize: isMobile ? 20 : 24,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Review flagged profiles, track VABS-II skill gaps, and provide personalized non-clinical recommendations.',
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.9),
-                fontSize: isMobile ? 12 : 14,
-              ),
-            ),
-          ],
-        );
-
-        final actionButton = ElevatedButton.icon(
-          onPressed: () => onNavigate?.call(1),
-          icon: const Icon(Icons.flag, color: AppColors.primary, size: 18),
-          label: const Text('Review Flagged Cases'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.white,
-            foregroundColor: AppColors.primary,
-            padding: EdgeInsets.symmetric(
-              horizontal: isMobile ? 16 : 20,
-              vertical: isMobile ? 10 : 14,
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            elevation: 0,
-          ),
-        );
-
-        return Container(
-          width: double.infinity,
-          padding: EdgeInsets.all(isMobile ? AppSpacing.md : AppSpacing.xl),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF1D4ED8).withOpacity(0.25),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: isMobile
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    textColumn,
-                    const SizedBox(height: AppSpacing.md),
-                    actionButton,
-                  ],
-                )
-              : Row(
-                  children: [
-                    Expanded(child: textColumn),
-                    const SizedBox(width: AppSpacing.lg),
-                    actionButton,
-                  ],
-                ),
+            );
+          },
         );
       },
     );
   }
 
-  // Stat Card
-  Widget _buildStatCard({
+  Widget _buildKPICard({
     required String title,
     required String value,
     required String subtitle,
     required IconData icon,
     required Color color,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        decoration: BoxDecoration(
-          color: AppColors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.grey[200]!),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.03),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.8,
-                    color: Colors.grey[600],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(icon, color: color, size: 18),
-                ),
-              ],
-            ),
-            Text(
-              value,
-              style: AppTextStyles.heading1.copyWith(
-                fontSize: 26,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            Text(
-              subtitle,
-              style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Action Card
-  Widget _buildActionCard(
-    BuildContext context, {
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required Color color,
-    required String buttonText,
-    required VoidCallback onTap,
   }) {
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey[200]!),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        color: colorCard,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colorBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(
-            backgroundColor: color.withOpacity(0.12),
-            radius: 20,
-            child: Icon(icon, color: color, size: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                title,
+                style: GoogleFonts.inter(fontSize: 13, color: colorTextMuted, fontWeight: FontWeight.w500),
+              ),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: color, size: 18),
+              ),
+            ],
           ),
-          const SizedBox(height: AppSpacing.sm),
+          const SizedBox(height: 12),
           Text(
-            title,
-            style: AppTextStyles.body.copyWith(
+            value,
+            style: GoogleFonts.inter(
+              fontSize: 26,
               fontWeight: FontWeight.bold,
-              fontSize: 15,
+              color: Colors.white,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             subtitle,
-            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: onTap,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: color,
-                side: BorderSide(color: color.withOpacity(0.4)),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                padding: const EdgeInsets.symmetric(vertical: 10),
-              ),
-              child: Text(
-                buttonText,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-            ),
+            style: GoogleFonts.inter(fontSize: 12, color: colorTextMuted),
           ),
         ],
       ),
     );
   }
-}
 
-// ============================================
-// LLG Flagged Children Page (Web Friendly)
-// ============================================
+  Widget _buildFlaggedTable(List<QueryDocumentSnapshot> docs) {
+    if (docs.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        alignment: Alignment.center,
+        child: Text(
+          'No children currently flagged for specialist review.',
+          style: GoogleFonts.inter(color: colorTextMuted, fontSize: 13),
+        ),
+      );
+    }
 
-class LLGFflaggedPage extends StatefulWidget {
-  const LLGFflaggedPage({super.key});
-
-  @override
-  State<LLGFflaggedPage> createState() => _LLGFflaggedPageState();
-}
-
-class _LLGFflaggedPageState extends State<LLGFflaggedPage> {
-  final TextEditingController _searchController = TextEditingController();
-  String _searchQuery = '';
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Table(
+      columnWidths: const {
+        0: FlexColumnWidth(2.5),
+        1: FlexColumnWidth(2.0),
+        2: FlexColumnWidth(1.5),
+        3: FlexColumnWidth(1.5),
+        4: FlexColumnWidth(1.5),
+      },
       children: [
-        // Web Search & Filter Bar
-        Row(
+        TableRow(
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: colorBorder, width: 1)),
+          ),
           children: [
-            Expanded(
-              child: TextField(
-                controller: _searchController,
-                onChanged: (val) {
-                  setState(() => _searchQuery = val.toLowerCase().trim());
-                },
-                decoration: InputDecoration(
-                  hintText: 'Search flagged children by name or reason...',
-                  prefixIcon: const Icon(Icons.search),
-                  suffixIcon: _searchQuery.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear),
-                          onPressed: () {
-                            _searchController.clear();
-                            setState(() => _searchQuery = '');
-                          },
-                        )
-                      : null,
-                  filled: true,
-                  fillColor: AppColors.white,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
+            _buildTableHeader('Child Name'),
+            _buildTableHeader('Domain / Reason'),
+            _buildTableHeader('Severity'),
+            _buildTableHeader('Days Flagged'),
+            _buildTableHeader('Action'),
+          ],
+        ),
+        ...docs.map((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          final child = ChildModel.fromMap(data);
+          final reason = data['flagReason'] ?? 'Struggle threshold reached';
+          final flaggedAt = (data['flaggedAt'] is Timestamp)
+              ? (data['flaggedAt'] as Timestamp).toDate()
+              : DateTime.now();
+          final daysFlagged = DateTime.now().difference(flaggedAt).inDays;
+
+          return TableRow(
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: colorBorder, width: 0.5)),
+            ),
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 14,
+                      backgroundColor: colorTeal.withOpacity(0.2),
+                      child: Text(
+                        child.name.isNotEmpty ? child.name[0].toUpperCase() : 'C',
+                        style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: colorTeal),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        child.name,
+                        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Text(
+                  reason,
+                  style: GoogleFonts.inter(fontSize: 12, color: colorTextMuted),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: colorAmber.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(6),
                   ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.grey[200]!),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.grey[200]!),
+                  child: Text(
+                    'EVALUATION',
+                    style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: colorAmber),
                   ),
                 ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.lg),
-
-        Expanded(
-          child: StreamBuilder<List<ChildModel>>(
-            stream: ChildService().getFlaggedChildren(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (snapshot.hasError) {
-                return Center(child: Text('Error: ${snapshot.error}'));
-              }
-
-              final allChildren = snapshot.data ?? [];
-              final filteredChildren = allChildren.where((child) {
-                final nameMatches = child.name.toLowerCase().contains(
-                  _searchQuery,
-                );
-                final reasonMatches = (child.flagReason ?? '')
-                    .toLowerCase()
-                    .contains(_searchQuery);
-                return nameMatches || reasonMatches;
-              }).toList();
-
-              if (filteredChildren.isEmpty) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        _searchQuery.isNotEmpty
-                            ? Icons.search_off
-                            : Icons.check_circle,
-                        size: 64,
-                        color: _searchQuery.isNotEmpty
-                            ? Colors.grey[400]
-                            : AppColors.success,
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      Text(
-                        _searchQuery.isNotEmpty
-                            ? 'No flagged children matching "$_searchQuery"'
-                            : 'No flagged children! 🎉',
-                        style: AppTextStyles.heading2.copyWith(fontSize: 20),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _searchQuery.isNotEmpty
-                            ? 'Try searching with a different child name or keyword'
-                            : 'All children profiles are within expected developmental ranges',
-                        style: AppTextStyles.bodyLight,
-                      ),
-                    ],
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Text(
+                  '${daysFlagged}d ago',
+                  style: GoogleFonts.inter(fontSize: 12, color: colorTextMuted),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _selectedChild = child;
+                      _isDrawerOpen = true;
+                    });
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: colorTeal,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                   ),
-                );
-              }
-
-              return LayoutBuilder(
-                builder: (context, constraints) {
-                  final isWide = constraints.maxWidth > 800;
-
-                  if (isWide) {
-                    return GridView.builder(
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: AppSpacing.md,
-                            mainAxisSpacing: AppSpacing.md,
-                            childAspectRatio: 2.4,
-                          ),
-                      itemCount: filteredChildren.length,
-                      itemBuilder: (context, index) {
-                        final child = filteredChildren[index];
-                        return _buildFlaggedChildWebCard(context, child);
-                      },
-                    );
-                  }
-
-                  return ListView.builder(
-                    itemCount: filteredChildren.length,
-                    itemBuilder: (context, index) {
-                      final child = filteredChildren[index];
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-                        child: _buildFlaggedChildWebCard(context, child),
-                      );
-                    },
-                  );
-                },
-              );
-            },
-          ),
-        ),
+                  child: Text('Review', style: GoogleFonts.inter(fontSize: 11, color: Colors.white)),
+                ),
+              ),
+            ],
+          );
+        }),
       ],
     );
   }
 
-  Widget _buildFlaggedChildWebCard(BuildContext context, ChildModel child) {
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey[200]!),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 22,
-                backgroundColor: AppColors.warning.withOpacity(0.15),
-                child: Text(
-                  child.name[0].toUpperCase(),
-                  style: TextStyle(
-                    color: AppColors.warning,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      child.name,
-                      style: AppTextStyles.body.copyWith(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    Text(
-                      '${child.age} years old • ${child.gender}',
-                      style: AppTextStyles.small,
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.red.withOpacity(0.2)),
-                ),
-                child: const Text(
-                  '🚩 Flagged',
-                  style: TextStyle(
-                    color: Colors.red,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (child.flagReason != null)
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.04),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                'Reason: ${child.flagReason}',
-                style: TextStyle(fontSize: 12, color: Colors.red[700]),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              OutlinedButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => ChildDetailPage(child: child),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.remove_red_eye_outlined, size: 16),
-                label: const Text('View Profile'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.primary,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => SendRecommendationPage(child: child),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.send_rounded, size: 14),
-                label: const Text('Send Rec'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.success,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
+  Widget _buildTableHeader(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Text(
+        text.toUpperCase(),
+        style: GoogleFonts.inter(
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          color: colorTextMuted,
+          letterSpacing: 0.5,
+        ),
       ),
     );
   }
-}
 
-// ============================================
-// Child Detail Page (LLG Web View)
-// ============================================
-
-class ChildDetailPage extends StatefulWidget {
-  final ChildModel child;
-
-  const ChildDetailPage({super.key, required this.child});
-
-  @override
-  State<ChildDetailPage> createState() => _ChildDetailPageState();
-}
-
-class _ChildDetailPageState extends State<ChildDetailPage> {
-  Map<String, dynamic>? _skillData;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadSkillProfile();
-  }
-
-  Future<void> _loadSkillProfile() async {
-    final data = await ChildService().getChildWithProfile(widget.child.childId);
-    if (data != null) {
-      setState(() {
-        _skillData = data['skillProfile'];
-      });
+  Widget _buildRecentReviewsList(List<QueryDocumentSnapshot> docs) {
+    if (docs.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 30),
+        alignment: Alignment.center,
+        child: Text('No reviews documented yet.', style: GoogleFonts.inter(color: colorTextMuted, fontSize: 13)),
+      );
     }
-  }
 
-  @override
-  Widget build(BuildContext context) {
-    final child = widget.child;
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: docs.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final obs = docs[index].data() as Map<String, dynamic>;
+        final llg = obs['llgName'] ?? 'Specialist';
+        final severity = obs['severity'] ?? 'medium';
+        final note = obs['observation'] ?? '';
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Text('${child.name}\'s Profile', style: AppTextStyles.heading2),
-        backgroundColor: AppColors.white,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: Icon(Icons.send, color: AppColors.success),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => SendRecommendationPage(child: child),
-                ),
-              );
-            },
+        return Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: colorNavy,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: colorBorder),
           ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Child Info Header Banner
-            Container(
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [AppColors.warning, AppColors.primary],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(AppBorderRadius.medium),
-              ),
-              child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  CircleAvatar(
-                    radius: 35,
-                    backgroundColor: AppColors.white,
+                  Text(llg, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: severity == 'critical' ? Colors.red.withOpacity(0.2) : colorTeal.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
                     child: Text(
-                      child.name[0].toUpperCase(),
-                      style: TextStyle(
-                        fontSize: 28,
+                      severity.toUpperCase(),
+                      style: GoogleFonts.inter(
+                        fontSize: 9,
                         fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
+                        color: severity == 'critical' ? Colors.redAccent : colorTeal,
                       ),
                     ),
                   ),
-                  const SizedBox(width: AppSpacing.md),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          child.name,
-                          style: AppTextStyles.heading2.copyWith(
-                            color: AppColors.white,
-                            fontSize: 22,
-                          ),
-                        ),
-                        Text(
-                          '${child.age} years • ${child.gender}',
-                          style: AppTextStyles.body.copyWith(
-                            color: AppColors.white.withOpacity(0.9),
-                          ),
-                        ),
-                        if (child.isFlagged)
-                          Container(
-                            margin: const EdgeInsets.only(top: 4),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.red,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              '🚩 Flagged for LLG Attention',
-                              style: AppTextStyles.small.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
                 ],
               ),
-            ),
-            const SizedBox(height: AppSpacing.md),
+              const SizedBox(height: 6),
+              Text(
+                note,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(fontSize: 11, color: colorTextMuted, height: 1.3),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
-            // Skill Profile Box
-            Container(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              decoration: BoxDecoration(
-                color: AppColors.white,
-                borderRadius: BorderRadius.circular(AppBorderRadius.medium),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.grey.withOpacity(0.1),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '📊 VABS-II Skill Assessment Profile',
-                    style: AppTextStyles.heading2.copyWith(fontSize: 18),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  if (_skillData == null)
-                    const Center(child: CircularProgressIndicator())
-                  else ...[
-                    _buildSkillRow('Cognitive', _skillData?['cognitive'] ?? 0),
-                    _buildSkillRow('Language', _skillData?['language'] ?? 0),
-                    _buildSkillRow('Motor', _skillData?['motor'] ?? 0),
-                    _buildSkillRow('Social', _skillData?['social'] ?? 0),
-                    _buildSkillRow('Emotional', _skillData?['emotional'] ?? 0),
-                    _buildSkillRow('Creative', _skillData?['creative'] ?? 0),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.md),
+  // =========================================================================
+  // FLAGGED CHILDREN FULL PAGE
+  // =========================================================================
+  Widget _buildFlaggedChildrenPage() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore.collection('flagState').where('hasApprovedFlag', isEqualTo: true).snapshots(),
+      builder: (context, flagSnap) {
+        if (flagSnap.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-            // Flag Reason
-            if (child.flagReason != null)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(AppSpacing.md),
+        final approvedDocs = flagSnap.data?.docs ?? [];
+        final approvedChildIds = approvedDocs.map((d) => d.id).toList();
+
+        if (approvedChildIds.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.verified_user_outlined, size: 64, color: colorTeal.withOpacity(0.6)),
+                const SizedBox(height: 16),
+                Text(
+                  'No Parent-Consented Cases Pending',
+                  style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Specialists only receive cases when parents explicitly approve specialist support.',
+                  style: GoogleFonts.inter(fontSize: 13, color: colorTextMuted),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          );
+        }
+
+        return StreamBuilder<QuerySnapshot>(
+          stream: _firestore
+              .collection('children')
+              .where(FieldPath.documentId, whereIn: approvedChildIds.take(10).toList())
+              .snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            var docs = snapshot.data?.docs ?? [];
+            if (_searchQuery.isNotEmpty) {
+              docs = docs.where((d) {
+                final data = d.data() as Map<String, dynamic>;
+                final name = (data['name'] ?? '').toString().toLowerCase();
+                final reason = (data['flagReason'] ?? '').toString().toLowerCase();
+                return name.contains(_searchQuery) || reason.contains(_searchQuery);
+              }).toList();
+            }
+
+            return Padding(
+              padding: const EdgeInsets.all(24),
+              child: Container(
+                padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(AppBorderRadius.medium),
-                  border: Border.all(color: Colors.red.withOpacity(0.3)),
+                  color: colorCard,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: colorBorder),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      '⚠️ Flag Reason & Clinical Note',
-                      style: AppTextStyles.heading2.copyWith(
-                        fontSize: 16,
-                        color: Colors.red,
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Parent-Approved Flagged Children Directory (${docs.length})',
+                          style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                        Text(
+                          'Exclusively showing cases with explicit parent consent',
+                          style: GoogleFonts.inter(fontSize: 12, color: colorTeal),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: _buildFlaggedTable(docs),
                       ),
                     ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(child.flagReason ?? '', style: AppTextStyles.body),
                   ],
                 ),
               ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // =========================================================================
+  // ACTIVE REVIEWS PAGE
+  // =========================================================================
+  Widget _buildActiveReviewsPage() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore.collection('notifications').where('type', isEqualTo: 'review_requested').snapshots(),
+      builder: (context, snapshot) {
+        final docs = snapshot.data?.docs ?? [];
+
+        return Padding(
+          padding: const EdgeInsets.all(24),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: colorCard,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: colorBorder),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Parent Review Requests (${docs.length})',
+                  style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+                const SizedBox(height: 16),
+                if (docs.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Center(
+                      child: Text('No active parent review requests.', style: GoogleFonts.inter(color: colorTextMuted)),
+                    ),
+                  )
+                else
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: docs.length,
+                      separatorBuilder: (context, index) => const SizedBox(height: 12),
+                      itemBuilder: (context, idx) {
+                        final data = docs[idx].data() as Map<String, dynamic>;
+                        final childName = data['childName'] ?? 'Child';
+                        final parentName = data['parentName'] ?? 'Parent';
+                        final body = data['body'] ?? '';
+
+                        return Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: colorNavy,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: colorBorder),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.mark_email_unread_outlined, color: colorTeal, size: 28),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('$childName — Requested by $parentName',
+                                        style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14)),
+                                    const SizedBox(height: 4),
+                                    Text(body, style: GoogleFonts.inter(color: colorTextMuted, fontSize: 12)),
+                                  ],
+                                ),
+                              ),
+                              ElevatedButton(
+                                onPressed: () async {
+                                  final cDoc = await _firestore.collection('children').doc(data['childId']).get();
+                                  if (cDoc.exists) {
+                                    setState(() {
+                                      _selectedChild = ChildModel.fromMap(cDoc.data()!);
+                                      _isDrawerOpen = true;
+                                    });
+                                  }
+                                },
+                                style: ElevatedButton.styleFrom(backgroundColor: colorTeal),
+                                child: const Text('Examine Child', style: TextStyle(color: Colors.white, fontSize: 12)),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // =========================================================================
+  // OBSERVATION HISTORY PAGE
+  // =========================================================================
+  Widget _buildObservationHistoryPage() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore.collection('llgObservations').orderBy('recordedAt', descending: true).snapshots(),
+      builder: (context, snapshot) {
+        final docs = snapshot.data?.docs ?? [];
+
+        return Padding(
+          padding: const EdgeInsets.all(24),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: colorCard,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: colorBorder),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Immutable Observation Records (${docs.length})',
+                      style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                    Row(
+                      children: [
+                        const Icon(Icons.lock, size: 14, color: colorAmber),
+                        const SizedBox(width: 6),
+                        Text('Locked & Traceable', style: GoogleFonts.inter(color: colorAmber, fontSize: 12)),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                if (docs.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Center(
+                      child: Text('No observation records found.', style: GoogleFonts.inter(color: colorTextMuted)),
+                    ),
+                  )
+                else
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: docs.length,
+                      separatorBuilder: (context, index) => const SizedBox(height: 12),
+                      itemBuilder: (context, idx) {
+                        final obs = docs[idx].data() as Map<String, dynamic>;
+                        final llgName = obs['llgName'] ?? 'Specialist';
+                        final severity = obs['severity'] ?? 'medium';
+                        final observation = obs['observation'] ?? '';
+                        final recommendations = List<String>.from(obs['recommendations'] ?? []);
+                        final timestamp = (obs['recordedAt'] is Timestamp)
+                            ? (obs['recordedAt'] as Timestamp).toDate()
+                            : DateTime.now();
+
+                        return Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: colorNavy,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: colorBorder),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    'Logged by $llgName',
+                                    style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: severity == 'critical' ? Colors.red.withOpacity(0.2) : colorTeal.withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      severity.toUpperCase(),
+                                      style: GoogleFonts.inter(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: severity == 'critical' ? Colors.redAccent : colorTeal,
+                                      ),
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  Text(
+                                    DateFormat.yMMMd().add_jm().format(timestamp),
+                                    style: GoogleFonts.inter(color: colorTextMuted, fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                observation,
+                                style: GoogleFonts.inter(fontSize: 13, color: Colors.white.withOpacity(0.9), height: 1.4),
+                              ),
+                              if (recommendations.isNotEmpty) ...[
+                                const SizedBox(height: 10),
+                                Text(
+                                  'Recommendations:',
+                                  style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: colorTeal, fontSize: 12),
+                                ),
+                                const SizedBox(height: 4),
+                                ...recommendations.map((r) => Padding(
+                                      padding: const EdgeInsets.only(left: 6, bottom: 2),
+                                      child: Text('• $r', style: GoogleFonts.inter(fontSize: 12, color: colorTextMuted)),
+                                    )),
+                              ],
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // =========================================================================
+  // CHILD DETAIL PANEL (Right side drawer)
+  // =========================================================================
+  Widget _buildChildDetailPanel(ChildModel child) {
+    return Positioned(
+      top: 0,
+      right: 0,
+      bottom: 0,
+      width: 440,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: colorSlate,
+          border: Border(left: BorderSide(color: colorBorder, width: 1)),
+          boxShadow: [
+            BoxShadow(color: Colors.black45, blurRadius: 20, offset: Offset(-4, 0)),
+          ],
+        ),
+        child: Column(
+          children: [
+            // Drawer Header
+            Container(
+              height: 64,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: const BoxDecoration(
+                border: Border(bottom: BorderSide(color: colorBorder)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          child.name,
+                          style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                        Text(
+                          'Age ${child.ageYears} • Flagged Profile Review',
+                          style: GoogleFonts.inter(fontSize: 11, color: colorTeal),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: colorTextMuted),
+                    onPressed: () => setState(() => _isDrawerOpen = false),
+                  ),
+                ],
+              ),
+            ),
+
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Child Profile Summary
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: colorNavy,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: colorBorder),
+                      ),
+                      child: Column(
+                        children: [
+                          _buildDetailRow('Date of Birth', DateFormat.yMMMd().format(child.dateOfBirth)),
+                          const Divider(color: colorBorder, height: 16),
+                          _buildDetailRow('Gender', child.gender),
+                          const Divider(color: colorBorder, height: 16),
+                          _buildDetailRow('Flag Reason', child.flagReason ?? 'Multiple activity struggles'),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Current Skill Scores (6 domains)
+                    Text(
+                      'Developmental Domain Scores',
+                      style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                    const SizedBox(height: 10),
+                    StreamBuilder<DocumentSnapshot>(
+                      stream: _firestore.collection('skillProfiles').doc(child.childId).snapshots(),
+                      builder: (context, snapshot) {
+                        final data = snapshot.data?.data() as Map<String, dynamic>? ?? {};
+                        final domains = ['cognitive', 'language', 'motor', 'social', 'emotional', 'creative'];
+
+                        return Column(
+                          children: domains.map((domain) {
+                            final score = (data[domain] is num) ? (data[domain] as num).toDouble() : 0.0;
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Row(
+                                children: [
+                                  SizedBox(
+                                    width: 80,
+                                    child: Text(
+                                      domain[0].toUpperCase() + domain.substring(1),
+                                      style: GoogleFonts.inter(color: colorTextMuted, fontSize: 12),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: LinearProgressIndicator(
+                                        value: (score / 100).clamp(0.0, 1.0),
+                                        backgroundColor: colorNavy,
+                                        valueColor: AlwaysStoppedAnimation<Color>(
+                                          score < 40 ? Colors.redAccent : (score < 70 ? colorAmber : colorTeal),
+                                        ),
+                                        minHeight: 8,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    '${score.toStringAsFixed(1)}%',
+                                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        );
+                      },
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Recent Score Events (Audit Trail from scoreEvents)
+                    Text(
+                      'Score Ledger Audit History (Latest 5)',
+                      style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                    const SizedBox(height: 10),
+                    FutureBuilder<List<Map<String, dynamic>>>(
+                      future: ScoreLedgerService().getScoreHistory(childId: child.childId),
+                      builder: (context, snapshot) {
+                        final events = snapshot.data ?? [];
+                        if (events.isEmpty) {
+                          return Text('No score events recorded yet.', style: GoogleFonts.inter(color: colorTextMuted, fontSize: 12));
+                        }
+
+                        return Column(
+                          children: events.take(5).map((e) {
+                            final delta = (e['appliedScoreDelta'] is num) ? (e['appliedScoreDelta'] as num).toDouble() : 0.0;
+                            final domain = e['skillDomain'] ?? 'skill';
+                            final title = e['activityTitle'] ?? 'Activity';
+                            final isPositive = delta >= 0;
+
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: colorNavy,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: colorBorder),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(title, style: GoogleFonts.inter(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w500)),
+                                        Text('$domain • Level ${e['levelAtTime'] ?? 1}', style: GoogleFonts.inter(fontSize: 10, color: colorTextMuted)),
+                                      ],
+                                    ),
+                                  ),
+                                  Text(
+                                    '${isPositive ? '+' : ''}${delta.toStringAsFixed(1)} pts',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: isPositive ? const Color(0xFF10B981) : Colors.redAccent,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        );
+                      },
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Flag Evidence & Clinical Confidence (from flagState)
+                    StreamBuilder<DocumentSnapshot>(
+                      stream: _firestore.collection('flagState').doc(child.childId).snapshots(),
+                      builder: (context, snapshot) {
+                        final data = snapshot.data?.data() as Map<String, dynamic>? ?? {};
+                        final domains = (data['domains'] as Map<String, dynamic>?) ?? {};
+                        final approvedEntries = domains.entries
+                            .where((e) => e.value is Map && e.value['parentResponse'] == 'approved')
+                            .toList();
+
+                        if (approvedEntries.isEmpty) {
+                          return const SizedBox.shrink();
+                        }
+
+                        final firstApproved = approvedEntries.first;
+                        final domainKey = firstApproved.key;
+                        final domainData = firstApproved.value as Map<String, dynamic>;
+                        final confidence = (domainData['confidence'] is num)
+                            ? (domainData['confidence'] as num).toDouble()
+                            : 0.0;
+                        final aiGenAttempts = domainData['aiGenAttempts'] ?? 0;
+                        final evidence = domainData['evidence'] as Map<String, dynamic>? ?? {};
+                        final parentRespondedAt = domainData['parentRespondedAt'];
+                        String respondedDateStr = 'Recently';
+                        if (parentRespondedAt is Timestamp) {
+                          respondedDateStr = DateFormat.yMMMd().format(parentRespondedAt.toDate());
+                        }
+
+                        return Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: colorNavy,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: colorTeal.withOpacity(0.4)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'Flag Evidence & Consent',
+                                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: colorTeal),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: colorTeal.withOpacity(0.15),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      '${confidence.round()}% Confidence',
+                                      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: colorTeal),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              _buildDetailRow('Target Domain', domainKey[0].toUpperCase() + domainKey.substring(1)),
+                              const Divider(color: colorBorder, height: 12),
+                              _buildDetailRow('Parent Approved', respondedDateStr),
+                              const Divider(color: colorBorder, height: 12),
+                              _buildDetailRow('AI Practice Attempts', '$aiGenAttempts / 3 (14-day window)'),
+                              const Divider(color: colorBorder, height: 12),
+                              _buildDetailRow('Activity Evidence', '${evidence['activityCount'] ?? 0} activities, ${evidence['struggleCount'] ?? 0} struggles'),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Actions: Add Observation, Request Parent Call, Close Case
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => AddObservationPage(
+                                child: child,
+                                onSuccess: () {
+                                  setState(() => _isDrawerOpen = false);
+                                },
+                              ),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.note_add_outlined, size: 18),
+                        label: const Text('Add Immutable Clinical Observation'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: colorTeal,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          textStyle: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Parent consultation request dispatched for ${child.name}.'),
+                              backgroundColor: colorTeal,
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.phone_in_talk_outlined, size: 18, color: Colors.white),
+                        label: const Text('Request Parent Consultation Call', style: TextStyle(color: Colors.white)),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: colorBorder),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              backgroundColor: colorSlate,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              title: Text('Close Case', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold)),
+                              content: Text(
+                                'Are you sure you want to mark this case as resolved for ${child.name}? This will clear the active flag and log an immutable audit resolution.',
+                                style: GoogleFonts.inter(color: colorTextMuted),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, false),
+                                  child: Text('Cancel', style: GoogleFonts.inter(color: colorTextMuted)),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () => Navigator.pop(ctx, true),
+                                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981)),
+                                  child: const Text('Resolve Case', style: TextStyle(color: Colors.white)),
+                                ),
+                              ],
+                            ),
+                          );
+
+                          if (confirm == true) {
+                            await FlagService().resolveAutoUnflag(childId: child.childId, domain: 'cognitive');
+                            setState(() => _isDrawerOpen = false);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Case resolved successfully.'),
+                                  backgroundColor: Color(0xFF10B981),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                        icon: const Icon(Icons.check_circle_outline, size: 18, color: Color(0xFF10B981)),
+                        label: const Text('Close Case (Mark Resolved)', style: TextStyle(color: Color(0xFF10B981))),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Color(0xFF10B981)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSkillRow(String label, double value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 100,
-            child: Text(
-              label,
-              style: AppTextStyles.small.copyWith(fontWeight: FontWeight.w600),
-            ),
-          ),
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: LinearProgressIndicator(
-                value: value / 100,
-                minHeight: 10,
-                backgroundColor: Colors.grey[200],
-                color: value >= 70
-                    ? AppColors.success
-                    : value >= 50
-                    ? AppColors.primary
-                    : Colors.red,
-              ),
-            ),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          SizedBox(
-            width: 45,
-            child: Text(
-              '${value.toInt()}%',
-              style: AppTextStyles.small.copyWith(fontWeight: FontWeight.bold),
-              textAlign: TextAlign.right,
-            ),
-          ),
-        ],
-      ),
+  Widget _buildDetailRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: GoogleFonts.inter(color: colorTextMuted, fontSize: 12)),
+        Text(value, style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 12)),
+      ],
     );
   }
 }

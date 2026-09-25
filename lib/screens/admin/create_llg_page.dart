@@ -1,8 +1,8 @@
-// lib/screens/admin/create_llg_page.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../utils/constants.dart';
+import '../../utils/validators.dart';
 
 class CreateLLGPage extends StatefulWidget {
   const CreateLLGPage({super.key});
@@ -19,7 +19,15 @@ class _CreateLLGPageState extends State<CreateLLGPage> {
   bool _isLoading = false;
 
   Future<void> _createLLG() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please correct errors before submitting.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
 
     setState(() => _isLoading = true);
 
@@ -93,6 +101,7 @@ class _CreateLLGPageState extends State<CreateLLGPage> {
               children: [
                 TextFormField(
                   controller: _nameController,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   decoration: InputDecoration(
                     labelText: 'Full Name',
                     prefixIcon: Icon(Icons.person_outline, color: AppColors.primary),
@@ -100,12 +109,13 @@ class _CreateLLGPageState extends State<CreateLLGPage> {
                       borderRadius: BorderRadius.circular(AppBorderRadius.medium),
                     ),
                   ),
-                  validator: (v) => v!.isEmpty ? 'Please enter a name' : null,
+                  validator: Validators.name,
                 ),
                 SizedBox(height: AppSpacing.md),
 
                 TextFormField(
                   controller: _emailController,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   keyboardType: TextInputType.emailAddress,
                   decoration: InputDecoration(
                     labelText: 'Email',
@@ -114,12 +124,13 @@ class _CreateLLGPageState extends State<CreateLLGPage> {
                       borderRadius: BorderRadius.circular(AppBorderRadius.medium),
                     ),
                   ),
-                  validator: (v) => v!.isEmpty ? 'Please enter an email' : null,
+                  validator: Validators.email,
                 ),
                 SizedBox(height: AppSpacing.md),
 
                 TextFormField(
                   controller: _passwordController,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   obscureText: true,
                   decoration: InputDecoration(
                     labelText: 'Password',
@@ -128,11 +139,7 @@ class _CreateLLGPageState extends State<CreateLLGPage> {
                       borderRadius: BorderRadius.circular(AppBorderRadius.medium),
                     ),
                   ),
-                  validator: (v) {
-                    if (v!.isEmpty) return 'Please enter a password';
-                    if (v.length < 6) return 'Password must be at least 6 characters';
-                    return null;
-                  },
+                  validator: Validators.strongPassword,
                 ),
                 SizedBox(height: AppSpacing.lg),
 

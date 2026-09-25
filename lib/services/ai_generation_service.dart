@@ -7,14 +7,17 @@ class AIGenerationService {
   // ✅ Cloud backend URL
   static const String baseUrl = 'https://littlelumin-backend.onrender.com';
   
-  // ✅ Increase timeout for slower networks
-  static const Duration _timeout = Duration(seconds: 60);
+  final http.Client? client;
+
+  AIGenerationService({this.client});
 
   Future<ActivityModel> generateActivity({
     required String skillDomain,
     required String difficulty,
     int ageYears = 4,
     String childName = '',
+    int maxRetries = 2,
+    Duration Function(int attempt)? retryDelayProvider,
   }) async {
     final url = '$baseUrl/api/ai/generate-activity';
     final requestBody = {
@@ -24,47 +27,83 @@ class AIGenerationService {
       'child_name': childName,
     };
 
-    debugPrint('[AIGenerationService] POST $url');
-    debugPrint('[AIGenerationService] Body: ${jsonEncode(requestBody)}');
+    Exception? lastError;
 
-    try {
-      final response = await http
-          .post(
-            Uri.parse(url),
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
-            body: jsonEncode(requestBody),
-          )
-          .timeout(_timeout);
+    for (int attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        debugPrint('[AIGenerationService] POST $url (attempt ${attempt + 1}/${maxRetries + 1})');
 
-      debugPrint('[AIGenerationService] Status: ${response.statusCode}');
-      debugPrint('[AIGenerationService] Response: ${response.body}');
+        final uri = Uri.parse(url);
+        final headers = {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        };
+        final bodyJson = jsonEncode(requestBody);
 
-      final body = jsonDecode(response.body);
+        final httpClient = client;
+        final response = await (httpClient != null
+                ? httpClient.post(uri, headers: headers, body: bodyJson)
+                : http.post(uri, headers: headers, body: bodyJson))
+            .timeout(const Duration(seconds: 90));
 
-      if (response.statusCode == 200 && body['status'] == 'success' && body['data'] != null) {
-        final data = Map<String, dynamic>.from(body['data']);
-        final generatedId = 'ai_${DateTime.now().millisecondsSinceEpoch}';
-        return ActivityModel.fromMap(generatedId, data);
-      } else {
-        final errorMessage = body['detail'] ?? body['message'] ?? 'Backend error (${response.statusCode})';
+        dynamic body;
+        try {
+          body = jsonDecode(response.body);
+        } catch (_) {
+          body = null;
+        }
+
+        if (response.statusCode == 200 &&
+            body is Map &&
+            body['status'] == 'success' &&
+            body['data'] != null) {
+          debugPrint('[AIGenerationService] ✅ Success on attempt ${attempt + 1}');
+          final data = Map<String, dynamic>.from(body['data']);
+          final generatedId = 'ai_${DateTime.now().millisecondsSinceEpoch}';
+          return ActivityModel.fromMap(generatedId, data);
+        }
+
+        // 500 error — retry if we have attempts left
+        if (response.statusCode >= 500 && attempt < maxRetries) {
+          final waitSeconds = (attempt + 1) * 3; // 3s, 6s
+          final delay = retryDelayProvider != null
+              ? retryDelayProvider(attempt)
+              : Duration(seconds: waitSeconds);
+          debugPrint('[AIGenerationService] ⚠️ Got ${response.statusCode}, retrying in ${delay.inSeconds}s...');
+          await Future.delayed(delay);
+          continue;
+        }
+
+        // Non-retryable error
+        final errorMessage = body is Map
+            ? (body['detail'] is Map
+                ? body['detail']['message'] ?? 'Backend error'
+                : body['detail'] ?? body['message'] ?? 'Backend error (${response.statusCode})')
+            : 'Backend error (${response.statusCode})';
         throw Exception(errorMessage);
+      } catch (e) {
+        lastError = e is Exception ? e : Exception(e.toString());
+        if (attempt < maxRetries) {
+          final waitSeconds = (attempt + 1) * 3;
+          final delay = retryDelayProvider != null
+              ? retryDelayProvider(attempt)
+              : Duration(seconds: waitSeconds);
+          debugPrint('[AIGenerationService] ⚠️ Attempt ${attempt + 1} failed. Retrying in ${delay.inSeconds}s...');
+          await Future.delayed(delay);
+        }
       }
-    } on http.ClientException catch (e) {
-      debugPrint('[AIGenerationService] Network error: $e');
-      throw Exception('Network error. Please check your internet connection.');
-    } catch (e) {
-      debugPrint('[AIGenerationService] Error: $e');
-      throw Exception('Failed to generate activity: ${e.toString().replaceAll('Exception: ', '')}');
     }
+
+    debugPrint('[AIGenerationService] ❌ All attempts failed');
+    throw lastError ?? Exception('Failed to generate activity after retries');
   }
 
   Future<Map<String, dynamic>> generateStory({
     required String childName,
     String topicOrMoral = 'Sharing and Kindness',
     int ageYears = 4,
+    int maxRetries = 2,
+    Duration Function(int attempt)? retryDelayProvider,
   }) async {
     final effectiveName = childName.trim().isEmpty ? 'Little Explorer' : childName.trim();
     final url = '$baseUrl/api/ai/generate-story';
@@ -74,35 +113,72 @@ class AIGenerationService {
       'age_years': ageYears,
     };
 
-    debugPrint('[AIGenerationService] POST $url');
-    debugPrint('[AIGenerationService] Body: ${jsonEncode(requestBody)}');
+    Exception? lastError;
 
-    try {
-      final response = await http
-          .post(
-            Uri.parse(url),
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
-            body: jsonEncode(requestBody),
-          )
-          .timeout(_timeout);
+    for (int attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        debugPrint('[AIGenerationService] POST $url (attempt ${attempt + 1}/${maxRetries + 1})');
 
-      debugPrint('[AIGenerationService] Status: ${response.statusCode}');
-      debugPrint('[AIGenerationService] Response: ${response.body}');
+        final uri = Uri.parse(url);
+        final headers = {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        };
+        final bodyJson = jsonEncode(requestBody);
 
-      final body = jsonDecode(response.body);
+        final httpClient = client;
+        final response = await (httpClient != null
+                ? httpClient.post(uri, headers: headers, body: bodyJson)
+                : http.post(uri, headers: headers, body: bodyJson))
+            .timeout(const Duration(seconds: 90));
 
-      if (response.statusCode == 200 && body['status'] == 'success' && body['data'] != null) {
-        return Map<String, dynamic>.from(body['data']);
-      } else {
-        final errorMessage = body['detail'] ?? body['message'] ?? 'Backend error (${response.statusCode})';
+        dynamic body;
+        try {
+          body = jsonDecode(response.body);
+        } catch (_) {
+          body = null;
+        }
+
+        if (response.statusCode == 200 &&
+            body is Map &&
+            body['status'] == 'success' &&
+            body['data'] != null) {
+          debugPrint('[AIGenerationService] ✅ Success on attempt ${attempt + 1}');
+          return Map<String, dynamic>.from(body['data']);
+        }
+
+        // 500 error — retry if we have attempts left
+        if (response.statusCode >= 500 && attempt < maxRetries) {
+          final waitSeconds = (attempt + 1) * 3;
+          final delay = retryDelayProvider != null
+              ? retryDelayProvider(attempt)
+              : Duration(seconds: waitSeconds);
+          debugPrint('[AIGenerationService] ⚠️ Got ${response.statusCode}, retrying in ${delay.inSeconds}s...');
+          await Future.delayed(delay);
+          continue;
+        }
+
+        // Non-retryable error
+        final errorMessage = body is Map
+            ? (body['detail'] is Map
+                ? body['detail']['message'] ?? 'Backend error'
+                : body['detail'] ?? body['message'] ?? 'Backend error (${response.statusCode})')
+            : 'Backend error (${response.statusCode})';
         throw Exception(errorMessage);
+      } catch (e) {
+        lastError = e is Exception ? e : Exception(e.toString());
+        if (attempt < maxRetries) {
+          final waitSeconds = (attempt + 1) * 3;
+          final delay = retryDelayProvider != null
+              ? retryDelayProvider(attempt)
+              : Duration(seconds: waitSeconds);
+          debugPrint('[AIGenerationService] ⚠️ Story attempt ${attempt + 1} failed. Retrying in ${delay.inSeconds}s...');
+          await Future.delayed(delay);
+        }
       }
-    } catch (e) {
-      debugPrint('[AIGenerationService] Story error: $e');
-      throw Exception('Failed to generate story: ${e.toString().replaceAll('Exception: ', '')}');
     }
+
+    debugPrint('[AIGenerationService] ❌ All attempts failed');
+    throw lastError ?? Exception('Failed to generate story after retries');
   }
 }

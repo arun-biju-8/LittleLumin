@@ -14,6 +14,9 @@ class SavedItemsService {
     required ActivityModel activity,
     required String childId,
   }) async {
+    if (childId.trim().isEmpty) throw ArgumentError('childId cannot be empty');
+    if (activity.title.trim().isEmpty) throw ArgumentError('Activity title cannot be empty');
+
     try {
       final userId = _userId;
       if (userId == null) throw Exception('Not logged in');
@@ -58,6 +61,10 @@ class SavedItemsService {
     required Map<String, dynamic> story,
     required String childId,
   }) async {
+    if (childId.trim().isEmpty) throw ArgumentError('childId cannot be empty');
+    final title = story['title']?.toString().trim();
+    if (title == null || title.isEmpty) throw ArgumentError('Story title cannot be empty');
+
     try {
       final userId = _userId;
       if (userId == null) throw Exception('Not logged in');
@@ -127,6 +134,7 @@ class SavedItemsService {
 
   // ============ DELETE ============
   Future<bool> deleteSavedActivity(String id) async {
+    if (id.trim().isEmpty) throw ArgumentError('id cannot be empty');
     try {
       await _firestore.collection('savedActivities').doc(id).delete();
       return true;
@@ -137,6 +145,7 @@ class SavedItemsService {
   }
 
   Future<bool> deleteSavedStory(String id) async {
+    if (id.trim().isEmpty) throw ArgumentError('id cannot be empty');
     try {
       await _firestore.collection('savedStories').doc(id).delete();
       return true;

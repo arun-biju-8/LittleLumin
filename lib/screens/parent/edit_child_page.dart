@@ -1,11 +1,13 @@
-// lib/screens/parent/edit_child_page.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/child_model.dart';
 import '../../services/child_service.dart';
 import '../../utils/constants.dart';
+import '../../utils/validators.dart';
+import '../../widgets/global_header.dart';
 
 class EditChildPage extends StatefulWidget {
   final ChildModel? child;
@@ -91,17 +93,17 @@ class _EditChildPageState extends State<EditChildPage> {
 
   Future<void> _selectDate(BuildContext context) async {
     final now = DateTime.now();
-    final minDate = DateTime(now.year - 12, now.month, now.day);
-    final maxDate = DateTime(now.year - 1, now.month, now.day);
-    final initialDate = _selectedDOB ?? DateTime(now.year - 3, now.month, now.day);
+    final initialDate = _selectedDOB ?? DateTime(now.year - 4, now.month, now.day);
+    final firstDate = DateTime(now.year - 10, now.month, now.day);
+    final lastDate = DateTime(now.year - 2, now.month, now.day);
 
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: initialDate.isBefore(minDate)
-          ? minDate
-          : (initialDate.isAfter(maxDate) ? maxDate : initialDate),
-      firstDate: DateTime(now.year - 20, now.month, now.day),
-      lastDate: now,
+      initialDate: initialDate.isBefore(firstDate)
+          ? firstDate
+          : (initialDate.isAfter(lastDate) ? lastDate : initialDate),
+      firstDate: firstDate,
+      lastDate: lastDate,
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -117,6 +119,15 @@ class _EditChildPageState extends State<EditChildPage> {
     );
 
     if (picked != null) {
+      final err = Validators.dateOfBirth(picked);
+      if (err != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(err), backgroundColor: Colors.red),
+          );
+        }
+        return;
+      }
       setState(() {
         _selectedDOB = picked;
         _dobController.text = DateFormat('dd/MM/yyyy').format(picked);
@@ -200,33 +211,33 @@ class _EditChildPageState extends State<EditChildPage> {
           gender: _selectedGender ?? _child!.gender,
           deliveryType: _selectedDeliveryType,
           gestationalAge: _selectedGestationalAge,
-          birthWeight: _birthWeightController.text.isNotEmpty
-              ? double.parse(_birthWeightController.text)
+          birthWeight: _birthWeightController.text.trim().isNotEmpty
+              ? double.tryParse(_birthWeightController.text.trim())
               : null,
-          birthComplications: _complicationsController.text.isNotEmpty
-              ? _complicationsController.text
+          birthComplications: _complicationsController.text.trim().isNotEmpty
+              ? _complicationsController.text.trim()
               : null,
-          birthOrder: _birthOrderController.text.isNotEmpty
-              ? int.parse(_birthOrderController.text)
+          birthOrder: _birthOrderController.text.trim().isNotEmpty
+              ? int.tryParse(_birthOrderController.text.trim())
               : null,
-          motherAgeAtConception: _motherAgeController.text.isNotEmpty
-              ? int.parse(_motherAgeController.text)
+          motherAgeAtConception: _motherAgeController.text.trim().isNotEmpty
+              ? int.tryParse(_motherAgeController.text.trim())
               : null,
-          fatherAgeAtConception: _fatherAgeController.text.isNotEmpty
-              ? int.parse(_fatherAgeController.text)
+          fatherAgeAtConception: _fatherAgeController.text.trim().isNotEmpty
+              ? int.tryParse(_fatherAgeController.text.trim())
               : null,
-          height: _heightController.text.isNotEmpty
-              ? double.parse(_heightController.text)
+          height: _heightController.text.trim().isNotEmpty
+              ? double.tryParse(_heightController.text.trim())
               : null,
-          weight: _weightController.text.isNotEmpty
-              ? double.parse(_weightController.text)
+          weight: _weightController.text.trim().isNotEmpty
+              ? double.tryParse(_weightController.text.trim())
               : null,
           sleepHabit: _selectedSleepHabit,
-          sleepDuration: _sleepDurationController.text.isNotEmpty
-              ? int.parse(_sleepDurationController.text)
+          sleepDuration: _sleepDurationController.text.trim().isNotEmpty
+              ? int.tryParse(_sleepDurationController.text.trim())
               : null,
-          nightWakings: _nightWakingsController.text.isNotEmpty
-              ? int.parse(_nightWakingsController.text)
+          nightWakings: _nightWakingsController.text.trim().isNotEmpty
+              ? int.tryParse(_nightWakingsController.text.trim())
               : null,
           mood: _selectedMood,
           attention: _selectedAttention,
@@ -272,20 +283,11 @@ class _EditChildPageState extends State<EditChildPage> {
   @override
   Widget build(BuildContext context) {
     final completion = _child?.profileCompletion ?? 0;
-    final isNewChild = widget.child == null;
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Text(isNewChild ? 'Add Child' : 'Edit ${_child?.name ?? 'Child'}\'s Profile', style: AppTextStyles.heading2),
-        backgroundColor: AppColors.white,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: Icon(Icons.save, color: AppColors.primary),
-            onPressed: _isSaving ? null : _saveProfile,
-          ),
-        ],
+      appBar: const GlobalHeader(
+        showBack: true,
       ),
       body: Stack(
         children: [
@@ -398,7 +400,7 @@ class _EditChildPageState extends State<EditChildPage> {
                         label: 'Child\'s Name',
                         hint: 'Enter child\'s name',
                         icon: Icons.person_outline,
-                        validator: (v) => v!.isEmpty ? 'Please enter a name' : null,
+                        validator: Validators.name,
                       ),
                       const SizedBox(height: AppSpacing.sm),
                       Row(
@@ -437,6 +439,10 @@ class _EditChildPageState extends State<EditChildPage> {
                               controller: _birthWeightController,
                               label: 'Birth Weight (kg)',
                               hint: 'e.g. 3.2',
+                              isDecimal: true,
+                              validator: (v) => (v != null && v.trim().isNotEmpty)
+                                  ? Validators.nonNegativeNumber(v, 'Birth weight', min: 0.5, max: 10, decimals: 2)
+                                  : null,
                             ),
                           ),
                           const SizedBox(width: AppSpacing.sm),
@@ -445,6 +451,10 @@ class _EditChildPageState extends State<EditChildPage> {
                               controller: _birthOrderController,
                               label: 'Birth Order',
                               hint: 'e.g. 1, 2, 3',
+                              isDecimal: false,
+                              validator: (v) => (v != null && v.trim().isNotEmpty)
+                                  ? Validators.integer(v, 'Birth order', min: 1, max: 20)
+                                  : null,
                             ),
                           ),
                         ],
@@ -456,6 +466,9 @@ class _EditChildPageState extends State<EditChildPage> {
                         hint: 'e.g. Jaundice, oxygen support, etc.',
                         icon: Icons.medical_information,
                         maxLines: 2,
+                        validator: (v) => (v != null && v.trim().isNotEmpty)
+                            ? Validators.safeText(v, 'Birth complications', min: 0, max: 300)
+                            : null,
                       ),
                       const SizedBox(height: AppSpacing.md),
 
@@ -468,6 +481,10 @@ class _EditChildPageState extends State<EditChildPage> {
                               controller: _motherAgeController,
                               label: 'Mother\'s Age',
                               hint: 'e.g. 28',
+                              isDecimal: false,
+                              validator: (v) => (v != null && v.trim().isNotEmpty)
+                                  ? Validators.integer(v, "Mother's age", min: 14, max: 70)
+                                  : null,
                             ),
                           ),
                           const SizedBox(width: AppSpacing.sm),
@@ -476,6 +493,10 @@ class _EditChildPageState extends State<EditChildPage> {
                               controller: _fatherAgeController,
                               label: 'Father\'s Age',
                               hint: 'e.g. 30',
+                              isDecimal: false,
+                              validator: (v) => (v != null && v.trim().isNotEmpty)
+                                  ? Validators.integer(v, "Father's age", min: 14, max: 80)
+                                  : null,
                             ),
                           ),
                         ],
@@ -491,6 +512,10 @@ class _EditChildPageState extends State<EditChildPage> {
                               controller: _heightController,
                               label: 'Height (cm)',
                               hint: 'e.g. 105',
+                              isDecimal: true,
+                              validator: (v) => (v != null && v.trim().isNotEmpty)
+                                  ? Validators.height(v)
+                                  : null,
                             ),
                           ),
                           const SizedBox(width: AppSpacing.sm),
@@ -499,6 +524,10 @@ class _EditChildPageState extends State<EditChildPage> {
                               controller: _weightController,
                               label: 'Weight (kg)',
                               hint: 'e.g. 16.5',
+                              isDecimal: true,
+                              validator: (v) => (v != null && v.trim().isNotEmpty)
+                                  ? Validators.weight(v)
+                                  : null,
                             ),
                           ),
                         ],
@@ -521,6 +550,10 @@ class _EditChildPageState extends State<EditChildPage> {
                               controller: _sleepDurationController,
                               label: 'Sleep Duration (hours/day)',
                               hint: 'e.g. 10',
+                              isDecimal: false,
+                              validator: (v) => (v != null && v.trim().isNotEmpty)
+                                  ? Validators.integer(v, 'Sleep duration', min: 1, max: 24)
+                                  : null,
                             ),
                           ),
                           const SizedBox(width: AppSpacing.sm),
@@ -529,6 +562,10 @@ class _EditChildPageState extends State<EditChildPage> {
                               controller: _nightWakingsController,
                               label: 'Night Wakings (times)',
                               hint: 'e.g. 1',
+                              isDecimal: false,
+                              validator: (v) => (v != null && v.trim().isNotEmpty)
+                                  ? Validators.integer(v, 'Night wakings', min: 0, max: 20)
+                                  : null,
                             ),
                           ),
                         ],
@@ -640,6 +677,7 @@ class _EditChildPageState extends State<EditChildPage> {
           controller: controller,
           maxLines: maxLines,
           validator: validator,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
           decoration: InputDecoration(
             hintText: hint,
             prefixIcon: Icon(icon, color: AppColors.primary, size: 20),
@@ -668,17 +706,8 @@ class _EditChildPageState extends State<EditChildPage> {
           controller: _dobController,
           readOnly: true,
           onTap: () => _selectDate(context),
-          validator: (v) {
-            if (_selectedDOB == null || v == null || v.isEmpty) {
-              return 'Select DOB';
-            }
-            final now = DateTime.now();
-            final minDate = DateTime(now.year - 12, now.month, now.day);
-            final maxDate = DateTime(now.year - 1, now.month, now.day);
-            if (_selectedDOB!.isAfter(maxDate)) return 'Min age 1 year';
-            if (_selectedDOB!.isBefore(minDate)) return 'Max age 12 years';
-            return null;
-          },
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          validator: (v) => Validators.dateOfBirth(_selectedDOB),
           decoration: InputDecoration(
             hintText: 'DD/MM/YYYY',
             prefixIcon: Icon(Icons.calendar_today_outlined, color: AppColors.primary, size: 20),
@@ -703,26 +732,29 @@ class _EditChildPageState extends State<EditChildPage> {
       children: [
         Text('Gender', style: AppTextStyles.small.copyWith(fontWeight: FontWeight.w500)),
         const SizedBox(height: 4),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            border: Border.all(color: AppColors.border),
-            borderRadius: BorderRadius.circular(AppBorderRadius.small),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: _selectedGender,
-              isExpanded: true,
-              hint: const Text('Select'),
-              items: _genders.map((gender) {
-                return DropdownMenuItem(
-                  value: gender,
-                  child: Text(gender),
-                );
-              }).toList(),
-              onChanged: (value) => setState(() => _selectedGender = value),
+        DropdownButtonFormField<String>(
+          value: _selectedGender,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          decoration: InputDecoration(
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(AppBorderRadius.small),
+              borderSide: BorderSide(color: AppColors.border),
             ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(AppBorderRadius.small),
+              borderSide: BorderSide(color: AppColors.primary, width: 1.5),
+            ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           ),
+          hint: const Text('Select'),
+          items: _genders.map((gender) {
+            return DropdownMenuItem(
+              value: gender,
+              child: Text(gender),
+            );
+          }).toList(),
+          validator: Validators.gender,
+          onChanged: (value) => setState(() => _selectedGender = value),
         ),
       ],
     );
@@ -739,26 +771,27 @@ class _EditChildPageState extends State<EditChildPage> {
       children: [
         Text(label, style: AppTextStyles.small.copyWith(fontWeight: FontWeight.w500)),
         const SizedBox(height: 4),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            border: Border.all(color: AppColors.border),
-            borderRadius: BorderRadius.circular(AppBorderRadius.small),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: value,
-              isExpanded: true,
-              hint: const Text('Select'),
-              items: items.map((item) {
-                return DropdownMenuItem(
-                  value: item,
-                  child: Text(item),
-                );
-              }).toList(),
-              onChanged: onChanged,
+        DropdownButtonFormField<String>(
+          value: value,
+          decoration: InputDecoration(
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(AppBorderRadius.small),
+              borderSide: BorderSide(color: AppColors.border),
             ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(AppBorderRadius.small),
+              borderSide: BorderSide(color: AppColors.primary, width: 1.5),
+            ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           ),
+          hint: const Text('Select'),
+          items: items.map((item) {
+            return DropdownMenuItem(
+              value: item,
+              child: Text(item),
+            );
+          }).toList(),
+          onChanged: onChanged,
         ),
       ],
     );
@@ -768,6 +801,8 @@ class _EditChildPageState extends State<EditChildPage> {
     required TextEditingController controller,
     required String label,
     required String hint,
+    bool isDecimal = false,
+    String? Function(String?)? validator,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -776,7 +811,17 @@ class _EditChildPageState extends State<EditChildPage> {
         const SizedBox(height: 4),
         TextFormField(
           controller: controller,
-          keyboardType: TextInputType.numberWithOptions(decimal: true),
+          keyboardType: isDecimal
+              ? const TextInputType.numberWithOptions(decimal: true)
+              : TextInputType.number,
+          inputFormatters: [
+            if (isDecimal)
+              FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))
+            else
+              FilteringTextInputFormatter.digitsOnly,
+          ],
+          validator: validator,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
           decoration: InputDecoration(
             hintText: hint,
             border: OutlineInputBorder(

@@ -1,5 +1,6 @@
 // lib/main.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -12,6 +13,8 @@ import 'screens/parent/parent_dashboard.dart';
 import 'screens/parent/ai_activity_generator.dart';
 import 'screens/admin/admin_dashboard.dart';
 import 'screens/llg/llg_dashboard.dart';
+import 'screens/parent/llg_connect_page.dart';
+import 'widgets/mobile_only_gate.dart';
 import 'services/auth_service.dart';
 
 void main() async {
@@ -39,6 +42,12 @@ void main() async {
     debugPrint('⚠️ Firebase initialization warning: $e');
   }
   
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.dark,
+    statusBarBrightness: Brightness.light,
+  ));
+
   // 3. Run Flutter Application
   runApp(const MyApp());
 }
@@ -66,10 +75,14 @@ class MyApp extends StatelessWidget {
           '/auth-wrapper': (context) => const AuthWrapper(),
           '/login': (context) => const LoginPage(),
           '/signup': (context) => const SignUpPage(),
-          '/parent-dashboard': (context) => const ParentDashboard(),
+          '/parent-dashboard': (context) => const MobileOnlyGate(
+                userType: 'parent',
+                child: ParentDashboard(),
+              ),
           '/admin-dashboard': (context) => const AdminDashboard(),
           '/llg-dashboard': (context) => const LLGDashboard(),
           '/ai-generator': (context) => const AIActivityGeneratorScreen(),
+          '/llg-connect': (context) => const LLGConnectPage(),
         },
       ),
     );
@@ -148,7 +161,10 @@ class AuthWrapper extends StatelessWidget {
             );
           case 'parent':
           default:
-            return const ParentDashboard();
+            return const MobileOnlyGate(
+              userType: 'parent',
+              child: ParentDashboard(),
+            );
         }
       },
     );

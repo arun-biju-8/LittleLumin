@@ -1,9 +1,9 @@
-// lib/screens/llg/send_recommendation_page.dart
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/child_model.dart';
 import '../../utils/constants.dart';
+import '../../utils/validators.dart';
 
 class SendRecommendationPage extends StatefulWidget {
   final ChildModel child;
@@ -20,7 +20,15 @@ class _SendRecommendationPageState extends State<SendRecommendationPage> {
   bool _isLoading = false;
 
   Future<void> _sendRecommendation() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a valid message before sending.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
 
     setState(() => _isLoading = true);
 
@@ -88,8 +96,9 @@ class _SendRecommendationPageState extends State<SendRecommendationPage> {
                 const SizedBox(height: AppSpacing.xs),
                 TextFormField(
                   controller: _messageController,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   maxLines: 8,
-                  validator: (v) => v!.isEmpty ? 'Please enter a message' : null,
+                  validator: (v) => Validators.safeText(v, 'Message', min: 10, max: 1000),
                   decoration: InputDecoration(
                     hintText: 'Example: "Aarav is doing great with language! Try sand writing to improve motor skills."',
                     border: OutlineInputBorder(

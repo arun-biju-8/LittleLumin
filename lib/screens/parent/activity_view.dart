@@ -10,6 +10,8 @@ import '../../widgets/activity_video_player.dart';
 import '../llg/add_activity_page.dart';
 import 'feedback_form.dart';
 import '../../services/journey_service.dart';
+import '../../services/activity_state_service.dart';
+import '../../widgets/global_header.dart';
 
 class ActivityView extends StatefulWidget {
   final ActivityModel? activity;
@@ -138,6 +140,12 @@ class _ActivityViewState extends State<ActivityView> {
           activityId: _activity!.id!,
           activityTitle: _activity!.title,
           level: journey.currentLevel,
+        );
+        await ActivityStateService().startActivity(
+          childId: _resolvedChildId!,
+          activityId: _activity!.id!,
+          activityTitle: _activity!.title,
+          skillDomain: _activity!.skillType,
         );
       }
     } catch (e) {
@@ -298,29 +306,35 @@ class _ActivityViewState extends State<ActivityView> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Text(
-          _activity?.title ?? 'Activity Details',
-          style: AppTextStyles.heading2,
-        ),
-        backgroundColor: AppColors.white,
-        elevation: 0.5,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.textDark),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          if (_isAdminOrLlg && _activity != null)
-            Padding(
-              padding: const EdgeInsets.only(right: 8.0),
-              child: IconButton(
-                icon: const Icon(Icons.edit_note, color: AppColors.primary, size: 28),
-                tooltip: 'Edit Activity',
-                onPressed: _navigateToEdit,
+      appBar: _isAdminOrLlg
+          ? AppBar(
+              title: Text(
+                _activity?.title ?? 'Activity Details',
+                style: AppTextStyles.heading2,
               ),
+              backgroundColor: AppColors.white,
+              elevation: 0.5,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back, color: AppColors.textDark),
+                onPressed: () => Navigator.pop(context),
+              ),
+              actions: [
+                if (_activity != null)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: IconButton(
+                      icon: const Icon(Icons.edit_note, color: AppColors.primary, size: 28),
+                      tooltip: 'Edit Activity',
+                      onPressed: _navigateToEdit,
+                    ),
+                  ),
+              ],
+            )
+          : GlobalHeader(
+              showBack: true,
+              title: _activity?.title,
+              onBackTap: () => Navigator.pop(context),
             ),
-        ],
-      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _activity == null
@@ -791,7 +805,11 @@ class _ActivityViewState extends State<ActivityView> {
       final completeBtn = SizedBox(
         height: 52,
         child: ElevatedButton.icon(
-          onPressed: () {
+          onPressed: () async {
+            if (_resolvedChildId != null && _resolvedChildId!.isNotEmpty) {
+              await ActivityStateService().markCompleted(_resolvedChildId!);
+            }
+            if (!context.mounted) return;
             Navigator.push(
               context,
               MaterialPageRoute(

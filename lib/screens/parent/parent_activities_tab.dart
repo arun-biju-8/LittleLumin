@@ -241,7 +241,8 @@ class _ParentActivitiesTabState extends State<ParentActivitiesTab> {
                 }
 
                 // Difficulty filter
-                if (_selectedDifficulty != 'All' && a.difficulty != _selectedDifficulty) {
+                if (_selectedDifficulty != 'All' &&
+                    a.difficulty.toLowerCase().trim() != _selectedDifficulty.toLowerCase().trim()) {
                   return false;
                 }
 

@@ -50,6 +50,7 @@ class ChildModel {
   }
 
   int get ageInYears => age;
+  int get ageYears => age;
 
   // ✅ Getter for age display string ("3 years", "4 months", etc.)
   String get ageDisplay {

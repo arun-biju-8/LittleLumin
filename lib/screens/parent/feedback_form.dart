@@ -3,10 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../utils/constants.dart';
+import '../../utils/validators.dart';
 import '../../services/ai_service.dart';
 import '../../services/journey_service.dart';
+import '../../services/activity_state_service.dart';
+import '../../widgets/global_header.dart';
 import '../../widgets/journey_dialogs.dart';
 import 'journey_activity_detail_page.dart';
+import 'widgets/post_feedback_guidance_sheet.dart';
 
 class FeedbackForm extends StatefulWidget {
   final String? activityId;
@@ -65,7 +69,25 @@ class _FeedbackFormState extends State<FeedbackForm> {
   bool get _isFormComplete => _answeredCount == 5;
 
   Future<void> _submitFeedback() async {
-    if (!_isFormComplete || _isSubmitting) return;
+    if (_isSubmitting) return;
+    if (!_isFormComplete) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please answer all 5 questions before submitting.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final notesText = _notesController.text.trim();
+    final noteErr = Validators.notes(notesText);
+    if (noteErr != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(noteErr), backgroundColor: Colors.red),
+      );
+      return;
+    }
 
     setState(() {
       _isSubmitting = true;
@@ -97,7 +119,7 @@ class _FeedbackFormState extends State<FeedbackForm> {
           'difficulty': _difficulty,
           'confidence': _confidence,
           'timeEstimate': _timeEstimate,
-          'notes': _notesController.text.trim(),
+          'notes': notesText,
           'createdAt': FieldValue.serverTimestamp(),
         }),
         _aiService.processFeedback(
@@ -107,6 +129,10 @@ class _FeedbackFormState extends State<FeedbackForm> {
           engagement: _engagement!,
           difficulty: _difficulty!,
           confidence: _confidence!,
+          timeEstimate: _timeEstimate,
+          notes: notesText,
+          activityTitle: widget.activityTitle,
+          parentId: currentUserId,
         ),
         journeyService.completeActivity(
           childId: childId,
@@ -115,8 +141,31 @@ class _FeedbackFormState extends State<FeedbackForm> {
         ),
       ]);
 
+      await ActivityStateService().markFeedbackSubmitted(childId);
+
       final result = results[1] as ProcessFeedbackResult;
       final journeyResult = results[2] as Map<String, dynamic>;
+
+      String childName = 'Your child';
+      try {
+        final childDoc = await _firestore.collection('children').doc(childId).get();
+        if (childDoc.exists && childDoc.data() != null) {
+          childName = childDoc.data()!['name']?.toString() ?? 'Your child';
+        }
+      } catch (_) {}
+
+      if (!mounted) return;
+
+      // Show Post-Feedback Guidance Sheet
+      await showPostFeedbackGuidance(
+        context,
+        childName: childName,
+        domain: result.domain,
+        scoreBefore: result.scoreBefore,
+        scoreAfter: result.scoreAfter,
+        delta: result.delta,
+        nextActivity: result.nextActivity,
+      );
 
       if (!mounted) return;
 
@@ -136,85 +185,13 @@ class _FeedbackFormState extends State<FeedbackForm> {
           nextLevel: nextLevel,
           trophyEarned: trophyName,
           onContinueJourney: () {
-            Navigator.of(context).pop();
-            Navigator.of(context).pop();
+            Navigator.of(context).popUntil((route) => route.isFirst);
           },
           onBrowseActivities: () {
-            Navigator.of(context).pop();
-            Navigator.of(context).pop();
+            Navigator.of(context).popUntil((route) => route.isFirst);
           },
         );
         return;
-      }
-
-      // Show Flag Alert or Toast
-      if (result.isFlagged) {
-        await showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (ctx) => AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppBorderRadius.medium),
-            ),
-            title: Row(
-              children: const [
-                Icon(Icons.warning_amber_rounded, color: AppColors.warning, size: 28),
-                SizedBox(width: 8),
-                Text('Child Flagged for Review', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Based on recent activity feedback, your child has experienced multiple struggles in the ${result.domain.toUpperCase()} domain.',
-                  style: AppTextStyles.body,
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppColors.warning.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.warning.withOpacity(0.3)),
-                  ),
-                  child: Text(
-                    'Reason: ${result.flagReason ?? "3+ struggles detected"}',
-                    style: AppTextStyles.small.copyWith(
-                      color: Colors.red.shade800,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'An LLG Specialist has been notified to review your child\'s progress and provide tailored support.',
-                  style: AppTextStyles.small,
-                ),
-              ],
-            ),
-            actions: [
-              ElevatedButton(
-                onPressed: () => Navigator.pop(ctx),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text('Understand & Proceed'),
-              ),
-            ],
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Activity Completed! 🎉 Opening next activity...'),
-            backgroundColor: AppColors.success,
-            duration: Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
       }
 
       // Proceed directly to Next Activity if recommended
@@ -225,10 +202,16 @@ class _FeedbackFormState extends State<FeedbackForm> {
           activityTitle: result.nextActivity!.title,
           level: level,
         );
+        await ActivityStateService().startActivity(
+          childId: childId,
+          activityId: result.nextActivity!.id!,
+          activityTitle: result.nextActivity!.title,
+          skillDomain: result.nextActivity!.skillType,
+        );
 
         if (!mounted) return;
 
-        Navigator.pushReplacement(
+        Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(
             builder: (_) => JourneyActivityDetailPage(
@@ -236,10 +219,11 @@ class _FeedbackFormState extends State<FeedbackForm> {
               childId: childId,
             ),
           ),
+          (route) => route.isFirst,
         );
       } else {
         // Pop back to journey/dashboard if no direct next activity
-        Navigator.of(context).pop();
+        Navigator.of(context).popUntil((route) => route.isFirst);
       }
     } catch (e) {
       if (!mounted) return;
@@ -262,12 +246,10 @@ class _FeedbackFormState extends State<FeedbackForm> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Activity Feedback'),
-        backgroundColor: AppColors.white,
-        foregroundColor: AppColors.textDark,
-        elevation: 0.5,
-        centerTitle: true,
+      appBar: GlobalHeader(
+        showBack: true,
+        title: 'Activity Feedback',
+        onBackTap: () => Navigator.pop(context),
       ),
       body: SafeArea(
         child: Column(

@@ -3,11 +3,18 @@ import '../../models/activity_model.dart';
 import '../../models/child_model.dart';
 import '../../services/ai_generation_service.dart';
 import '../../services/saved_items_service.dart';
+import '../../utils/validators.dart';
+import '../../widgets/global_header.dart';
 
 class AIActivityGeneratorScreen extends StatefulWidget {
   final ChildModel? child;
+  final int initialTabIndex;
   
-  const AIActivityGeneratorScreen({super.key, this.child});
+  const AIActivityGeneratorScreen({
+    super.key,
+    this.child,
+    this.initialTabIndex = 0,
+  });
 
   @override
   State<AIActivityGeneratorScreen> createState() => _AIActivityGeneratorScreenState();
@@ -45,7 +52,11 @@ class _AIActivityGeneratorScreenState extends State<AIActivityGeneratorScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: widget.initialTabIndex.clamp(0, 1),
+    );
     if (widget.child != null) {
       _childName = widget.child!.name;
       _childNameController.text = widget.child!.name;
@@ -60,6 +71,17 @@ class _AIActivityGeneratorScreenState extends State<AIActivityGeneratorScreen>
   }
 
   Future<void> _generateActivity() async {
+    final trimmedName = _childName.trim();
+    if (trimmedName.isNotEmpty) {
+      final nameErr = Validators.name(trimmedName);
+      if (nameErr != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Invalid child name: $nameErr'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+    }
+
     setState(() {
       _isGeneratingActivity = true;
       _generatedActivity = null;
@@ -148,6 +170,17 @@ class _AIActivityGeneratorScreenState extends State<AIActivityGeneratorScreen>
   }
 
   Future<void> _generateStory() async {
+    final trimmedName = _childName.trim();
+    if (trimmedName.isNotEmpty) {
+      final nameErr = Validators.name(trimmedName);
+      if (nameErr != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Invalid child name: $nameErr'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+    }
+
     setState(() {
       _isGeneratingStory = true;
       _generatedStory = null;
@@ -236,25 +269,33 @@ class _AIActivityGeneratorScreenState extends State<AIActivityGeneratorScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('AI Generator'),
-        backgroundColor: Colors.purple.shade700,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          tabs: const [
-            Tab(icon: Icon(Icons.auto_awesome), text: 'Activity'),
-            Tab(icon: Icon(Icons.book), text: 'Story'),
-          ],
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: const GlobalHeader(showBack: true),
+      body: Column(
         children: [
-          _buildActivityTab(),
-          _buildStoryTab(),
+          Container(
+            color: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: TabBar(
+              controller: _tabController,
+              indicatorColor: Colors.purple.shade700,
+              labelColor: Colors.purple.shade700,
+              unselectedLabelColor: Colors.grey.shade600,
+              tabs: const [
+                Tab(icon: Icon(Icons.auto_awesome), text: 'Activity'),
+                Tab(icon: Icon(Icons.book), text: 'Story'),
+              ],
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildActivityTab(),
+                _buildStoryTab(),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -274,6 +315,7 @@ class _AIActivityGeneratorScreenState extends State<AIActivityGeneratorScreen>
               controller: _childNameController,
               decoration: InputDecoration(
                 hintText: 'Enter child name (optional)',
+                errorText: _childName.trim().isNotEmpty ? Validators.name(_childName.trim()) : null,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 filled: true,
                 fillColor: Colors.grey.shade50,
@@ -503,6 +545,7 @@ class _AIActivityGeneratorScreenState extends State<AIActivityGeneratorScreen>
               controller: _childNameController,
               decoration: InputDecoration(
                 hintText: 'Enter child name',
+                errorText: _childName.trim().isNotEmpty ? Validators.name(_childName.trim()) : null,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 filled: true,
                 fillColor: Colors.grey.shade50,

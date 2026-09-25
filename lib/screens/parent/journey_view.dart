@@ -9,10 +9,14 @@ import 'journey_activity_detail_page.dart';
 
 class JourneyViewScreen extends StatefulWidget {
   final ChildModel activeChild;
+  final String? title;
+  final List<Widget>? headerWidgets;
 
   const JourneyViewScreen({
     super.key,
     required this.activeChild,
+    this.title,
+    this.headerWidgets,
   });
 
   @override
@@ -90,7 +94,7 @@ class _JourneyViewScreenState extends State<JourneyViewScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: Text('Activity Journey', style: AppTextStyles.heading2),
+        title: Text(widget.title ?? 'Activity Journey', style: AppTextStyles.heading2),
         backgroundColor: AppColors.white,
         elevation: 0.5,
         centerTitle: true,
@@ -111,6 +115,9 @@ class _JourneyViewScreenState extends State<JourneyViewScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Header Widgets (e.g. Guidance Banner & Score Preview)
+                      if (widget.headerWidgets != null) ...widget.headerWidgets!,
+
                       // Header Overview Banner
                       _buildJourneyHeaderBanner(journey),
                       const SizedBox(height: AppSpacing.lg),
@@ -347,7 +354,9 @@ class _JourneyViewScreenState extends State<JourneyViewScreen> {
 
           // Activities List for Level
           FutureBuilder<List<ActivityModel>>(
-            future: _journeyService.getActivitiesForLevel(lvlProg.activityIds),
+            future: lvlProg.activityIds.isNotEmpty
+                ? _journeyService.getActivitiesForLevel(lvlProg.activityIds)
+                : _journeyService.getActivitiesForLevelConfig(lvlConfig, age: widget.activeChild.age),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Padding(

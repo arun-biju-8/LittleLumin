@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/llg_service.dart';
 import '../../utils/constants.dart';
+import '../../utils/validators.dart';
 import '../../theme/app_theme.dart';
 
 class AdminLLGVerificationPage extends StatefulWidget {
@@ -162,10 +163,11 @@ class _AdminLLGVerificationPageState extends State<AdminLLGVerificationPage> {
             ),
             onPressed: () async {
               final reason = reasonController.text.trim();
-              if (reason.isEmpty) {
+              final err = Validators.safeText(reason, 'Rejection reason', min: 5, max: 500);
+              if (err != null) {
                 ScaffoldMessenger.of(dialogCtx).showSnackBar(
-                  const SnackBar(
-                    content: Text('Please enter a rejection reason.'),
+                  SnackBar(
+                    content: Text(err),
                     backgroundColor: Colors.redAccent,
                   ),
                 );

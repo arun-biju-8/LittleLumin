@@ -6,6 +6,7 @@ import '../llg/llg_dashboard.dart';
 import '../admin/admin_dashboard.dart';
 import 'signup_page.dart';
 import '../../models/user_model.dart';
+import '../../utils/validators.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -195,60 +196,11 @@ class _LoginPageState extends State<LoginPage> {
 
   // ============ VALIDATION HELPERS ============
 
-  /// Email validation with detailed messages
-  String? _validateEmail(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return 'Email is required';
-    }
-    
-    final email = value.trim();
-    
-    // Basic format check
-    if (!email.contains('@')) {
-      return 'Email must contain @ symbol';
-    }
-    
-    if (!email.contains('.')) {
-      return 'Email must contain a domain (e.g., .com)';
-    }
-    
-    // Regex validation
-    final emailRegex = RegExp(
-      r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
-    );
-    
-    if (!emailRegex.hasMatch(email)) {
-      return 'Please enter a valid email address';
-    }
-    
-    // Check for common typos
-    if (email.contains('..')) {
-      return 'Email cannot contain consecutive dots';
-    }
-    
-    if (email.startsWith('.') || email.endsWith('.')) {
-      return 'Email cannot start or end with a dot';
-    }
-    
-    if (email.contains('@.')) {
-      return 'Email domain is invalid';
-    }
-    
-    return null;
-  }
+  /// Email validation with Universal Validators
+  String? _validateEmail(String? value) => Validators.email(value);
 
-  /// Login password validation (only checks if provided)
-  String? _validateLoginPassword(String? value) {
-    if (value == null || value.isEmpty) {
-      return 'Password is required';
-    }
-    
-    if (value.length < 8) {
-      return 'Password must be at least 8 characters';
-    }
-    
-    return null;
-  }
+  /// Login password validation with Universal Validators
+  String? _validateLoginPassword(String? value) => Validators.loginPassword(value);
 
   @override
   void dispose() {

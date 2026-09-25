@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/saved_items_service.dart';
+import '../../widgets/global_header.dart';
+import 'parent_theme.dart';
 
 class SavedItemsPage extends StatefulWidget {
   const SavedItemsPage({super.key});
@@ -29,24 +31,33 @@ class _SavedItemsPageState extends State<SavedItemsPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Library'),
-        backgroundColor: Colors.purple.shade700,
-        foregroundColor: Colors.white,
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          tabs: const [
-            Tab(icon: Icon(Icons.auto_awesome), text: 'Activities'),
-            Tab(icon: Icon(Icons.book), text: 'Stories'),
-          ],
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
+      backgroundColor: ParentColors.surfaceAlt,
+      appBar: const GlobalHeader(showBack: true),
+      body: Column(
         children: [
-          _buildActivitiesTab(),
-          _buildStoriesTab(),
+          Container(
+            color: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: TabBar(
+              controller: _tabController,
+              indicatorColor: ParentColors.primary,
+              labelColor: ParentColors.primary,
+              unselectedLabelColor: ParentColors.textSecondary,
+              tabs: const [
+                Tab(icon: Icon(Icons.auto_awesome), text: 'Activities'),
+                Tab(icon: Icon(Icons.book), text: 'Stories'),
+              ],
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildActivitiesTab(),
+                _buildStoriesTab(),
+              ],
+            ),
+          ),
         ],
       ),
     );

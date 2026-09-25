@@ -218,6 +218,30 @@ class JourneyProgress {
           }
         });
       }
+      if (rawMap['levels'] is Map) {
+        (rawMap['levels'] as Map).forEach((key, value) {
+          final lvl = int.tryParse(key.toString()) ?? 1;
+          if (value is Map) {
+            final domains = value['domains'] as Map?;
+            int completedCount = 0;
+            if (domains != null) {
+              domains.forEach((_, dVal) {
+                if (dVal is Map && dVal['completed'] == true) {
+                  completedCount++;
+                }
+              });
+            }
+            final isUnl = (rawMap['unlockedLevels'] is List)
+                ? (rawMap['unlockedLevels'] as List).map((e) => int.tryParse(e.toString()) ?? 1).contains(lvl)
+                : (lvl == 1);
+            result[lvl] = LevelProgress(
+              completed: List.generate(completedCount, (i) => 'domain_$i'),
+              total: 6,
+              isUnlocked: isUnl,
+            );
+          }
+        });
+      }
       for (int i = 1; i <= 4; i++) {
         if (!result.containsKey(i) && rawMap.containsKey('level_$i') && rawMap['level_$i'] is Map) {
           final lData = rawMap['level_$i'];

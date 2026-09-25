@@ -1,11 +1,12 @@
-// lib/screens/llg/add_activity_page.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/activity_model.dart';
 import '../../services/activity_service.dart';
 import '../../services/auth_service.dart';
 import '../../utils/constants.dart';
+import '../../utils/validators.dart';
 import '../../widgets/activity_card.dart';
 
 class AddActivityPage extends StatefulWidget {
@@ -133,7 +134,10 @@ class _AddActivityPageState extends State<AddActivityPage> {
   Future<void> _submitForm() async {
     if (!_formKey.currentState!.validate()) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please correct errors in the form.')),
+        const SnackBar(
+          content: Text('Please correct errors in the form.'),
+          backgroundColor: Colors.redAccent,
+        ),
       );
       return;
     }
@@ -457,22 +461,19 @@ class _AddActivityPageState extends State<AddActivityPage> {
                           children: [
                             TextFormField(
                               controller: _titleController,
+                              autovalidateMode: AutovalidateMode.onUserInteraction,
                               decoration: const InputDecoration(
                                 labelText: 'Activity Title *',
                                 hintText: 'e.g., Animal Sounds Hunt',
                                 border: OutlineInputBorder(),
                                 prefixIcon: Icon(Icons.title, color: AppColors.primary),
                               ),
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Title is required';
-                                }
-                                return null;
-                              },
+                              validator: (v) => Validators.noSpecialChars(v, 'Activity title', max: 100),
                             ),
                             const SizedBox(height: AppSpacing.md),
                             TextFormField(
                               controller: _shortDescriptionController,
+                              autovalidateMode: AutovalidateMode.onUserInteraction,
                               maxLength: 80,
                               decoration: const InputDecoration(
                                 labelText: 'Short Description / Tagline',
@@ -481,6 +482,9 @@ class _AddActivityPageState extends State<AddActivityPage> {
                                 border: OutlineInputBorder(),
                                 prefixIcon: Icon(Icons.short_text, color: AppColors.primary),
                               ),
+                              validator: (v) => (v != null && v.trim().isNotEmpty)
+                                  ? Validators.safeText(v, 'Short description', min: 0, max: 120)
+                                  : null,
                             ),
                             const SizedBox(height: AppSpacing.md),
                             Row(
@@ -488,22 +492,30 @@ class _AddActivityPageState extends State<AddActivityPage> {
                                 Expanded(
                                   child: TextFormField(
                                     controller: _categoryController,
+                                    autovalidateMode: AutovalidateMode.onUserInteraction,
                                     decoration: const InputDecoration(
                                       labelText: 'Category',
                                       hintText: 'e.g., Early Math',
                                       border: OutlineInputBorder(),
                                     ),
+                                    validator: (v) => (v != null && v.trim().isNotEmpty)
+                                        ? Validators.safeText(v, 'Category', min: 0, max: 50)
+                                        : null,
                                   ),
                                 ),
                                 const SizedBox(width: AppSpacing.md),
                                 Expanded(
                                   child: TextFormField(
                                     controller: _tagsController,
+                                    autovalidateMode: AutovalidateMode.onUserInteraction,
                                     decoration: const InputDecoration(
                                       labelText: 'Tags (comma separated)',
                                       hintText: 'shapes, math',
                                       border: OutlineInputBorder(),
                                     ),
+                                    validator: (v) => (v != null && v.trim().isNotEmpty)
+                                        ? Validators.safeText(v, 'Tags', min: 0, max: 100)
+                                        : null,
                                   ),
                                 ),
                               ],
@@ -619,7 +631,9 @@ class _AddActivityPageState extends State<AddActivityPage> {
 
                             TextFormField(
                               controller: _durationController,
+                              autovalidateMode: AutovalidateMode.onUserInteraction,
                               keyboardType: TextInputType.number,
+                              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                               decoration: const InputDecoration(
                                 labelText: 'Activity Duration (in minutes) *',
                                 hintText: 'e.g. 10 or 15',
@@ -628,11 +642,7 @@ class _AddActivityPageState extends State<AddActivityPage> {
                                 prefixIcon: Icon(Icons.timer_outlined, color: AppColors.primary),
                                 suffixText: 'mins',
                               ),
-                              validator: (val) {
-                                if (val == null || val.trim().isEmpty) return 'Duration is required';
-                                if (int.tryParse(val.trim()) == null) return 'Must be a valid number';
-                                return null;
-                              },
+                              validator: (val) => Validators.durationMinutes(val),
                             ),
                           ],
                         ),
@@ -646,6 +656,7 @@ class _AddActivityPageState extends State<AddActivityPage> {
                           children: [
                             TextFormField(
                               controller: _instructionsController,
+                              autovalidateMode: AutovalidateMode.onUserInteraction,
                               maxLines: 4,
                               decoration: const InputDecoration(
                                 labelText: 'Step-by-Step Parent Instructions',
@@ -653,10 +664,14 @@ class _AddActivityPageState extends State<AddActivityPage> {
                                 border: OutlineInputBorder(),
                                 alignLabelWithHint: true,
                               ),
+                              validator: (v) => (v != null && v.trim().isNotEmpty)
+                                  ? Validators.safeText(v, 'Instructions', min: 0, max: 3000)
+                                  : null,
                             ),
                             const SizedBox(height: AppSpacing.md),
                             TextFormField(
                               controller: _learningGoalsController,
+                              autovalidateMode: AutovalidateMode.onUserInteraction,
                               maxLines: 3,
                               decoration: const InputDecoration(
                                 labelText: 'Learning Goals',
@@ -664,10 +679,14 @@ class _AddActivityPageState extends State<AddActivityPage> {
                                 border: OutlineInputBorder(),
                                 alignLabelWithHint: true,
                               ),
+                              validator: (v) => (v != null && v.trim().isNotEmpty)
+                                  ? Validators.safeText(v, 'Learning goals', min: 0, max: 1000)
+                                  : null,
                             ),
                             const SizedBox(height: AppSpacing.md),
                             TextFormField(
                               controller: _materialsController,
+                              autovalidateMode: AutovalidateMode.onUserInteraction,
                               maxLines: 2,
                               decoration: const InputDecoration(
                                 labelText: 'Materials Needed',
@@ -675,6 +694,9 @@ class _AddActivityPageState extends State<AddActivityPage> {
                                 border: OutlineInputBorder(),
                                 alignLabelWithHint: true,
                               ),
+                              validator: (v) => (v != null && v.trim().isNotEmpty)
+                                  ? Validators.safeText(v, 'Materials', min: 0, max: 1000)
+                                  : null,
                             ),
                           ],
                         ),
@@ -688,42 +710,58 @@ class _AddActivityPageState extends State<AddActivityPage> {
                           children: [
                             TextFormField(
                               controller: _videoUrlController,
+                              autovalidateMode: AutovalidateMode.onUserInteraction,
                               decoration: const InputDecoration(
                                 labelText: 'Video Guide URL (mp4)',
                                 hintText: 'https://example.com/demo.mp4',
                                 border: OutlineInputBorder(),
                                 prefixIcon: Icon(Icons.link, color: Colors.deepOrange),
                               ),
+                              validator: (v) => (v != null && v.trim().isNotEmpty)
+                                  ? Validators.url(v, 'Video URL')
+                                  : null,
                             ),
                             const SizedBox(height: AppSpacing.md),
                             TextFormField(
                               controller: _videoThumbnailController,
+                              autovalidateMode: AutovalidateMode.onUserInteraction,
                               decoration: const InputDecoration(
                                 labelText: 'Video Thumbnail Image URL',
                                 hintText: 'https://images.unsplash.com/...',
                                 border: OutlineInputBorder(),
                                 prefixIcon: Icon(Icons.photo, color: Colors.purple),
                               ),
+                              validator: (v) => (v != null && v.trim().isNotEmpty)
+                                  ? Validators.url(v, 'Video thumbnail URL')
+                                  : null,
                             ),
                             const SizedBox(height: AppSpacing.md),
                             TextFormField(
                               controller: _videoDurationController,
+                              autovalidateMode: AutovalidateMode.onUserInteraction,
                               decoration: const InputDecoration(
                                 labelText: 'Video Length (e.g. 1:45)',
                                 hintText: '1:45',
                                 border: OutlineInputBorder(),
                                 prefixIcon: Icon(Icons.schedule, color: Colors.purple),
                               ),
+                              validator: (v) => (v != null && v.trim().isNotEmpty)
+                                  ? Validators.safeText(v, 'Video length', min: 0, max: 20)
+                                  : null,
                             ),
                             const SizedBox(height: AppSpacing.md),
                             TextFormField(
                               controller: _imageUrlController,
+                              autovalidateMode: AutovalidateMode.onUserInteraction,
                               decoration: const InputDecoration(
                                 labelText: 'Activity Banner Image URL',
                                 hintText: 'https://images.unsplash.com/...',
                                 border: OutlineInputBorder(),
                                 prefixIcon: Icon(Icons.image, color: AppColors.primary),
                               ),
+                              validator: (v) => (v != null && v.trim().isNotEmpty)
+                                  ? Validators.url(v, 'Banner image URL')
+                                  : null,
                             ),
                           ],
                         ),

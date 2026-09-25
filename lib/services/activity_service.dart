@@ -82,7 +82,12 @@ class ActivityService {
         // Under 3: 1-2 gentle, sensory activities
         final under3 = all.where((a) => a.ageGroup.any((g) => g < 3)).toList();
         if (under3.isEmpty) {
-          final fallback = all.where((a) => a.difficulty == 'Easy' && (a.skillType == 'Motor' || a.skillType == 'Social' || a.skillType == 'Listening' || a.skillType == 'Emotional')).toList();
+          final fallback = all.where((a) =>
+              a.difficulty.toLowerCase() == 'easy' &&
+              (a.skillType.toLowerCase() == 'motor' ||
+                  a.skillType.toLowerCase() == 'social' ||
+                  a.skillType.toLowerCase() == 'listening' ||
+                  a.skillType.toLowerCase() == 'emotional')).toList();
           return fallback.take(2).toList();
         }
         return under3.take(2).toList();
@@ -124,11 +129,11 @@ class ActivityService {
       }
 
       if (skillType != null && skillType != 'All' && skillType.isNotEmpty) {
-        activities = activities.where((a) => a.skillType == skillType).toList();
+        activities = activities.where((a) => a.skillType.toLowerCase() == skillType.toLowerCase()).toList();
       }
 
       if (difficulty != null && difficulty != 'All' && difficulty.isNotEmpty) {
-        activities = activities.where((a) => a.difficulty == difficulty).toList();
+        activities = activities.where((a) => a.difficulty.toLowerCase() == difficulty.toLowerCase()).toList();
       }
 
       if (ageGroup != null && ageGroup > 0) {

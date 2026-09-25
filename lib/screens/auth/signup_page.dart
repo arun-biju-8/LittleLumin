@@ -1,5 +1,5 @@
-// lib/screens/auth/signup_page.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -9,6 +9,7 @@ import '../../utils/constants.dart';
 import '../parent/parent_dashboard.dart';
 import 'login_page.dart';
 import '../../widgets/auth_loading_overlay.dart';
+import '../../utils/validators.dart';
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
@@ -208,134 +209,21 @@ class _SignUpPageState extends State<SignUpPage> {
 
   // ============ VALIDATION HELPERS ============
 
-  /// Name validation
-  String? _validateName(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return 'Full name is required';
-    }
-    
-    final name = value.trim();
-    
-    if (name.length < 3) {
-      return 'Name must be at least 3 characters';
-    }
-    
-    if (name.length > 50) {
-      return 'Name is too long (max 50 characters)';
-    }
-    
-    // Only letters and spaces
-    final nameRegex = RegExp(r'^[a-zA-Z\s]+$');
-    if (!nameRegex.hasMatch(name)) {
-      return 'Name can only contain letters and spaces';
-    }
-    
-    return null;
-  }
+  /// Name validation with Universal Validators
+  String? _validateName(String? value) => Validators.name(value);
 
-  /// Email validation
-  String? _validateEmail(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return 'Email is required';
-    }
-    
-    final email = value.trim();
-    
-    if (!email.contains('@')) {
-      return 'Email must contain @ symbol';
-    }
-    
-    if (!email.contains('.')) {
-      return 'Email must contain a domain (e.g., .com)';
-    }
-    
-    final emailRegex = RegExp(
-      r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
-    );
-    
-    if (!emailRegex.hasMatch(email)) {
-      return 'Please enter a valid email address';
-    }
-    
-    if (email.contains('..')) {
-      return 'Email cannot contain consecutive dots';
-    }
-    
-    return null;
-  }
+  /// Email validation with Universal Validators
+  String? _validateEmail(String? value) => Validators.email(value);
 
-  /// Phone validation (10-digit Indian mobile)
-  String? _validatePhone(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return 'Phone number is required';
-    }
-    
-    final phone = value.trim().replaceAll(RegExp(r'[\s-]'), '');
-    
-    // Check for valid length
-    if (phone.length != 10) {
-      return 'Phone number must be 10 digits';
-    }
-    
-    // Check if all digits
-    final phoneRegex = RegExp(r'^[0-9]+$');
-    if (!phoneRegex.hasMatch(phone)) {
-      return 'Phone number can only contain digits';
-    }
-    
-    // Indian mobile numbers start with 6, 7, 8, or 9
-    if (!RegExp(r'^[6-9]').hasMatch(phone)) {
-      return 'Phone number must start with 6, 7, 8, or 9';
-    }
-    
-    return null;
-  }
+  /// Phone validation with Universal Validators
+  String? _validatePhone(String? value) => Validators.phone(value);
 
-  /// Strong password validation
-  String? _validateStrongPassword(String? value) {
-    if (value == null || value.isEmpty) {
-      return 'Password is required';
-    }
-    
-    if (value.length < 8) {
-      return 'Password must be at least 8 characters';
-    }
-    
-    if (value.length > 64) {
-      return 'Password is too long (max 64 characters)';
-    }
-    
-    if (!RegExp(r'[A-Z]').hasMatch(value)) {
-      return 'Password must contain at least 1 uppercase letter';
-    }
-    
-    if (!RegExp(r'[a-z]').hasMatch(value)) {
-      return 'Password must contain at least 1 lowercase letter';
-    }
-    
-    if (!RegExp(r'[0-9]').hasMatch(value)) {
-      return 'Password must contain at least 1 number';
-    }
-    
-    if (value.contains(' ')) {
-      return 'Password cannot contain spaces';
-    }
-    
-    return null;
-  }
+  /// Strong password validation with Universal Validators
+  String? _validateStrongPassword(String? value) => Validators.strongPassword(value);
 
-  /// Confirm password validation
-  String? _validateConfirmPassword(String? value) {
-    if (value == null || value.isEmpty) {
-      return 'Please confirm your password';
-    }
-    
-    if (value != _passwordController.text) {
-      return 'Passwords do not match';
-    }
-    
-    return null;
-  }
+  /// Confirm password validation with Universal Validators
+  String? _validateConfirmPassword(String? value) =>
+      Validators.confirmPassword(value, _passwordController.text);
 
   Widget _buildPasswordStrengthIndicator() {
     final password = _passwordController.text;
@@ -475,6 +363,7 @@ class _SignUpPageState extends State<SignUpPage> {
                           keyboardType: TextInputType.phone,
                           textInputAction: TextInputAction.next,
                           autovalidateMode: AutovalidateMode.onUserInteraction,
+                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                           decoration: InputDecoration(
                             labelText: 'Phone Number',
                             hintText: '10-digit mobile number',
