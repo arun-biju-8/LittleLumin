@@ -79,3 +79,7 @@ android/app/google-services.json
 backend/firebase-admin-key.json
 
 build/web/assets/.env
+
+.env
+**/.env
+build/
