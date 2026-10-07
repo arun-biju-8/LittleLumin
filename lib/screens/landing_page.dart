@@ -4,8 +4,6 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../theme/app_theme.dart';
 import '../widgets/background_shapes.dart';
 import '../widgets/logo_widget.dart';
-import '../screens/auth/login_page.dart';
-import '../screens/auth/signup_page.dart';
 import 'llg/llg_landing_page.dart';
 import '../screens/auth/splash_screen.dart';
 
@@ -74,15 +72,9 @@ class _LandingPageWidgetState extends State<LandingPageWidget> {
   // When user clicks "Get Started" or "Create Account"
   void _openGetStartedDialog({bool isCreateAccount = false}) {
     if (isCreateAccount) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const SignUpPage()),
-      );
+      Navigator.pushNamed(context, '/signup');
     } else {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const LoginPage()),
-      );
+      Navigator.pushNamed(context, '/login');
     }
   }
 

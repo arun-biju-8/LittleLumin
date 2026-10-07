@@ -6,8 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
 import 'screens/auth/splash_screen.dart';
-import 'screens/auth/login_page.dart';
-import 'screens/auth/signup_page.dart';
+import 'screens/auth/auth_page.dart';
 import 'screens/landing_page.dart';
 import 'screens/parent/parent_dashboard.dart';
 import 'screens/parent/ai_activity_generator.dart';
@@ -73,8 +72,8 @@ class MyApp extends StatelessWidget {
         routes: {
           '/landing': (context) => const LandingPageWidget(),
           '/auth-wrapper': (context) => const AuthWrapper(),
-          '/login': (context) => const LoginPage(),
-          '/signup': (context) => const SignUpPage(),
+          '/login': (context) => const AuthPage(initialMode: AuthMode.login),
+          '/signup': (context) => const AuthPage(initialMode: AuthMode.signup),
           '/parent-dashboard': (context) => const MobileOnlyGate(
                 userType: 'parent',
                 child: ParentDashboard(),
