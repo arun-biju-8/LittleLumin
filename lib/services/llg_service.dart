@@ -8,10 +8,10 @@ class LLGService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   /// Submit a new LLG Guide application and create user credentials
-  Future<UserCredential> submitLLGApplication({
+  Future<UserCredential?> submitLLGApplication({
     required String name,
     required String email,
-    required String password,
+    String? password,
     required String qualification,
     required String license,
     required String experience,
@@ -27,23 +27,41 @@ class LLGService {
     String? experienceCertificateLink,
     String? identityProofLink,
     String? professionalAssociationLink,
+    String? existingUid,
+    String? photoUrl,
   }) async {
     if (name.trim().isEmpty) throw ArgumentError('Name cannot be empty');
     if (email.trim().isEmpty) throw ArgumentError('Email cannot be empty');
-    if (password.isEmpty) throw ArgumentError('Password cannot be empty');
+    if (existingUid == null && (password == null || password.isEmpty)) {
+      throw ArgumentError('Password cannot be empty');
+    }
     if (qualification.trim().isEmpty) throw ArgumentError('Qualification cannot be empty');
     if (license.trim().isEmpty) throw ArgumentError('License cannot be empty');
 
-    // 1. Create Firebase Auth account
-    UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
-      email: email.trim(),
-      password: password,
-    );
+    final String uid;
+    UserCredential? userCredential;
 
-    final uid = userCredential.user!.uid;
+    if (existingUid != null) {
+      uid = existingUid;
+      if (_auth.currentUser != null) {
+        await _auth.currentUser!.updateDisplayName(name.trim());
+      }
+    } else {
+      // 1. Create Firebase Auth account
+      userCredential = await _auth.createUserWithEmailAndPassword(
+        email: email.trim(),
+        password: password!,
+      );
 
-    // 2. Update display name in Firebase Auth
-    await userCredential.user!.updateDisplayName(name.trim());
+      uid = userCredential.user!.uid;
+
+      // 2. Update display name in Firebase Auth
+      await userCredential.user!.updateDisplayName(name.trim());
+    }
+
+    final SetOptions writeOptions = existingUid != null
+        ? SetOptions(merge: true)
+        : SetOptions();
 
     // 3. Create document in 'users' collection
     await _firestore.collection('users').doc(uid).set({
@@ -55,7 +73,7 @@ class LLGService {
       'status': 'pending',
       'createdAt': FieldValue.serverTimestamp(),
       'isVerified': false,
-      'photoUrl': '',
+      'photoUrl': photoUrl ?? '',
       'qualification': qualification.trim(),
       'license': license.trim(),
       'experience': experience.trim(),
@@ -70,7 +88,7 @@ class LLGService {
       'experienceCertificateLink': experienceCertificateLink?.trim() ?? '',
       'identityProofLink': identityProofLink?.trim() ?? '',
       'professionalAssociationLink': professionalAssociationLink?.trim() ?? '',
-    });
+    }, writeOptions);
 
     // 4. Create document in 'llgProfiles' collection
     await _firestore.collection('llgProfiles').doc(uid).set({
@@ -97,7 +115,7 @@ class LLGService {
       'submittedAt': FieldValue.serverTimestamp(),
       'createdAt': FieldValue.serverTimestamp(),
       'rejectionReason': '',
-    });
+    }, writeOptions);
 
     return userCredential;
   }

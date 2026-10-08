@@ -197,6 +197,65 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  // ============ GOOGLE SIGN-IN FOR LLG ============
+  Future<User?> signInWithGoogleForLLG() async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      debugPrint('🔵 Starting Google Sign-In for LLG...');
+
+      // Configure GoogleSignIn
+      final GoogleSignIn googleSignIn = GoogleSignIn(
+        scopes: ['email', 'profile'],
+      );
+
+      // Sign out first to force account picker
+      await googleSignIn.signOut();
+
+      // Trigger the sign-in flow
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+
+      if (googleUser == null) {
+        debugPrint('⚠️ User cancelled Google Sign-In');
+        return null;
+      }
+
+      debugPrint('✅ Google account selected for LLG: ${googleUser.email}');
+
+      // Get authentication details
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+
+      // Create Firebase credential
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      // Sign in to Firebase
+      final userCredential = await _auth.signInWithCredential(credential);
+      final user = userCredential.user;
+
+      if (user == null) throw Exception('Google sign-in failed');
+
+      debugPrint('✅ Firebase Google Sign-In for LLG: ${user.uid}');
+      return user;
+    } on FirebaseAuthException catch (e) {
+      debugPrint('❌ Google Sign-In for LLG error: ${e.code} - ${e.message}');
+
+      if (e.code == 'account-exists-with-different-credential') {
+        throw Exception('An account already exists with a different sign-in method.');
+      }
+      throw Exception(_getAuthErrorMessage(e.code));
+    } catch (e) {
+      debugPrint('❌ Google Sign-In for LLG error: $e');
+      throw Exception('Google Sign-In failed. Please try again.');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   // ============ SIGN OUT ============
   Future<void> signOut() async {
     try {

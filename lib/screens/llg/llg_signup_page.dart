@@ -1,6 +1,7 @@
 // lib/screens/llg/llg_signup_page.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../services/auth_service.dart';
 import '../../services/llg_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/background_shapes.dart';
@@ -17,6 +18,11 @@ class LLGSignUpPage extends StatefulWidget {
 
 class _LLGSignUpPageState extends State<LLGSignUpPage> {
   final _formKey = GlobalKey<FormState>();
+
+  // Google Auth State
+  bool _googleAuthComplete = false;
+  String? _googleUid;
+  String? _googlePhotoUrl;
 
   // Controllers - Account & Personal
   final _nameController = TextEditingController();
@@ -70,6 +76,53 @@ class _LLGSignUpPageState extends State<LLGSignUpPage> {
     super.dispose();
   }
 
+  Future<void> _handleGoogleApply() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final authService = AuthService();
+      final user = await authService.signInWithGoogleForLLG();
+
+      if (user == null) {
+        // User cancelled
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
+
+      if (mounted) {
+        setState(() {
+          _googleAuthComplete = true;
+          _googleUid = user.uid;
+          _googlePhotoUrl = user.photoURL;
+          if (user.displayName != null && user.displayName!.trim().isNotEmpty) {
+            _nameController.text = user.displayName!.trim();
+          }
+          if (user.email != null && user.email!.trim().isNotEmpty) {
+            _emailController.text = user.email!.trim();
+          }
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Google connected. Fill in your credentials below.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Google connection failed: ${e.toString().replaceAll("Exception: ", "")}'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   Future<void> _submitApplication() async {
     if (!_formKey.currentState!.validate()) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -88,7 +141,7 @@ class _LLGSignUpPageState extends State<LLGSignUpPage> {
       await llgService.submitLLGApplication(
         name: _nameController.text.trim(),
         email: _emailController.text.trim(),
-        password: _passwordController.text,
+        password: _googleAuthComplete ? null : _passwordController.text,
         phone: _phoneController.text.trim(),
         qualification: _qualificationController.text.trim(),
         license: _licenseController.text.trim(),
@@ -104,6 +157,8 @@ class _LLGSignUpPageState extends State<LLGSignUpPage> {
         experienceCertificateLink: _experienceCertificateController.text.trim(),
         identityProofLink: _identityProofController.text.trim(),
         professionalAssociationLink: _associationController.text.trim(),
+        existingUid: _googleAuthComplete ? _googleUid : null,
+        photoUrl: _googleAuthComplete ? _googlePhotoUrl : null,
       );
 
       if (mounted) {
@@ -237,11 +292,48 @@ class _LLGSignUpPageState extends State<LLGSignUpPage> {
                             ),
                             const SizedBox(height: 24),
 
+                            // Google Sign-In Option
+                            SizedBox(
+                              width: double.infinity,
+                              height: 50,
+                              child: OutlinedButton.icon(
+                                onPressed: (_isLoading || _googleAuthComplete) ? null : _handleGoogleApply,
+                                icon: _googleAuthComplete
+                                    ? const Icon(Icons.check_circle, color: Colors.green, size: 22)
+                                    : Image.asset(
+                                        'assets/images/google_logo.png',
+                                        height: 22,
+                                        errorBuilder: (context, error, stackTrace) => const Icon(
+                                          Icons.g_mobiledata,
+                                          size: 28,
+                                          color: Color(0xFFDB4437),
+                                        ),
+                                      ),
+                                label: Text(
+                                  _googleAuthComplete ? 'Google Connected' : 'Continue with Google',
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppTheme.amberGold,
+                                  ),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  backgroundColor: AppTheme.darkSlate,
+                                  side: const BorderSide(color: AppTheme.amberGold, width: 1.5),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+
                             // SECTION 1: ACCOUNT & PERSONAL DETAILS
                             _buildSectionHeader('1. Personal & Account Details', Icons.person_rounded),
                             const SizedBox(height: 12),
                             TextFormField(
                               controller: _nameController,
+                              readOnly: _googleAuthComplete && _nameController.text.trim().isNotEmpty,
                               autovalidateMode: AutovalidateMode.onUserInteraction,
                               style: const TextStyle(color: Colors.white),
                               decoration: _inputDecoration('Full Name *', Icons.badge_outlined),
@@ -253,6 +345,7 @@ class _LLGSignUpPageState extends State<LLGSignUpPage> {
                                 Expanded(
                                   child: TextFormField(
                                     controller: _emailController,
+                                    readOnly: _googleAuthComplete && _emailController.text.trim().isNotEmpty,
                                     autovalidateMode: AutovalidateMode.onUserInteraction,
                                     keyboardType: TextInputType.emailAddress,
                                     style: const TextStyle(color: Colors.white),
@@ -274,42 +367,44 @@ class _LLGSignUpPageState extends State<LLGSignUpPage> {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 14),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: TextFormField(
-                                    controller: _passwordController,
-                                    autovalidateMode: AutovalidateMode.onUserInteraction,
-                                    obscureText: _obscurePassword,
-                                    style: const TextStyle(color: Colors.white),
-                                    decoration: _inputDecoration('Password *', Icons.lock_outline).copyWith(
-                                      suffixIcon: IconButton(
-                                        icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, color: Colors.white60),
-                                        onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                            if (!_googleAuthComplete) ...[
+                              const SizedBox(height: 14),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _passwordController,
+                                      autovalidateMode: AutovalidateMode.onUserInteraction,
+                                      obscureText: _obscurePassword,
+                                      style: const TextStyle(color: Colors.white),
+                                      decoration: _inputDecoration('Password *', Icons.lock_outline).copyWith(
+                                        suffixIcon: IconButton(
+                                          icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, color: Colors.white60),
+                                          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                                        ),
                                       ),
+                                      validator: Validators.strongPassword,
                                     ),
-                                    validator: Validators.strongPassword,
                                   ),
-                                ),
-                                const SizedBox(width: 14),
-                                Expanded(
-                                  child: TextFormField(
-                                    controller: _confirmPasswordController,
-                                    autovalidateMode: AutovalidateMode.onUserInteraction,
-                                    obscureText: _obscureConfirmPassword,
-                                    style: const TextStyle(color: Colors.white),
-                                    decoration: _inputDecoration('Confirm Password *', Icons.lock_reset).copyWith(
-                                      suffixIcon: IconButton(
-                                        icon: Icon(_obscureConfirmPassword ? Icons.visibility_off : Icons.visibility, color: Colors.white60),
-                                        onPressed: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _confirmPasswordController,
+                                      autovalidateMode: AutovalidateMode.onUserInteraction,
+                                      obscureText: _obscureConfirmPassword,
+                                      style: const TextStyle(color: Colors.white),
+                                      decoration: _inputDecoration('Confirm Password *', Icons.lock_reset).copyWith(
+                                        suffixIcon: IconButton(
+                                          icon: Icon(_obscureConfirmPassword ? Icons.visibility_off : Icons.visibility, color: Colors.white60),
+                                          onPressed: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
+                                        ),
                                       ),
+                                      validator: (v) => Validators.confirmPassword(v, _passwordController.text),
                                     ),
-                                    validator: (v) => Validators.confirmPassword(v, _passwordController.text),
                                   ),
-                                ),
-                              ],
-                            ),
+                                ],
+                              ),
+                            ],
                             const SizedBox(height: 28),
 
                             // SECTION 2: PROFESSIONAL QUALIFICATIONS
