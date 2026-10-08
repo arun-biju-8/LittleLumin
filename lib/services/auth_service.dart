@@ -121,37 +121,45 @@ class AuthService extends ChangeNotifier {
     try {
       debugPrint('🔵 Starting Google Sign-In...');
 
-      // Configure GoogleSignIn
-      final GoogleSignIn googleSignIn = GoogleSignIn(
-        scopes: ['email', 'profile'],
-      );
+      final User? user;
 
-      // Sign out first to force account picker
-      await googleSignIn.signOut();
+      if (kIsWeb) {
+        debugPrint('🔵 Starting Web Google Sign-In with popup...');
+        final userCredential = await _auth.signInWithPopup(GoogleAuthProvider());
+        user = userCredential.user;
+      } else {
+        // Configure GoogleSignIn
+        final GoogleSignIn googleSignIn = GoogleSignIn(
+          scopes: ['email', 'profile'],
+        );
 
-      // Trigger the sign-in flow
-      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
-      
-      if (googleUser == null) {
-        debugPrint('⚠️ User cancelled Google Sign-In');
-        return null;
+        // Sign out first to force account picker
+        await googleSignIn.signOut();
+
+        // Trigger the sign-in flow
+        final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+
+        if (googleUser == null) {
+          debugPrint('⚠️ User cancelled Google Sign-In');
+          return null;
+        }
+
+        debugPrint('✅ Google account selected: ${googleUser.email}');
+
+        // Get authentication details
+        final GoogleSignInAuthentication googleAuth =
+            await googleUser.authentication;
+
+        // Create Firebase credential
+        final credential = GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken,
+          idToken: googleAuth.idToken,
+        );
+
+        // Sign in to Firebase
+        final userCredential = await _auth.signInWithCredential(credential);
+        user = userCredential.user;
       }
-
-      debugPrint('✅ Google account selected: ${googleUser.email}');
-
-      // Get authentication details
-      final GoogleSignInAuthentication googleAuth = 
-          await googleUser.authentication;
-
-      // Create Firebase credential
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      // Sign in to Firebase
-      final userCredential = await _auth.signInWithCredential(credential);
-      final user = userCredential.user;
 
       if (user == null) throw Exception('Google sign-in failed');
 
@@ -168,6 +176,7 @@ class AuthService extends ChangeNotifier {
           name: user.displayName ?? 'User',
           email: user.email ?? '',
           phone: '',
+          photoUrl: user.photoURL ?? '',
           userType: 'parent',
           status: 'active',
           createdAt: DateTime.now(),
@@ -183,7 +192,11 @@ class AuthService extends ChangeNotifier {
       return userModel;
     } on FirebaseAuthException catch (e) {
       debugPrint('❌ Google Sign-In error: ${e.code} - ${e.message}');
-      
+
+      if (e.code == 'popup-closed-by-user' || e.code == 'cancelled-popup-request') {
+        debugPrint('⚠️ User closed Google Sign-In popup');
+        return null;
+      }
       if (e.code == 'account-exists-with-different-credential') {
         throw Exception('An account already exists with a different sign-in method.');
       }
@@ -204,37 +217,45 @@ class AuthService extends ChangeNotifier {
     try {
       debugPrint('🔵 Starting Google Sign-In for LLG...');
 
-      // Configure GoogleSignIn
-      final GoogleSignIn googleSignIn = GoogleSignIn(
-        scopes: ['email', 'profile'],
-      );
+      final User? user;
 
-      // Sign out first to force account picker
-      await googleSignIn.signOut();
+      if (kIsWeb) {
+        debugPrint('🔵 Starting Web Google Sign-In for LLG with popup...');
+        final userCredential = await _auth.signInWithPopup(GoogleAuthProvider());
+        user = userCredential.user;
+      } else {
+        // Configure GoogleSignIn
+        final GoogleSignIn googleSignIn = GoogleSignIn(
+          scopes: ['email', 'profile'],
+        );
 
-      // Trigger the sign-in flow
-      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+        // Sign out first to force account picker
+        await googleSignIn.signOut();
 
-      if (googleUser == null) {
-        debugPrint('⚠️ User cancelled Google Sign-In');
-        return null;
+        // Trigger the sign-in flow
+        final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+
+        if (googleUser == null) {
+          debugPrint('⚠️ User cancelled Google Sign-In');
+          return null;
+        }
+
+        debugPrint('✅ Google account selected for LLG: ${googleUser.email}');
+
+        // Get authentication details
+        final GoogleSignInAuthentication googleAuth =
+            await googleUser.authentication;
+
+        // Create Firebase credential
+        final credential = GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken,
+          idToken: googleAuth.idToken,
+        );
+
+        // Sign in to Firebase
+        final userCredential = await _auth.signInWithCredential(credential);
+        user = userCredential.user;
       }
-
-      debugPrint('✅ Google account selected for LLG: ${googleUser.email}');
-
-      // Get authentication details
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
-
-      // Create Firebase credential
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      // Sign in to Firebase
-      final userCredential = await _auth.signInWithCredential(credential);
-      final user = userCredential.user;
 
       if (user == null) throw Exception('Google sign-in failed');
 
@@ -243,6 +264,10 @@ class AuthService extends ChangeNotifier {
     } on FirebaseAuthException catch (e) {
       debugPrint('❌ Google Sign-In for LLG error: ${e.code} - ${e.message}');
 
+      if (e.code == 'popup-closed-by-user' || e.code == 'cancelled-popup-request') {
+        debugPrint('⚠️ User closed Google Sign-In popup');
+        return null;
+      }
       if (e.code == 'account-exists-with-different-credential') {
         throw Exception('An account already exists with a different sign-in method.');
       }
