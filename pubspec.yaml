@@ -37,7 +37,6 @@ dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - .env
     - assets/logo/
     - assets/images/
     - assets/illustrations/
