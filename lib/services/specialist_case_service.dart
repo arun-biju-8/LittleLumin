@@ -124,6 +124,18 @@ class SpecialistCaseService {
     });
   }
 
+  /// Get list of cases for a specialist, optionally filtered by childId
+  Future<List<SpecialistCaseModel>> getSpecialistCases({required String specialistId, String? childId}) async {
+    Query query = _firestore.collection(collection).where('specialistId', isEqualTo: specialistId);
+    if (childId != null && childId.isNotEmpty) {
+      query = query.where('childId', isEqualTo: childId);
+    }
+    final snap = await query.get();
+    return snap.docs.map((doc) {
+      return SpecialistCaseModel.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+    }).toList();
+  }
+
   /// Stream consultation requests submitted by the signed-in parent
   Stream<List<SpecialistCaseModel>> getParentCasesStream(String parentId, {String? childId}) {
     Query query = _firestore.collection(collection).where('parentId', isEqualTo: parentId);

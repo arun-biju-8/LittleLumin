@@ -5,6 +5,7 @@ import '../../../theme/meadow_theme.dart';
 import '../journey_view.dart';
 import '../widgets/growth_guidance_banner.dart';
 import '../widgets/compact_score_preview.dart';
+import '../widgets/personalized_recommendations_section.dart';
 
 class GrowthTab extends StatelessWidget {
   final ChildModel? activeChild;
@@ -81,6 +82,9 @@ class GrowthTab extends StatelessWidget {
           skillProfileStream: skillProfileStream,
           scoreEventsStream: scoreEventsStream,
           onViewFullAnalytics: onViewFullAnalytics,
+        ),
+        PersonalizedRecommendationsSection(
+          activeChild: activeChild!,
         ),
       ],
     );

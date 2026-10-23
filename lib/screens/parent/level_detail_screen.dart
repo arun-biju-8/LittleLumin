@@ -1275,7 +1275,10 @@ class _LevelDetailScreenState extends State<LevelDetailScreen> with SingleTicker
                         ),
                         subtitle: Padding(
                           padding: const EdgeInsets.only(top: 4),
-                          child: Row(
+                          child: Wrap(
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 8,
+                            runSpacing: 4,
                             children: [
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
@@ -1304,7 +1307,6 @@ class _LevelDetailScreenState extends State<LevelDetailScreen> with SingleTicker
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 8),
                               Text(
                                 '${activity.duration} min · ${activity.difficulty}',
                                 style: MeadowTypography.caption.copyWith(color: MeadowColors.textSecondary),

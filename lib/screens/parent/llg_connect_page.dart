@@ -4,12 +4,17 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../services/child_service.dart';
 import '../../models/child_model.dart';
 import '../../models/specialist_case_model.dart';
 import '../../services/specialist_case_service.dart';
+import '../../models/contact_consent_model.dart';
+import '../../services/contact_consent_service.dart';
+import '../../services/consultation_summary_service.dart';
 import '../../utils/validators.dart';
 import '../../widgets/global_header.dart';
+import '../chat/chat_screen.dart';
 
 class LLGConnectPage extends StatefulWidget {
   final String? initialChildId;
@@ -24,6 +29,8 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final SpecialistCaseService _caseService = SpecialistCaseService();
+  final ContactConsentService _consentService = ContactConsentService();
+  final ConsultationSummaryService _summaryService = ConsultationSummaryService();
 
   String? _selectedChildId;
   bool _isLoading = false;
@@ -36,6 +43,8 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
 
   @override
   Widget build(BuildContext context) {
+    final user = _auth.currentUser;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: const GlobalHeader(
@@ -46,31 +55,53 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (_isLoading) const Padding(padding: EdgeInsets.only(bottom: 16), child: LinearProgressIndicator()),
+            if (_isLoading)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 16),
+                child: LinearProgressIndicator(),
+              ),
             _buildHeaderBanner(),
             const SizedBox(height: 24),
             _buildChildSelector(),
             const SizedBox(height: 24),
-            _buildActiveCasesSection(),
+
+            // Stream user's cases for the selected child to drive discovery separation
+            if (user != null && _selectedChildId != null)
+              StreamBuilder<List<SpecialistCaseModel>>(
+                stream: _caseService.getParentCasesStream(user.uid, childId: _selectedChildId),
+                builder: (context, caseSnapshot) {
+                  final cases = caseSnapshot.data ?? [];
+                  final activeOrPendingIds = cases
+                      .where((c) =>
+                          c.status == CaseStatus.accepted ||
+                          c.status == CaseStatus.active ||
+                          c.status == CaseStatus.pending)
+                      .map((c) => c.specialistId)
+                      .toSet();
+
+                  final hasActiveRelationship = cases.any((c) =>
+                      c.status == CaseStatus.accepted || c.status == CaseStatus.active);
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Section 1: Your Selected Guide & Consultation Requests
+                      _buildCasesSection(cases),
+                      const SizedBox(height: 32),
+
+                      // Section 2: Explore Other Guides (Separated & Filtered)
+                      _buildExploreHeader(hasActiveRelationship),
+                      const SizedBox(height: 16),
+                      _buildSpecialistsList(activeOrPendingIds, hasActiveRelationship),
+                    ],
+                  );
+                },
+              )
+            else
+              const Center(child: CircularProgressIndicator()),
+
             const SizedBox(height: 32),
-            Text(
-              'Verified Specialists & Learning Guides',
-              style: GoogleFonts.inter(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: const Color(0xFF0F172A),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'All specialists are verified by administrators with valid professional credentials. Sharing requires your explicit, case-specific consent.',
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                color: const Color(0xFF64748B),
-              ),
-            ),
-            const SizedBox(height: 16),
-            _buildSpecialistsList(),
+            _buildConsultationSummariesSection(),
             const SizedBox(height: 32),
             _buildObservationsSection(),
           ],
@@ -122,7 +153,7 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Receive clinical notes, milestone observations, and actionable recommendations from verified development specialists.',
+                  'Connect with verified LittleLumin Guides (LLGs) and Clinical Specialists. All requests are backed by explicit DPDP parental consent.',
                   style: GoogleFonts.inter(
                     fontSize: 13,
                     color: Colors.white.withOpacity(0.9),
@@ -149,7 +180,7 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
         }
 
         return Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
@@ -195,155 +226,118 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
     );
   }
 
-  Widget _buildSpecialistsList() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: _firestore
-          .collection('llgProfiles')
-          .where('isVerified', isEqualTo: true)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        final docs = snapshot.data?.docs ?? [];
-        if (docs.isEmpty) {
-          return Container(
-            padding: const EdgeInsets.all(28),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-            ),
-            child: Column(
-              children: [
-                const Icon(Icons.person_search_outlined, size: 48, color: Color(0xFF94A3B8)),
-                const SizedBox(height: 12),
-                Text(
-                  'No Verified Specialists Available Right Now',
-                  style: GoogleFonts.inter(
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF475569),
-                    fontSize: 15,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Our administrators are currently reviewing specialist credentials.',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.inter(color: const Color(0xFF94A3B8), fontSize: 13),
-                ),
-              ],
-            ),
-          );
-        }
-
-        return ListView.separated(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: docs.length,
-          separatorBuilder: (context, index) => const SizedBox(height: 16),
-          itemBuilder: (context, index) {
-            final data = docs[index].data() as Map<String, dynamic>;
-            final llgId = docs[index].id;
-            return _buildSpecialistCard(llgId, data);
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildActiveCasesSection() {
-    final user = _auth.currentUser;
-    if (user == null || _selectedChildId == null) return const SizedBox.shrink();
-
-    return StreamBuilder<List<SpecialistCaseModel>>(
-      stream: _caseService.getParentCasesStream(user.uid, childId: _selectedChildId),
-      builder: (context, snapshot) {
-        final cases = snapshot.data ?? [];
-        if (cases.isEmpty) return const SizedBox.shrink();
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildCasesSection(List<SpecialistCaseModel> cases) {
+    if (cases.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Row(
           children: [
-            Row(
-              children: [
-                const Icon(Icons.shield_outlined, color: Color(0xFF0EA5E9), size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  'My Consultation Requests & Active Cases (${cases.length})',
-                  style: GoogleFonts.inter(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFF0F172A),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Case-specific consent is active. You can review scope or withdraw consent at any time.',
-              style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B)),
-            ),
-            const SizedBox(height: 14),
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: cases.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                final c = cases[index];
-                return _buildParentCaseCard(c);
-              },
+            const Icon(Icons.info_outline, color: Color(0xFF0EA5E9), size: 24),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                'No active guide or pending requests for this child yet. Choose a verified specialist below to begin consultation.',
+                style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
+              ),
             ),
           ],
-        );
-      },
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.shield_outlined, color: Color(0xFF0EA5E9), size: 20),
+            const SizedBox(width: 8),
+            Text(
+              'Your Selected Guide & Consultation Requests',
+              style: GoogleFonts.inter(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF0F172A),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Your active consultations and pending requests are listed below. Each consultation is isolated with explicit consent.',
+          style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B)),
+        ),
+        const SizedBox(height: 14),
+        ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: cases.length,
+          separatorBuilder: (context, index) => const SizedBox(height: 12),
+          itemBuilder: (context, index) {
+            return _buildParentCaseCard(cases[index]);
+          },
+        ),
+      ],
     );
   }
 
   Widget _buildParentCaseCard(SpecialistCaseModel c) {
     Color statusColor;
     String statusLabel;
+    IconData statusIcon;
+
     switch (c.status) {
       case CaseStatus.accepted:
       case CaseStatus.active:
         statusColor = const Color(0xFF10B981);
         statusLabel = 'ACTIVE CONSULTATION';
+        statusIcon = Icons.check_circle_outline;
         break;
       case CaseStatus.pending:
         statusColor = const Color(0xFFF59E0B);
-        statusLabel = 'AWAITING SPECIALIST ACCEPTANCE';
+        statusLabel = 'AWAITING GUIDE ACCEPTANCE';
+        statusIcon = Icons.hourglass_top_outlined;
         break;
       case CaseStatus.declined:
         statusColor = const Color(0xFF64748B);
         statusLabel = 'DECLINED';
+        statusIcon = Icons.cancel_outlined;
         break;
       case CaseStatus.revoked:
         statusColor = const Color(0xFFEF4444);
         statusLabel = 'CONSENT WITHDRAWN';
+        statusIcon = Icons.lock_outline;
         break;
       case CaseStatus.completed:
         statusColor = const Color(0xFF0EA5E9);
         statusLabel = 'COMPLETED';
+        statusIcon = Icons.task_alt;
         break;
     }
 
     final isClinical = c.specialistRole.contains('clinical');
+    final isAuthorized = c.canAccessChildData;
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: c.status == CaseStatus.revoked ? const Color(0xFFFEE2E2) : const Color(0xFFE2E8F0),
+          color: c.status == CaseStatus.revoked
+              ? const Color(0xFFFEE2E2)
+              : (isAuthorized ? const Color(0xFF10B981).withOpacity(0.3) : const Color(0xFFE2E8F0)),
+          width: isAuthorized ? 1.5 : 1,
         ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.02),
-            blurRadius: 6,
+            blurRadius: 8,
             offset: const Offset(0, 2),
           ),
         ],
@@ -354,13 +348,9 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
           Row(
             children: [
               CircleAvatar(
-                radius: 20,
+                radius: 22,
                 backgroundColor: statusColor.withOpacity(0.12),
-                child: Icon(
-                  c.status == CaseStatus.revoked ? Icons.lock_outline : Icons.assignment_outlined,
-                  color: statusColor,
-                  size: 20,
-                ),
+                child: Icon(statusIcon, color: statusColor, size: 22),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -372,7 +362,7 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
                         Flexible(
                           child: Text(
                             c.specialistName,
-                            style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 15),
+                            style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -397,7 +387,7 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
                     const SizedBox(height: 2),
                     Text(
                       'Purpose: ${c.purpose}',
-                      style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
+                      style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
                     ),
                   ],
                 ),
@@ -416,6 +406,8 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
             ],
           ),
           const SizedBox(height: 12),
+
+          // Categories authorized
           Wrap(
             spacing: 6,
             runSpacing: 4,
@@ -433,30 +425,338 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
               );
             }).toList(),
           ),
-          const SizedBox(height: 10),
+
+          const SizedBox(height: 14),
+
+          // Action Buttons: Chat, Contact Request, WhatsApp, Withdraw Consent
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Requested: ${DateFormat.yMMMd().format(c.consentedAt)} • DPDP ${c.consentNoticeVersion}',
-                style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF94A3B8)),
-              ),
-              if (c.status == CaseStatus.pending || c.status == CaseStatus.accepted || c.status == CaseStatus.active)
+              if (isAuthorized) ...[
+                ElevatedButton.icon(
+                  onPressed: () => _openChat(c),
+                  icon: const Icon(Icons.chat_bubble_outline, size: 16),
+                  label: const Text('Message Guide'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0EA5E9),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    textStyle: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: () => _openContactSharingDialog(c),
+                  icon: const Icon(Icons.contact_phone_outlined, size: 16),
+                  label: const Text('Contact Details'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF0EA5E9),
+                    side: const BorderSide(color: Color(0xFF0EA5E9)),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    textStyle: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ],
+              const Spacer(),
+              if (c.status == CaseStatus.pending)
+                TextButton.icon(
+                  onPressed: () => _cancelPendingRequest(c),
+                  icon: const Icon(Icons.close, size: 15, color: Colors.redAccent),
+                  label: const Text('Cancel Request', style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+                )
+              else if (isAuthorized)
                 TextButton.icon(
                   onPressed: () => _confirmWithdrawConsent(c),
                   icon: const Icon(Icons.cancel_outlined, size: 14, color: Color(0xFFEF4444)),
                   label: const Text('Withdraw Consent', style: TextStyle(color: Color(0xFFEF4444), fontSize: 12)),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
                 ),
             ],
+          ),
+
+          // Stream contact sharing status for this case
+          _buildApprovedContactInfo(c),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildApprovedContactInfo(SpecialistCaseModel c) {
+    return StreamBuilder<List<ContactConsentModel>>(
+      stream: _consentService.getCaseConsentRequestsStream(c.caseId),
+      builder: (context, snapshot) {
+        final requests = snapshot.data ?? [];
+        final approvedRequests = requests.where((r) => r.isApproved && r.sharedContactValue != null).toList();
+
+        if (approvedRequests.isEmpty) return const SizedBox.shrink();
+
+        return Container(
+          margin: const EdgeInsets.only(top: 12),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF0FDF4),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFBBF7D0)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.verified_outlined, size: 16, color: Color(0xFF16A34A)),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Direct Contact Details (Consent Granted):',
+                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF166534)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              ...approvedRequests.map((req) {
+                final isPhoneOrWA = req.requestedItem == ContactItemType.phone || req.requestedItem == ContactItemType.whatsapp;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    children: [
+                      Text(
+                        '${req.requestedItem.name.toUpperCase()}: ${req.sharedContactValue}',
+                        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF1F2937)),
+                      ),
+                      if (isPhoneOrWA) ...[
+                        const SizedBox(width: 8),
+                        InkWell(
+                          onTap: () => _launchWhatsApp(req.sharedContactValue ?? '', c),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF25D366),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.chat, size: 12, color: Colors.white),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'WhatsApp',
+                                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              }),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _openChat(SpecialistCaseModel c) {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatScreen(
+          specialistCase: c,
+          currentUserId: user.uid,
+          currentUserName: user.displayName ?? 'Parent',
+          currentUserRole: 'parent',
+          otherParticipantName: c.specialistName,
+          otherParticipantRole: c.specialistRole,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _launchWhatsApp(String phone, SpecialistCaseModel c) async {
+    // Clean phone number
+    final cleanPhone = phone.replaceAll(RegExp(r'[^0-9+]'), '');
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.open_in_new, color: Color(0xFF25D366)),
+            const SizedBox(width: 8),
+            Text('Open WhatsApp Consultation?', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16)),
+          ],
+        ),
+        content: Text(
+          'You are leaving LittleLumin to communicate on WhatsApp.\n\nNotice:\n• External WhatsApp messages are conducted outside LittleLumin.\n• Your guide (${c.specialistName}) will document an authorized Consultation Summary in your child\'s LittleLumin file following your call.',
+          style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569), height: 1.4),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF25D366),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Continue to WhatsApp'),
           ),
         ],
       ),
     );
+
+    if (confirmed == true) {
+      final msg = Uri.encodeComponent('Hello ${c.specialistName}, I am contacting you regarding ${c.childName} from LittleLumin.');
+      final uri = Uri.parse('https://wa.me/$cleanPhone?text=$msg');
+      try {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not open WhatsApp: $e')),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _openContactSharingDialog(SpecialistCaseModel c) async {
+    final purposeController = TextEditingController();
+    ContactItemType selectedItem = ContactItemType.phone;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text('Request Contact Sharing', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Request ${c.specialistName}\'s direct contact details under explicit consent.',
+                style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<ContactItemType>(
+                value: selectedItem,
+                decoration: InputDecoration(
+                  labelText: 'Contact Detail Requested',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                items: const [
+                  DropdownMenuItem(value: ContactItemType.phone, child: Text('Phone Number')),
+                  DropdownMenuItem(value: ContactItemType.whatsapp, child: Text('WhatsApp Number')),
+                  DropdownMenuItem(value: ContactItemType.email, child: Text('Email Address')),
+                ],
+                onChanged: (val) {
+                  if (val != null) setDialogState(() => selectedItem = val);
+                },
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: purposeController,
+                decoration: InputDecoration(
+                  labelText: 'Reason for Request',
+                  hintText: 'e.g. For urgent milestone follow-up call',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                final purpose = purposeController.text.trim();
+                if (purpose.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please state a reason for this contact request.')),
+                  );
+                  return;
+                }
+                Navigator.pop(ctx);
+                try {
+                  await _consentService.requestContactSharing(
+                    caseId: c.caseId,
+                    childId: c.childId,
+                    requesterId: _auth.currentUser!.uid,
+                    requesterName: _auth.currentUser?.displayName ?? 'Parent',
+                    requesterRole: 'parent',
+                    recipientId: c.specialistId,
+                    recipientName: c.specialistName,
+                    recipientRole: c.specialistRole,
+                    requestedItem: selectedItem,
+                    purpose: purpose,
+                  );
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('✅ Contact sharing request submitted to guide.'),
+                        backgroundColor: Color(0xFF10B981),
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                    );
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0EA5E9),
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Send Request'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _cancelPendingRequest(SpecialistCaseModel c) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancel Consultation Request?'),
+        content: Text('Are you sure you want to cancel your pending consultation request with ${c.specialistName}?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+            child: const Text('Cancel Request'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      setState(() => _isLoading = true);
+      try {
+        await _caseService.revokeConsent(c.caseId, _auth.currentUser!.uid, reason: 'Parent cancelled pending request.');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Request cancelled successfully.')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    }
   }
 
   Future<void> _confirmWithdrawConsent(SpecialistCaseModel c) async {
@@ -519,12 +819,97 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
     }
   }
 
-  Widget _buildSpecialistCard(String llgId, Map<String, dynamic> data) {
+  Widget _buildExploreHeader(bool hasActiveRelationship) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Explore Other Guides & Specialists',
+          style: GoogleFonts.inter(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: const Color(0xFF0F172A),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          hasActiveRelationship
+              ? 'Your child currently has an active assigned guide above. You can view profiles of other verified guides or request an alternative for a different developmental focus.'
+              : 'Browse certified child development professionals and request tailored developmental guidance.',
+          style: GoogleFonts.inter(
+            fontSize: 13,
+            color: const Color(0xFF64748B),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSpecialistsList(Set<String> activeOrPendingIds, bool hasActiveRelationship) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore
+          .collection('llgProfiles')
+          .where('isVerified', isEqualTo: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final docs = snapshot.data?.docs ?? [];
+        // Filter out specialists already requested or active so user is never confused!
+        final availableDocs = docs.where((d) => !activeOrPendingIds.contains(d.id)).toList();
+
+        if (availableDocs.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(24),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Column(
+              children: [
+                const Icon(Icons.check_circle_outline, size: 40, color: Color(0xFF10B981)),
+                const SizedBox(height: 12),
+                Text(
+                  activeOrPendingIds.isNotEmpty
+                      ? 'All available specialists are already connected in your consultation section above.'
+                      : 'No other verified specialists available right now.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF475569),
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: availableDocs.length,
+          separatorBuilder: (context, index) => const SizedBox(height: 16),
+          itemBuilder: (context, index) {
+            final data = availableDocs[index].data() as Map<String, dynamic>;
+            final llgId = availableDocs[index].id;
+            return _buildSpecialistCard(llgId, data, hasActiveRelationship);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildSpecialistCard(String llgId, Map<String, dynamic> data, bool hasActiveRelationship) {
     final name = data['name'] ?? 'Child Specialist';
     final qualification = data['qualification'] ?? 'Development Specialist';
     final experience = data['experience'] ?? '5+ years';
     final specialization = data['specialization'] ?? 'Early Childhood Development';
-    final consultationMode = data['consultationMode'] ?? 'Online & Clinical';
+    final consultationMode = data['consultationMode'] ?? 'Online & In-Person';
     final bio = data['bio'] ?? 'Dedicated to supporting healthy milestones and cognitive growth.';
     final userType = (data['userType'] ?? 'llg').toString().toLowerCase();
     final isClinical = userType.contains('clinical');
@@ -550,7 +935,9 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
             children: [
               CircleAvatar(
                 radius: 26,
-                backgroundColor: isClinical ? const Color(0xFF4F46E5).withOpacity(0.12) : const Color(0xFF0EA5E9).withOpacity(0.12),
+                backgroundColor: isClinical
+                    ? const Color(0xFF4F46E5).withOpacity(0.12)
+                    : const Color(0xFF0EA5E9).withOpacity(0.12),
                 child: Text(
                   name.isNotEmpty ? name[0].toUpperCase() : 'S',
                   style: GoogleFonts.inter(
@@ -611,6 +998,8 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
           const SizedBox(height: 12),
           Text(
             bio,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
             style: GoogleFonts.inter(
               fontSize: 13,
               color: const Color(0xFF475569),
@@ -618,20 +1007,34 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
             ),
           ),
           const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: () => _openRequestReviewDialog(llgId, name, userType),
-              icon: const Icon(Icons.shield_outlined, size: 16),
-              label: const Text('Authorize & Request Review'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isClinical ? const Color(0xFF4F46E5) : const Color(0xFF0EA5E9),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                textStyle: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 14),
+          Row(
+            children: [
+              OutlinedButton.icon(
+                onPressed: () => _viewGuideProfile(name, data),
+                icon: const Icon(Icons.visibility_outlined, size: 16),
+                label: const Text('View Profile'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF334155),
+                  side: const BorderSide(color: Color(0xFFCBD5E1)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
               ),
-            ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _openRequestReviewDialog(llgId, name, userType, hasActiveRelationship),
+                  icon: const Icon(Icons.shield_outlined, size: 16),
+                  label: Text(hasActiveRelationship ? 'Request Alternative Focus' : 'Authorize & Request Review'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isClinical ? const Color(0xFF4F46E5) : const Color(0xFF0EA5E9),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    textStyle: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -663,7 +1066,112 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
     );
   }
 
-  Future<void> _openRequestReviewDialog(String llgId, String llgName, String specialistRole) async {
+  void _viewGuideProfile(String name, Map<String, dynamic> data) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        maxChildSize: 0.9,
+        minChildSize: 0.4,
+        expand: false,
+        builder: (context, scrollController) => SingleChildScrollView(
+          controller: scrollController,
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 30,
+                    backgroundColor: const Color(0xFF0EA5E9).withOpacity(0.15),
+                    child: Text(
+                      name.isNotEmpty ? name[0].toUpperCase() : 'G',
+                      style: GoogleFonts.inter(fontSize: 22, fontWeight: FontWeight.bold, color: const Color(0xFF0284C7)),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(name, style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 4),
+                        Text(data['qualification'] ?? 'Verified Specialist', style: GoogleFonts.inter(color: Colors.grey[600], fontSize: 13)),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            const Icon(Icons.verified, size: 16, color: Color(0xFF0EA5E9)),
+                            const SizedBox(width: 4),
+                            Text('Admin Verified Credentials', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF0EA5E9), fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              const Divider(),
+              const SizedBox(height: 12),
+              _buildProfileDetailRow('Specialization', data['specialization'] ?? 'Early Childhood'),
+              _buildProfileDetailRow('Experience', data['experience'] ?? '5+ years'),
+              _buildProfileDetailRow('Organization', data['organization'] ?? 'LittleLumin Network'),
+              _buildProfileDetailRow('Languages', data['languages'] ?? 'English'),
+              _buildProfileDetailRow('Modes', data['consultationMode'] ?? 'Online & Clinical'),
+              const SizedBox(height: 16),
+              Text('About & Clinical Philosophy', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14)),
+              const SizedBox(height: 6),
+              Text(
+                data['bio'] ?? 'Dedicated to supporting healthy milestones.',
+                style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569), height: 1.5),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(label, style: GoogleFonts.inter(fontSize: 13, color: Colors.grey[600], fontWeight: FontWeight.w500)),
+          ),
+          Expanded(
+            child: Text(value, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A))),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openRequestReviewDialog(
+    String llgId,
+    String llgName,
+    String specialistRole,
+    bool hasActiveRelationship,
+  ) async {
     final noteController = TextEditingController();
     final user = _auth.currentUser;
 
@@ -707,6 +1215,21 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (hasActiveRelationship) ...[
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF3C7),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.4)),
+                    ),
+                    child: Text(
+                      'Note: $childName already has an active consultation. You are adding an additional consultation for a specific focus.',
+                      style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFFB45309)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 Text(
                   'Specify the consultation focus and authorize targeted learning progress sharing for $childName.',
                   style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
@@ -725,26 +1248,11 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   ),
                   items: const [
-                    DropdownMenuItem(
-                      value: 'Developmental Milestone Review',
-                      child: Text('Developmental Milestone Review'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'Learning & Educational Guidance',
-                      child: Text('Learning & Educational Guidance'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'Speech & Language Support',
-                      child: Text('Speech & Language Support'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'Behavioral & Social Guidance',
-                      child: Text('Behavioral & Social Guidance'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'Motor Skills Coordination',
-                      child: Text('Motor Skills Coordination'),
-                    ),
+                    DropdownMenuItem(value: 'Developmental Milestone Review', child: Text('Developmental Milestone Review')),
+                    DropdownMenuItem(value: 'Learning & Educational Guidance', child: Text('Learning & Educational Guidance')),
+                    DropdownMenuItem(value: 'Speech & Language Support', child: Text('Speech & Language Support')),
+                    DropdownMenuItem(value: 'Behavioral & Social Guidance', child: Text('Behavioral & Social Guidance')),
+                    DropdownMenuItem(value: 'Motor Skills Coordination', child: Text('Motor Skills Coordination')),
                   ],
                   onChanged: (val) {
                     if (val != null) setDialogState(() => selectedPurpose = val);
@@ -767,7 +1275,6 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                // DPDP Parental Consent Box
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -852,13 +1359,12 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('✅ Case consultation request and consent submitted.'),
+                              content: Text('✅ Consultation request submitted! Awaiting guide acceptance.'),
                               backgroundColor: Color(0xFF10B981),
                             ),
                           );
                         }
                       } catch (e) {
-                        debugPrint('❌ Error submitting case request: $e');
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(content: Text('Failed to submit request: $e'), backgroundColor: Colors.red),
@@ -880,6 +1386,84 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
     );
   }
 
+  Widget _buildConsultationSummariesSection() {
+    if (_selectedChildId == null) return const SizedBox.shrink();
+
+    return StreamBuilder<List<dynamic>>(
+      stream: _summaryService.getChildSummariesStream(_selectedChildId!),
+      builder: (context, snapshot) {
+        final summaries = snapshot.data ?? [];
+        if (summaries.isEmpty) return const SizedBox.shrink();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Documented Consultation Summaries (${summaries.length})',
+              style: GoogleFonts.inter(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF0F172A),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Official notes from sessions conducted with your specialist.',
+              style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B)),
+            ),
+            const SizedBox(height: 14),
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: summaries.length,
+              separatorBuilder: (context, index) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final s = summaries[index];
+                return Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.article_outlined, color: Color(0xFF0EA5E9), size: 20),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Session with ${s.llgName} (${s.consultationMode})',
+                            style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                          const Spacer(),
+                          Text(
+                            DateFormat.yMMMd().format(s.consultationDate),
+                            style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text('Guidance Provided:', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF334155))),
+                      const SizedBox(height: 2),
+                      Text(s.guidanceProvided, style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569))),
+                      if (s.agreedFollowUpActions.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text('Agreed Actions:', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF334155))),
+                        ...s.agreedFollowUpActions.map((a) => Text('• $a', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)))),
+                      ],
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildObservationsSection() {
     if (_selectedChildId == null) return const SizedBox.shrink();
 
@@ -889,10 +1473,6 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
           .where('childId', isEqualTo: _selectedChildId)
           .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
         final docs = snapshot.data?.docs ?? [];
         if (docs.isEmpty) return const SizedBox.shrink();
 

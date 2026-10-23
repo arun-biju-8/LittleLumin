@@ -474,13 +474,16 @@ class _FeedbackFormState extends State<FeedbackForm> {
                               size: 22,
                             ),
                             const SizedBox(width: 8),
-                            Text(
-                              _isFormComplete
-                                  ? 'Submit Feedback'
-                                  : 'Please answer all questions ($_answeredCount/5)',
-                              style: AppTextStyles.button.copyWith(
-                                color: _isFormComplete ? Colors.white : Colors.grey.shade700,
-                                fontWeight: FontWeight.bold,
+                            Flexible(
+                              child: Text(
+                                _isFormComplete
+                                    ? 'Submit Feedback'
+                                    : 'Please answer all questions ($_answeredCount/5)',
+                                style: AppTextStyles.button.copyWith(
+                                  color: _isFormComplete ? Colors.white : Colors.grey.shade700,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ],
