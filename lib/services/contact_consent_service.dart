@@ -5,14 +5,17 @@ import '../models/contact_consent_model.dart';
 import 'audit_log_service.dart';
 
 class ContactConsentService {
-  final FirebaseFirestore _firestore;
-  final FirebaseAuth _auth;
+  final FirebaseFirestore? _customFirestore;
+  final FirebaseAuth? _customAuth;
+
+  FirebaseFirestore get _firestore => _customFirestore ?? FirebaseFirestore.instance;
+  FirebaseAuth get _auth => _customAuth ?? FirebaseAuth.instance;
 
   ContactConsentService({
     FirebaseFirestore? firestore,
     FirebaseAuth? auth,
-  })  : _firestore = firestore ?? FirebaseFirestore.instance,
-        _auth = auth ?? FirebaseAuth.instance;
+  })  : _customFirestore = firestore,
+        _customAuth = auth;
 
   static const String collection = 'contactConsentRequests';
 

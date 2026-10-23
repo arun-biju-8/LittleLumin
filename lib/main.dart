@@ -84,6 +84,7 @@ class MyApp extends StatelessWidget {
           '/llg-dashboard': (context) => const LLGDashboard(),
           '/ai-generator': (context) => const AIActivityGeneratorScreen(),
           '/llg-connect': (context) => const LLGConnectPage(),
+          '/specialist-support': (context) => const LLGConnectPage(),
         },
       ),
     );

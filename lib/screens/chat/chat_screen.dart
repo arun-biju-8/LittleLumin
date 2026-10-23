@@ -244,6 +244,29 @@ class _ChatScreenState extends State<ChatScreen> {
           return const Center(child: CircularProgressIndicator());
         }
 
+        if (snapshot.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, size: 40, color: Colors.redAccent),
+                  const SizedBox(height: 12),
+                  Text('Failed to load messages', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 6),
+                  Text('${snapshot.error}', textAlign: TextAlign.center, style: GoogleFonts.inter(fontSize: 12, color: Colors.grey)),
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: () => setState(() {}),
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
         final messages = snapshot.data ?? [];
         if (messages.isEmpty) {
           return Center(

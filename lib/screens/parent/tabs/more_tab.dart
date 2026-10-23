@@ -167,9 +167,11 @@ class MoreTab extends StatelessWidget {
         showBack: false,
         title: 'More',
       ),
-      body: ListView(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: MeadowSpacing.screenH, vertical: MeadowSpacing.lg),
-        children: [
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
           // Header
           Text('More', style: MeadowTypography.display),
           const SizedBox(height: MeadowSpacing.xs),
@@ -271,6 +273,60 @@ class MoreTab extends StatelessWidget {
                 ),
               ),
               onTap: () => _showComingSoon(context, 'Parent Journal'),
+            ),
+          ]),
+
+          const SizedBox(height: MeadowSpacing.xxl),
+
+          // 2.5 SPECIALIST & SUPPORT SECTION
+          _buildSectionHeader('SPECIALIST & SUPPORT'),
+          _buildGroupContainer([
+            _buildMenuItem(
+              icon: Icons.health_and_safety_rounded,
+              iconColor: MeadowColors.primary,
+              iconBgColor: MeadowColors.primarySurface,
+              title: 'Specialist & Support Hub',
+              subtitle: 'Connect with certified LittleLumin Guides (LLG)',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => LLGConnectPage(initialChildId: activeChild?.childId),
+                ),
+              ),
+            ),
+            const Divider(height: 1, indent: 64, color: MeadowColors.borderLight),
+            _buildMenuItem(
+              icon: Icons.lightbulb_outline_rounded,
+              iconColor: MeadowColors.gold,
+              iconBgColor: MeadowColors.goldSurface,
+              title: 'Guide Recommendations',
+              subtitle: 'Personalized developmental activity plans',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => LLGConnectPage(
+                    initialChildId: activeChild?.childId,
+                    initialSection: 'recommendations',
+                  ),
+                ),
+              ),
+            ),
+            const Divider(height: 1, indent: 64, color: MeadowColors.borderLight),
+            _buildMenuItem(
+              icon: Icons.security_rounded,
+              iconColor: MeadowColors.motor,
+              iconBgColor: MeadowColors.motorSurface,
+              title: 'Contact Sharing & Consent',
+              subtitle: 'Review pending requests and manage permissions',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => LLGConnectPage(
+                    initialChildId: activeChild?.childId,
+                    initialSection: 'consents',
+                  ),
+                ),
+              ),
             ),
           ]),
 
@@ -401,8 +457,9 @@ class MoreTab extends StatelessWidget {
           const SizedBox(height: MeadowSpacing.xxxl),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildSectionHeader(String title) {
     return Padding(

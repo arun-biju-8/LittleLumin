@@ -12,24 +12,45 @@ import '../../llg_connect_page.dart';
 class SpecialistSupportCard extends StatelessWidget {
   final ChildModel? activeChild;
   final SpecialistCaseService? caseService;
+  final String? parentId;
+  final String? parentName;
 
   const SpecialistSupportCard({
     super.key,
     required this.activeChild,
     this.caseService,
+    this.parentId,
+    this.parentName,
   });
 
   @override
   Widget build(BuildContext context) {
     if (activeChild == null) return const SizedBox.shrink();
 
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return const SizedBox.shrink();
+    String? uid = parentId;
+    String? pName = parentName;
+    if (uid == null) {
+      try {
+        final currentUser = FirebaseAuth.instance.currentUser;
+        uid = currentUser?.uid;
+        pName ??= currentUser?.displayName;
+      } catch (_) {
+        // Safe fallback in test environments where Firebase is not initialized
+        return const SizedBox.shrink();
+      }
+    }
+    if (uid == null) return const SizedBox.shrink();
 
-    final service = caseService ?? SpecialistCaseService();
+    final Stream<List<SpecialistCaseModel>> casesStream;
+    try {
+      final service = caseService ?? SpecialistCaseService();
+      casesStream = service.getParentCasesStream(uid, childId: activeChild!.childId);
+    } catch (_) {
+      return const SizedBox.shrink();
+    }
 
     return StreamBuilder<List<SpecialistCaseModel>>(
-      stream: service.getParentCasesStream(user.uid, childId: activeChild!.childId),
+      stream: casesStream,
       builder: (context, snapshot) {
         final cases = snapshot.data ?? [];
 
@@ -45,7 +66,7 @@ class SpecialistSupportCard extends StatelessWidget {
             );
 
         if (activeCase != null) {
-          return _buildActiveCaseCard(context, activeCase, user);
+          return _buildActiveCaseCard(context, activeCase, uid!, pName ?? 'Parent');
         } else if (pendingCase != null) {
           return _buildPendingCaseCard(context, pendingCase);
         } else {
@@ -58,7 +79,8 @@ class SpecialistSupportCard extends StatelessWidget {
   Widget _buildActiveCaseCard(
     BuildContext context,
     SpecialistCaseModel activeCase,
-    User user,
+    String currentUserId,
+    String currentUserName,
   ) {
     return Container(
       margin: const EdgeInsets.only(bottom: MeadowSpacing.lg),
@@ -150,8 +172,8 @@ class SpecialistSupportCard extends StatelessWidget {
                       MaterialPageRoute(
                         builder: (_) => ChatScreen(
                           specialistCase: activeCase,
-                          currentUserId: user.uid,
-                          currentUserName: user.displayName ?? 'Parent',
+                          currentUserId: currentUserId,
+                          currentUserName: currentUserName,
                           currentUserRole: 'parent',
                           otherParticipantName: activeCase.specialistName,
                           otherParticipantRole: activeCase.specialistRole,

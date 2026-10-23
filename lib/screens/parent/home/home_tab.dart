@@ -337,7 +337,10 @@ class _HomeTabState extends State<HomeTab> {
                     ),
                     const SizedBox(height: MeadowSpacing.lg),
 
-                    // 4. Quick Actions Row (3 tiles)
+                    // 4. Specialist & Support Card
+                    SpecialistSupportCard(activeChild: widget.activeChild),
+
+                    // 5. Quick Actions Row (3 tiles)
                     QuickActionsRow(
                       onAIActivity: () {
                         Navigator.push(

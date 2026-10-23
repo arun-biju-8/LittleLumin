@@ -5,21 +5,31 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../services/child_service.dart';
+
 import '../../models/child_model.dart';
 import '../../models/specialist_case_model.dart';
-import '../../services/specialist_case_service.dart';
 import '../../models/contact_consent_model.dart';
+import '../../models/recommendation_model.dart';
+import '../../models/consultation_summary_model.dart';
+import '../../services/child_service.dart';
+import '../../services/specialist_case_service.dart';
 import '../../services/contact_consent_service.dart';
+import '../../services/recommendation_service.dart';
 import '../../services/consultation_summary_service.dart';
+import '../../theme/meadow_theme.dart';
 import '../../utils/validators.dart';
 import '../../widgets/global_header.dart';
 import '../chat/chat_screen.dart';
 
 class LLGConnectPage extends StatefulWidget {
   final String? initialChildId;
+  final String initialSection; // 'overview', 'recommendations', 'consents', 'directory', 'summaries'
 
-  const LLGConnectPage({super.key, this.initialChildId});
+  const LLGConnectPage({
+    super.key,
+    this.initialChildId,
+    this.initialSection = 'overview',
+  });
 
   @override
   State<LLGConnectPage> createState() => _LLGConnectPageState();
@@ -30,15 +40,18 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final SpecialistCaseService _caseService = SpecialistCaseService();
   final ContactConsentService _consentService = ContactConsentService();
+  final RecommendationService _recommendationService = RecommendationService();
   final ConsultationSummaryService _summaryService = ConsultationSummaryService();
 
   String? _selectedChildId;
+  late String _activeSection;
   bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
     _selectedChildId = widget.initialChildId;
+    _activeSection = widget.initialSection;
   }
 
   @override
@@ -46,26 +59,35 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
     final user = _auth.currentUser;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: MeadowColors.cream,
       appBar: const GlobalHeader(
         showBack: true,
+        title: 'Specialist & Support',
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.symmetric(horizontal: MeadowSpacing.screenH, vertical: 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (_isLoading)
               const Padding(
                 padding: EdgeInsets.only(bottom: 16),
-                child: LinearProgressIndicator(),
+                child: LinearProgressIndicator(color: MeadowColors.primary),
               ),
-            _buildHeaderBanner(),
-            const SizedBox(height: 24),
-            _buildChildSelector(),
-            const SizedBox(height: 24),
 
-            // Stream user's cases for the selected child to drive discovery separation
+            // 1. Header Banner
+            _buildHeaderBanner(),
+            const SizedBox(height: 16),
+
+            // 2. Child Selector
+            _buildChildSelector(),
+            const SizedBox(height: 16),
+
+            // 3. Section Selector Bar
+            if (user != null) _buildSectionSelector(user.uid),
+            const SizedBox(height: 20),
+
+            // 4. Section Content
             if (user != null && _selectedChildId != null)
               StreamBuilder<List<SpecialistCaseModel>>(
                 stream: _caseService.getParentCasesStream(user.uid, childId: _selectedChildId),
@@ -82,81 +104,78 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
                   final hasActiveRelationship = cases.any((c) =>
                       c.status == CaseStatus.accepted || c.status == CaseStatus.active);
 
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Section 1: Your Selected Guide & Consultation Requests
-                      _buildCasesSection(cases),
-                      const SizedBox(height: 32),
-
-                      // Section 2: Explore Other Guides (Separated & Filtered)
-                      _buildExploreHeader(hasActiveRelationship),
-                      const SizedBox(height: 16),
-                      _buildSpecialistsList(activeOrPendingIds, hasActiveRelationship),
-                    ],
-                  );
+                  switch (_activeSection) {
+                    case 'recommendations':
+                      return _buildRecommendationsSection(_selectedChildId!);
+                    case 'consents':
+                      return _buildContactConsentsSection(user.uid, cases);
+                    case 'directory':
+                      return _buildSpecialistsDirectorySection(activeOrPendingIds, hasActiveRelationship);
+                    case 'summaries':
+                      return _buildConsultationSummariesSection(_selectedChildId!);
+                    case 'overview':
+                    default:
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildCasesSection(cases),
+                          const SizedBox(height: 24),
+                          _buildRecommendationsPreviewSection(_selectedChildId!),
+                          const SizedBox(height: 24),
+                          _buildContactConsentsPreviewSection(user.uid),
+                          const SizedBox(height: 24),
+                          _buildConsultationSummariesSection(_selectedChildId!),
+                        ],
+                      );
+                  }
                 },
               )
             else
-              const Center(child: CircularProgressIndicator()),
-
-            const SizedBox(height: 32),
-            _buildConsultationSummariesSection(),
-            const SizedBox(height: 32),
-            _buildObservationsSection(),
+              const Center(child: CircularProgressIndicator(color: MeadowColors.primary)),
+            const SizedBox(height: 40),
           ],
         ),
       ),
     );
   }
 
+  // =========================================================================
+  // HEADER BANNER
+  // =========================================================================
   Widget _buildHeaderBanner() {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF0EA5E9), Color(0xFF0284C7)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF0EA5E9).withOpacity(0.25),
-            blurRadius: 15,
-            offset: const Offset(0, 6),
-          ),
-        ],
+        color: MeadowColors.surface,
+        borderRadius: BorderRadius.circular(MeadowRadius.xl),
+        border: Border.all(color: MeadowColors.borderLight),
+        boxShadow: MeadowShadows.card,
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              shape: BoxShape.circle,
+              color: MeadowColors.primarySurface,
+              borderRadius: BorderRadius.circular(14),
             ),
-            child: const Icon(Icons.psychology_outlined, color: Colors.white, size: 36),
+            child: const Icon(Icons.health_and_safety_rounded, color: MeadowColors.primary, size: 32),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Expert Guidance for Your Child',
-                  style: GoogleFonts.inter(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
+                  'Expert Guidance & Specialist Support',
+                  style: MeadowTypography.h3.copyWith(fontSize: 16),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Connect with verified LittleLumin Guides (LLGs) and Clinical Specialists. All requests are backed by explicit DPDP parental consent.',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    color: Colors.white.withOpacity(0.9),
+                  'Collaborate with certified LittleLumin Guides (LLGs) and Clinical Specialists. All data access is protected by explicit DPDP parental consent.',
+                  style: MeadowTypography.body.copyWith(
+                    fontSize: 12,
+                    color: MeadowColors.textSecondary,
                     height: 1.4,
                   ),
                 ),
@@ -168,6 +187,9 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
     );
   }
 
+  // =========================================================================
+  // CHILD SELECTOR
+  // =========================================================================
   Widget _buildChildSelector() {
     return StreamBuilder<List<ChildModel>>(
       stream: ChildService().getChildren(),
@@ -180,44 +202,39 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
         }
 
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
+            color: MeadowColors.surface,
+            borderRadius: BorderRadius.circular(MeadowRadius.lg),
+            border: Border.all(color: MeadowColors.borderLight),
+            boxShadow: MeadowShadows.soft,
           ),
           child: Row(
             children: [
-              const Icon(Icons.child_care, color: Color(0xFF0EA5E9)),
-              const SizedBox(width: 12),
+              const Icon(Icons.child_care_rounded, color: MeadowColors.primary, size: 22),
+              const SizedBox(width: 10),
               Text(
                 'Reviewing For:',
-                style: GoogleFonts.inter(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                  color: const Color(0xFF1E293B),
-                ),
+                style: MeadowTypography.label.copyWith(fontSize: 13),
               ),
               const Spacer(),
-              DropdownButton<String>(
-                value: _selectedChildId,
-                underline: const SizedBox.shrink(),
-                items: children.map((c) {
-                  return DropdownMenuItem<String>(
-                    value: c.childId,
-                    child: Text(
-                      '${c.name} (${c.ageYears} yrs)',
-                      style: GoogleFonts.inter(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                        color: const Color(0xFF0F172A),
+              DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _selectedChildId,
+                  icon: const Icon(Icons.keyboard_arrow_down, size: 18, color: MeadowColors.textSecondary),
+                  items: children.map((c) {
+                    return DropdownMenuItem<String>(
+                      value: c.childId,
+                      child: Text(
+                        '${c.name} (${c.ageYears} yrs)',
+                        style: MeadowTypography.body.copyWith(fontSize: 13, fontWeight: FontWeight.bold),
                       ),
-                    ),
-                  );
-                }).toList(),
-                onChanged: (val) {
-                  setState(() => _selectedChildId = val);
-                },
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                    if (val != null) setState(() => _selectedChildId = val);
+                  },
+                ),
               ),
             ],
           ),
@@ -226,24 +243,139 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
     );
   }
 
+  // =========================================================================
+  // SECTION SELECTOR NAVIGATION PILLS
+  // =========================================================================
+  Widget _buildSectionSelector(String userId) {
+    return StreamBuilder<List<ContactConsentModel>>(
+      stream: _consentService.getIncomingRequestsStream(userId),
+      builder: (context, consentSnap) {
+        final pendingConsents = consentSnap.data ?? [];
+        final pendingCount = pendingConsents.length;
+
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _buildNavPill('overview', 'Overview & Guide', Icons.dashboard_outlined),
+              const SizedBox(width: 8),
+              _buildNavPill('recommendations', 'Recommendations', Icons.lightbulb_outline),
+              const SizedBox(width: 8),
+              _buildNavPill(
+                'consents',
+                'Contact Requests',
+                Icons.security_outlined,
+                badgeCount: pendingCount,
+              ),
+              const SizedBox(width: 8),
+              _buildNavPill('directory', 'Find Specialists', Icons.person_search_outlined),
+              const SizedBox(width: 8),
+              _buildNavPill('summaries', 'Session Summaries', Icons.assignment_outlined),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildNavPill(String sectionId, String label, IconData icon, {int badgeCount = 0}) {
+    final isSelected = _activeSection == sectionId;
+    return InkWell(
+      onTap: () => setState(() => _activeSection = sectionId),
+      borderRadius: BorderRadius.circular(20),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? MeadowColors.primary : MeadowColors.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? MeadowColors.primary : MeadowColors.borderLight,
+          ),
+          boxShadow: isSelected ? MeadowShadows.soft : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: isSelected ? Colors.white : MeadowColors.textSecondary,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected ? Colors.white : MeadowColors.textSecondary,
+              ),
+            ),
+            if (badgeCount > 0) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isSelected ? Colors.white : MeadowColors.error,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '$badgeCount',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: isSelected ? MeadowColors.primary : Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // =========================================================================
+  // ASSIGNED GUIDE & CASES SECTION
+  // =========================================================================
   Widget _buildCasesSection(List<SpecialistCaseModel> cases) {
     if (cases.isEmpty) {
       return Container(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(22),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
+          color: MeadowColors.surface,
+          borderRadius: BorderRadius.circular(MeadowRadius.xl),
+          border: Border.all(color: MeadowColors.borderLight),
+          boxShadow: MeadowShadows.card,
         ),
-        child: Row(
+        child: Column(
           children: [
-            const Icon(Icons.info_outline, color: Color(0xFF0EA5E9), size: 24),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(
-                'No active guide or pending requests for this child yet. Choose a verified specialist below to begin consultation.',
-                style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: const BoxDecoration(
+                color: MeadowColors.primarySurface,
+                shape: BoxShape.circle,
               ),
+              child: const Icon(Icons.person_outline_rounded, color: MeadowColors.primary, size: 36),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'No Learning Guide Assigned Yet',
+              style: MeadowTypography.h3,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Connect with a certified LittleLumin Guide to receive personalized developmental plans, milestone observations, and dedicated consultation.',
+              style: MeadowTypography.body.copyWith(color: MeadowColors.textSecondary, fontSize: 13),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () => setState(() => _activeSection = 'directory'),
+              icon: const Icon(Icons.search_rounded, size: 18),
+              label: const Text('Browse Verified Specialists'),
+              style: MeadowButtons.small(),
             ),
           ],
         ),
@@ -255,32 +387,23 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
       children: [
         Row(
           children: [
-            const Icon(Icons.shield_outlined, color: Color(0xFF0EA5E9), size: 20),
+            const Icon(Icons.verified_user_rounded, color: MeadowColors.primary, size: 20),
             const SizedBox(width: 8),
-            Text(
-              'Your Selected Guide & Consultation Requests',
-              style: GoogleFonts.inter(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: const Color(0xFF0F172A),
-              ),
-            ),
+            Text('Assigned Guide & Case Status', style: MeadowTypography.h2),
           ],
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         Text(
-          'Your active consultations and pending requests are listed below. Each consultation is isolated with explicit consent.',
-          style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B)),
+          'Your active consultations and pending requests are listed below.',
+          style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textSecondary),
         ),
         const SizedBox(height: 14),
         ListView.separated(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: cases.length,
-          separatorBuilder: (context, index) => const SizedBox(height: 12),
-          itemBuilder: (context, index) {
-            return _buildParentCaseCard(cases[index]);
-          },
+          separatorBuilder: (context, index) => const SizedBox(height: 14),
+          itemBuilder: (context, index) => _buildParentCaseCard(cases[index]),
         ),
       ],
     );
@@ -294,53 +417,44 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
     switch (c.status) {
       case CaseStatus.accepted:
       case CaseStatus.active:
-        statusColor = const Color(0xFF10B981);
+        statusColor = MeadowColors.success;
         statusLabel = 'ACTIVE CONSULTATION';
-        statusIcon = Icons.check_circle_outline;
+        statusIcon = Icons.check_circle_rounded;
         break;
       case CaseStatus.pending:
-        statusColor = const Color(0xFFF59E0B);
+        statusColor = MeadowColors.warning;
         statusLabel = 'AWAITING GUIDE ACCEPTANCE';
-        statusIcon = Icons.hourglass_top_outlined;
+        statusIcon = Icons.hourglass_top_rounded;
         break;
       case CaseStatus.declined:
-        statusColor = const Color(0xFF64748B);
+        statusColor = MeadowColors.textTertiary;
         statusLabel = 'DECLINED';
         statusIcon = Icons.cancel_outlined;
         break;
       case CaseStatus.revoked:
-        statusColor = const Color(0xFFEF4444);
+        statusColor = MeadowColors.error;
         statusLabel = 'CONSENT WITHDRAWN';
         statusIcon = Icons.lock_outline;
         break;
       case CaseStatus.completed:
-        statusColor = const Color(0xFF0EA5E9);
+        statusColor = MeadowColors.cognitive;
         statusLabel = 'COMPLETED';
         statusIcon = Icons.task_alt;
         break;
     }
 
-    final isClinical = c.specialistRole.contains('clinical');
     final isAuthorized = c.canAccessChildData;
 
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        color: MeadowColors.surface,
+        borderRadius: BorderRadius.circular(MeadowRadius.xl),
         border: Border.all(
-          color: c.status == CaseStatus.revoked
-              ? const Color(0xFFFEE2E2)
-              : (isAuthorized ? const Color(0xFF10B981).withOpacity(0.3) : const Color(0xFFE2E8F0)),
+          color: isAuthorized ? MeadowColors.primary.withOpacity(0.3) : MeadowColors.borderLight,
           width: isAuthorized ? 1.5 : 1,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: MeadowShadows.card,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -348,11 +462,18 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
           Row(
             children: [
               CircleAvatar(
-                radius: 22,
+                radius: 24,
                 backgroundColor: statusColor.withOpacity(0.12),
-                child: Icon(statusIcon, color: statusColor, size: 22),
+                child: Text(
+                  c.specialistName.isNotEmpty ? c.specialistName[0].toUpperCase() : 'S',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontWeight: FontWeight.bold,
+                    color: statusColor,
+                    fontSize: 18,
+                  ),
+                ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -362,7 +483,7 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
                         Flexible(
                           child: Text(
                             c.specialistName,
-                            style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16),
+                            style: MeadowTypography.label.copyWith(fontSize: 16),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -370,24 +491,24 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: isClinical ? const Color(0xFFEEF2FF) : const Color(0xFFF0FDF4),
+                            color: MeadowColors.primarySurface,
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            isClinical ? 'Clinical Specialist' : 'Learning Guide',
-                            style: GoogleFonts.inter(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: isClinical ? const Color(0xFF4F46E5) : const Color(0xFF16A34A),
+                            c.specialistRole.replaceAll('_', ' ').toUpperCase(),
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: MeadowColors.primary,
                             ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 3),
                     Text(
-                      'Purpose: ${c.purpose}',
-                      style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
+                      'Focus: ${c.purpose}',
+                      style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textSecondary),
                     ),
                   ],
                 ),
@@ -398,16 +519,23 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
                   color: statusColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: Text(
-                  statusLabel,
-                  style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: statusColor),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(statusIcon, size: 12, color: statusColor),
+                    const SizedBox(width: 4),
+                    Text(
+                      statusLabel,
+                      style: GoogleFonts.plusJakartaSans(fontSize: 9, fontWeight: FontWeight.bold, color: statusColor),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
 
-          // Categories authorized
+          // Authorized data categories tags
           Wrap(
             spacing: 6,
             runSpacing: 4,
@@ -415,20 +543,20 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
               return Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
+                  color: MeadowColors.surfaceAlt,
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   cat.replaceAll('_', ' ').toUpperCase(),
-                  style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF334155), fontWeight: FontWeight.w500),
+                  style: MeadowTypography.caption.copyWith(fontSize: 9, color: MeadowColors.textSecondary),
                 ),
               );
             }).toList(),
           ),
 
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
 
-          // Action Buttons: Chat, Contact Request, WhatsApp, Withdraw Consent
+          // Action Buttons: Chat, Direct Contact, Withdraw Consent
           Row(
             children: [
               if (isAuthorized) ...[
@@ -436,25 +564,18 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
                   onPressed: () => _openChat(c),
                   icon: const Icon(Icons.chat_bubble_outline, size: 16),
                   label: const Text('Message Guide'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0EA5E9),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    textStyle: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
+                  style: MeadowButtons.small(),
                 ),
                 const SizedBox(width: 8),
                 OutlinedButton.icon(
                   onPressed: () => _openContactSharingDialog(c),
                   icon: const Icon(Icons.contact_phone_outlined, size: 16),
-                  label: const Text('Contact Details'),
+                  label: const Text('Direct Contact'),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF0EA5E9),
-                    side: const BorderSide(color: Color(0xFF0EA5E9)),
+                    foregroundColor: MeadowColors.primary,
+                    side: const BorderSide(color: MeadowColors.border),
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    textStyle: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
               ],
@@ -462,19 +583,19 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
               if (c.status == CaseStatus.pending)
                 TextButton.icon(
                   onPressed: () => _cancelPendingRequest(c),
-                  icon: const Icon(Icons.close, size: 15, color: Colors.redAccent),
-                  label: const Text('Cancel Request', style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+                  icon: const Icon(Icons.close, size: 15, color: MeadowColors.error),
+                  label: const Text('Cancel Request', style: TextStyle(color: MeadowColors.error, fontSize: 12)),
                 )
               else if (isAuthorized)
                 TextButton.icon(
                   onPressed: () => _confirmWithdrawConsent(c),
-                  icon: const Icon(Icons.cancel_outlined, size: 14, color: Color(0xFFEF4444)),
-                  label: const Text('Withdraw Consent', style: TextStyle(color: Color(0xFFEF4444), fontSize: 12)),
+                  icon: const Icon(Icons.cancel_outlined, size: 14, color: MeadowColors.error),
+                  label: const Text('Withdraw Consent', style: TextStyle(color: MeadowColors.error, fontSize: 12)),
                 ),
             ],
           ),
 
-          // Stream contact sharing status for this case
+          // Approved contact details card if available
           _buildApprovedContactInfo(c),
         ],
       ),
@@ -491,23 +612,23 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
         if (approvedRequests.isEmpty) return const SizedBox.shrink();
 
         return Container(
-          margin: const EdgeInsets.only(top: 12),
+          margin: const EdgeInsets.only(top: 14),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: const Color(0xFFF0FDF4),
+            color: MeadowColors.primarySurface,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFFBBF7D0)),
+            border: Border.all(color: MeadowColors.sageLight),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  const Icon(Icons.verified_outlined, size: 16, color: Color(0xFF16A34A)),
+                  const Icon(Icons.verified_outlined, size: 16, color: MeadowColors.primary),
                   const SizedBox(width: 6),
                   Text(
                     'Direct Contact Details (Consent Granted):',
-                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF166534)),
+                    style: MeadowTypography.label.copyWith(fontSize: 12, color: MeadowColors.primaryDark),
                   ),
                 ],
               ),
@@ -515,31 +636,32 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
               ...approvedRequests.map((req) {
                 final isPhoneOrWA = req.requestedItem == ContactItemType.phone || req.requestedItem == ContactItemType.whatsapp;
                 return Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
+                  padding: const EdgeInsets.only(bottom: 4),
                   child: Row(
                     children: [
                       Text(
                         '${req.requestedItem.name.toUpperCase()}: ${req.sharedContactValue}',
-                        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF1F2937)),
+                        style: MeadowTypography.body.copyWith(fontSize: 12, fontWeight: FontWeight.bold),
                       ),
                       if (isPhoneOrWA) ...[
                         const SizedBox(width: 8),
                         InkWell(
                           onTap: () => _launchWhatsApp(req.sharedContactValue ?? '', c),
+                          borderRadius: BorderRadius.circular(6),
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
                               color: const Color(0xFF25D366),
                               borderRadius: BorderRadius.circular(6),
                             ),
-                            child: Row(
+                            child: const Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(Icons.chat, size: 12, color: Colors.white),
-                                const SizedBox(width: 4),
+                                Icon(Icons.chat, size: 12, color: Colors.white),
+                                SizedBox(width: 4),
                                 Text(
                                   'WhatsApp',
-                                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
                                 ),
                               ],
                             ),
@@ -557,6 +679,947 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
     );
   }
 
+  // =========================================================================
+  // RECOMMENDATIONS SECTION
+  // =========================================================================
+  Widget _buildRecommendationsPreviewSection(String childId) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.lightbulb_outline_rounded, color: MeadowColors.gold, size: 20),
+                const SizedBox(width: 8),
+                Text('Personalized Recommendations', style: MeadowTypography.h2),
+              ],
+            ),
+            TextButton(
+              onPressed: () => setState(() => _activeSection = 'recommendations'),
+              child: const Text('View All'),
+            ),
+          ],
+        ),
+        _buildRecommendationsStream(childId, limit: 2),
+      ],
+    );
+  }
+
+  Widget _buildRecommendationsSection(String childId) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.lightbulb_outline_rounded, color: MeadowColors.gold, size: 22),
+            const SizedBox(width: 8),
+            Text('LLG Recommendations & Activity Guidance', style: MeadowTypography.h2),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Personalized activities prescribed by your verified guide based on evaluated developmental needs.',
+          style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textSecondary),
+        ),
+        const SizedBox(height: 16),
+        _buildRecommendationsStream(childId),
+      ],
+    );
+  }
+
+  Widget _buildRecommendationsStream(String childId, {int? limit}) {
+    return StreamBuilder<List<RecommendationModel>>(
+      stream: _recommendationService.getChildRecommendationsStream(childId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()));
+        }
+
+        final recs = snapshot.data ?? [];
+        if (recs.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: MeadowColors.surface,
+              borderRadius: BorderRadius.circular(MeadowRadius.xl),
+              border: Border.all(color: MeadowColors.borderLight),
+            ),
+            child: Center(
+              child: Column(
+                children: [
+                  const Icon(Icons.lightbulb_outline, size: 36, color: MeadowColors.sage),
+                  const SizedBox(height: 8),
+                  Text('No Activity Recommendations Yet', style: MeadowTypography.label),
+                  const SizedBox(height: 4),
+                  Text(
+                    'When your guide prescribes personalized activities, they will appear here.',
+                    style: MeadowTypography.caption.copyWith(color: MeadowColors.textSecondary),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        final displayList = limit != null ? recs.take(limit).toList() : recs;
+
+        return ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: displayList.length,
+          separatorBuilder: (context, i) => const SizedBox(height: 12),
+          itemBuilder: (context, i) => _buildRecommendationCard(displayList[i]),
+        );
+      },
+    );
+  }
+
+  Widget _buildRecommendationCard(RecommendationModel rec) {
+    final domainColor = MeadowDomain.colorFor(rec.skillDomain);
+    final domainSurface = MeadowDomain.surfaceFor(rec.skillDomain);
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: MeadowColors.surface,
+        borderRadius: BorderRadius.circular(MeadowRadius.xl),
+        border: Border.all(color: MeadowColors.borderLight),
+        boxShadow: MeadowShadows.card,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: domainSurface,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  MeadowDomain.labelFor(rec.skillDomain),
+                  style: GoogleFonts.plusJakartaSans(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 10,
+                    color: domainColor,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  rec.title,
+                  style: MeadowTypography.label.copyWith(fontSize: 15),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: MeadowColors.surfaceAlt,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  rec.status.name.replaceAll('_', ' ').toUpperCase(),
+                  style: GoogleFonts.plusJakartaSans(fontSize: 9, fontWeight: FontWeight.bold, color: MeadowColors.primary),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Recommended by ${rec.llgName} • ${rec.durationMinutes} mins • ${rec.frequency}',
+            style: MeadowTypography.caption.copyWith(color: MeadowColors.textSecondary, fontSize: 11),
+          ),
+          if (rec.rationale.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Rationale: ${rec.rationale}',
+              style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textPrimary),
+            ),
+          ],
+          if (rec.instructions.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            ...rec.instructions.take(3).map((ins) => Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text('• $ins', style: MeadowTypography.caption.copyWith(color: MeadowColors.textSecondary)),
+            )),
+          ],
+          if (rec.hasParentResponded) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: MeadowColors.surfaceAlt,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded, size: 16, color: MeadowColors.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Your Response: ${rec.parentResponse.name.replaceAll('_', ' ').toUpperCase()}${rec.parentFeedback != null ? " — \"${rec.parentFeedback}\"" : ""}',
+                      style: MeadowTypography.caption.copyWith(fontWeight: FontWeight.bold, fontSize: 11),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => _openRecommendationFeedbackDialog(rec),
+              icon: const Icon(Icons.rate_review_outlined, size: 16),
+              label: Text(rec.hasParentResponded ? 'Update Feedback' : 'Record Activity Feedback'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: MeadowColors.primary,
+                side: const BorderSide(color: MeadowColors.primary),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openRecommendationFeedbackDialog(RecommendationModel rec) {
+    ParentActivityResponse selected = rec.parentResponse != ParentActivityResponse.none
+        ? rec.parentResponse
+        : ParentActivityResponse.completed;
+    final feedbackController = TextEditingController(text: rec.parentFeedback ?? '');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text('Activity Feedback: ${rec.title}', style: MeadowTypography.h3),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'How did your child participate in this activity?',
+                  style: MeadowTypography.body.copyWith(fontSize: 13, color: MeadowColors.textSecondary),
+                ),
+                const SizedBox(height: 14),
+                ...ParentActivityResponse.values.where((r) => r != ParentActivityResponse.none).map((resp) {
+                  return RadioListTile<ParentActivityResponse>(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: Text(
+                      resp.name.replaceAll('_', ' ').toUpperCase(),
+                      style: MeadowTypography.label.copyWith(fontSize: 12),
+                    ),
+                    value: resp,
+                    groupValue: selected,
+                    activeColor: MeadowColors.primary,
+                    onChanged: (val) {
+                      if (val != null) setDialogState(() => selected = val);
+                    },
+                  );
+                }),
+                const SizedBox(height: 12),
+                Text('Parent Observations / Notes:', style: MeadowTypography.label.copyWith(fontSize: 12)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: feedbackController,
+                  maxLines: 2,
+                  decoration: InputDecoration(
+                    hintText: 'e.g. Enjoyed the sensory game, needed assistance with grip...',
+                    hintStyle: MeadowTypography.caption.copyWith(color: MeadowColors.textTertiary),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                setState(() => _isLoading = true);
+                try {
+                  await _recommendationService.submitParentResponse(
+                    recommendationId: rec.id,
+                    response: selected,
+                    feedback: feedbackController.text.trim(),
+                  );
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('✅ Feedback submitted to guide!'), backgroundColor: MeadowColors.primary),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error: $e'), backgroundColor: MeadowColors.error),
+                    );
+                  }
+                } finally {
+                  if (mounted) setState(() => _isLoading = false);
+                }
+              },
+              style: MeadowButtons.small(),
+              child: const Text('Submit Feedback'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // =========================================================================
+  // CONTACT CONSENTS & PRIVACY SECTION
+  // =========================================================================
+  Widget _buildContactConsentsPreviewSection(String userId) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.security_rounded, color: MeadowColors.motor, size: 20),
+                const SizedBox(width: 8),
+                Text('Contact Sharing Requests', style: MeadowTypography.h2),
+              ],
+            ),
+            TextButton(
+              onPressed: () => setState(() => _activeSection = 'consents'),
+              child: const Text('Manage'),
+            ),
+          ],
+        ),
+        _buildIncomingConsentsStream(userId),
+      ],
+    );
+  }
+
+  Widget _buildContactConsentsSection(String userId, List<SpecialistCaseModel> cases) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.security_rounded, color: MeadowColors.motor, size: 22),
+            const SizedBox(width: 8),
+            Text('Contact Sharing & Explicit Consent', style: MeadowTypography.h2),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Under DPDP principles, your personal contact details are strictly protected and only shared after your explicit approval.',
+          style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textSecondary),
+        ),
+        const SizedBox(height: 16),
+
+        // Incoming pending requests
+        Text('Pending Requests Directed to You', style: MeadowTypography.h3),
+        const SizedBox(height: 8),
+        _buildIncomingConsentsStream(userId),
+
+        const SizedBox(height: 24),
+
+        // Active Approved Consents for cases
+        if (cases.isNotEmpty) ...[
+          Text('Active Approved Contact Permissions', style: MeadowTypography.h3),
+          const SizedBox(height: 8),
+          ...cases.map((c) => _buildApprovedContactInfo(c)),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildIncomingConsentsStream(String userId) {
+    return StreamBuilder<List<ContactConsentModel>>(
+      stream: _consentService.getIncomingRequestsStream(userId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()));
+        }
+
+        final requests = snapshot.data ?? [];
+        if (requests.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: MeadowColors.surface,
+              borderRadius: BorderRadius.circular(MeadowRadius.xl),
+              border: Border.all(color: MeadowColors.borderLight),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.check_circle_outline, color: MeadowColors.success, size: 22),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'No pending contact requests. Your contact info is safe and private.',
+                    style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textSecondary),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: requests.length,
+          separatorBuilder: (context, i) => const SizedBox(height: 12),
+          itemBuilder: (context, i) => _buildIncomingConsentCard(requests[i]),
+        );
+      },
+    );
+  }
+
+  Widget _buildIncomingConsentCard(ContactConsentModel req) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: MeadowColors.surface,
+        borderRadius: BorderRadius.circular(MeadowRadius.xl),
+        border: Border.all(color: MeadowColors.warning.withOpacity(0.5), width: 1.5),
+        boxShadow: MeadowShadows.card,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: MeadowColors.goldSurface,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.phone_in_talk_rounded, color: MeadowColors.gold, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Request from ${req.requesterName}',
+                      style: MeadowTypography.label.copyWith(fontSize: 14),
+                    ),
+                    Text(
+                      'Requested: ${req.requestedItem.name.toUpperCase()}',
+                      style: MeadowTypography.caption.copyWith(color: MeadowColors.primary, fontWeight: FontWeight.bold, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Purpose stated: "${req.purpose}"',
+            style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textSecondary),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => _handleApproveConsent(req),
+                  style: MeadowButtons.small(),
+                  child: const Text('Accept & Share'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              OutlinedButton(
+                onPressed: () => _handleDeclineConsent(req),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: MeadowColors.error,
+                  side: const BorderSide(color: MeadowColors.error),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                child: const Text('Decline'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _handleApproveConsent(ContactConsentModel req) {
+    final contactController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Approve Contact Sharing', style: MeadowTypography.h3),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Confirm sharing your ${req.requestedItem.name.toUpperCase()} with ${req.requesterName} for consultation.',
+              style: MeadowTypography.body.copyWith(fontSize: 13, color: MeadowColors.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: contactController,
+              decoration: InputDecoration(
+                labelText: 'Contact Detail to Share (optional override)',
+                hintText: 'Leave blank to use profile default',
+                hintStyle: MeadowTypography.caption.copyWith(color: MeadowColors.textTertiary),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              setState(() => _isLoading = true);
+              try {
+                await _consentService.respondToRequest(
+                  requestId: req.id,
+                  approve: true,
+                  contactValueIfApproved: contactController.text.trim().isNotEmpty
+                      ? contactController.text.trim()
+                      : null,
+                );
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('✅ Contact sharing approved.'), backgroundColor: MeadowColors.success),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed: $e'), backgroundColor: MeadowColors.error),
+                  );
+                }
+              } finally {
+                if (mounted) setState(() => _isLoading = false);
+              }
+            },
+            style: MeadowButtons.small(),
+            child: const Text('Confirm & Share'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _handleDeclineConsent(ContactConsentModel req) async {
+    final reasonController = TextEditingController();
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Decline Request?', style: MeadowTypography.h3),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to decline contact sharing with ${req.requesterName}?',
+              style: MeadowTypography.body.copyWith(fontSize: 13, color: MeadowColors.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonController,
+              decoration: InputDecoration(
+                labelText: 'Reason for declining (optional)',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: MeadowColors.error, foregroundColor: Colors.white),
+            child: const Text('Decline Request'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      setState(() => _isLoading = true);
+      try {
+        await _consentService.respondToRequest(
+          requestId: req.id,
+          approve: false,
+          declineReason: reasonController.text.trim(),
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Request declined.')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: MeadowColors.error),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  // =========================================================================
+  // SPECIALIST DIRECTORY SECTION
+  // =========================================================================
+  Widget _buildSpecialistsDirectorySection(Set<String> activeOrPendingIds, bool hasActiveRelationship) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.person_search_rounded, color: MeadowColors.primary, size: 22),
+            const SizedBox(width: 8),
+            Text('Explore Verified Specialists', style: MeadowTypography.h2),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          hasActiveRelationship
+              ? 'Your child currently has an assigned guide. You can also connect with specialists for different developmental areas.'
+              : 'Browse certified child development professionals and request tailored developmental guidance.',
+          style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textSecondary),
+        ),
+        const SizedBox(height: 16),
+        _buildSpecialistsList(activeOrPendingIds, hasActiveRelationship),
+      ],
+    );
+  }
+
+  Widget _buildSpecialistsList(Set<String> activeOrPendingIds, bool hasActiveRelationship) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore
+          .collection('llgProfiles')
+          .where('isVerified', isEqualTo: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()));
+        }
+
+        final docs = snapshot.data?.docs ?? [];
+        final availableDocs = docs.where((d) => !activeOrPendingIds.contains(d.id)).toList();
+
+        if (availableDocs.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(24),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: MeadowColors.surface,
+              borderRadius: BorderRadius.circular(MeadowRadius.xl),
+              border: Border.all(color: MeadowColors.borderLight),
+            ),
+            child: Column(
+              children: [
+                const Icon(Icons.check_circle_outline, size: 36, color: MeadowColors.success),
+                const SizedBox(height: 12),
+                Text(
+                  activeOrPendingIds.isNotEmpty
+                      ? 'All available specialists are already connected in your consultation section.'
+                      : 'No other verified specialists available right now.',
+                  textAlign: TextAlign.center,
+                  style: MeadowTypography.label.copyWith(fontSize: 13),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: availableDocs.length,
+          separatorBuilder: (context, index) => const SizedBox(height: 16),
+          itemBuilder: (context, index) {
+            final data = availableDocs[index].data() as Map<String, dynamic>;
+            final llgId = availableDocs[index].id;
+            return _buildSpecialistCard(llgId, data, hasActiveRelationship);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildSpecialistCard(String llgId, Map<String, dynamic> data, bool hasActiveRelationship) {
+    final name = data['name'] ?? 'Child Specialist';
+    final qualification = data['qualification'] ?? 'Development Specialist';
+    final experience = data['experience'] ?? '5+ years';
+    final specialization = data['specialization'] ?? 'Early Childhood Development';
+    final consultationMode = data['consultationMode'] ?? 'Online & In-Person';
+    final bio = data['bio'] ?? 'Dedicated to supporting healthy milestones and cognitive growth.';
+    final userType = (data['userType'] ?? 'llg').toString().toLowerCase();
+    final isClinical = userType.contains('clinical');
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: MeadowColors.surface,
+        borderRadius: BorderRadius.circular(MeadowRadius.xl),
+        border: Border.all(color: MeadowColors.borderLight),
+        boxShadow: MeadowShadows.card,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: MeadowColors.primarySurface,
+                child: Text(
+                  name.isNotEmpty ? name[0].toUpperCase() : 'S',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: MeadowColors.primary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            name,
+                            style: MeadowTypography.label.copyWith(fontSize: 15),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        const Icon(Icons.verified, size: 16, color: MeadowColors.primary),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '$qualification • $experience experience',
+                      style: MeadowTypography.caption.copyWith(color: MeadowColors.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              _buildBadge(isClinical ? Icons.medical_services_outlined : Icons.school_outlined, isClinical ? 'Clinical Specialist' : 'Learning Guide'),
+              _buildBadge(Icons.psychology_outlined, specialization),
+              _buildBadge(Icons.videocam_outlined, consultationMode),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            bio,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textSecondary),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              OutlinedButton.icon(
+                onPressed: () => _viewGuideProfile(name, data),
+                icon: const Icon(Icons.visibility_outlined, size: 15),
+                label: const Text('View Profile'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: MeadowColors.textPrimary,
+                  side: const BorderSide(color: MeadowColors.border),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _openRequestReviewDialog(llgId, name, userType, hasActiveRelationship),
+                  icon: const Icon(Icons.shield_outlined, size: 15),
+                  label: Text(hasActiveRelationship ? 'Request Alternative Focus' : 'Authorize Consultation'),
+                  style: MeadowButtons.small(),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBadge(IconData icon, String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: MeadowColors.surfaceAlt,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: MeadowColors.textSecondary),
+          const SizedBox(width: 4),
+          Text(text, style: MeadowTypography.caption.copyWith(fontSize: 11, color: MeadowColors.textSecondary)),
+        ],
+      ),
+    );
+  }
+
+  // =========================================================================
+  // CONSULTATION SUMMARIES SECTION
+  // =========================================================================
+  Widget _buildConsultationSummariesSection(String childId) {
+    return StreamBuilder<List<ConsultationSummaryModel>>(
+      stream: _summaryService.getChildSummariesStream(childId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()));
+        }
+
+        final summaries = snapshot.data ?? [];
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.assignment_outlined, color: MeadowColors.primary, size: 20),
+                const SizedBox(width: 8),
+                Text('Documented Consultation Summaries', style: MeadowTypography.h2),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Official clinical and developmental session notes documented by your specialist.',
+              style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textSecondary),
+            ),
+            const SizedBox(height: 14),
+
+            if (summaries.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: MeadowColors.surface,
+                  borderRadius: BorderRadius.circular(MeadowRadius.xl),
+                  border: Border.all(color: MeadowColors.borderLight),
+                ),
+                child: Center(
+                  child: Column(
+                    children: [
+                      const Icon(Icons.article_outlined, size: 36, color: MeadowColors.sage),
+                      const SizedBox(height: 8),
+                      Text('No Consultation Summaries Documented Yet', style: MeadowTypography.label),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Session notes and agreed follow-up plans from your specialist will appear here.',
+                        style: MeadowTypography.caption.copyWith(color: MeadowColors.textSecondary),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: summaries.length,
+                separatorBuilder: (context, index) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  final s = summaries[index];
+                  return Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: MeadowColors.surface,
+                      borderRadius: BorderRadius.circular(MeadowRadius.xl),
+                      border: Border.all(color: MeadowColors.borderLight),
+                      boxShadow: MeadowShadows.card,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: MeadowColors.primarySurface,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                s.consultationMode.toUpperCase(),
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 10,
+                                  color: MeadowColors.primary,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'With ${s.llgName}',
+                                style: MeadowTypography.label.copyWith(fontSize: 14),
+                              ),
+                            ),
+                            Text(
+                              DateFormat.yMMMd().format(s.consultationDate),
+                              style: MeadowTypography.caption.copyWith(color: MeadowColors.textTertiary),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text('Reason: ${s.consultationReason}', style: MeadowTypography.body.copyWith(fontSize: 12, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 4),
+                        Text('Guidance: ${s.guidanceProvided}', style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textSecondary)),
+                        if (s.agreedFollowUpActions.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Text('Agreed Actions:', style: MeadowTypography.caption.copyWith(fontWeight: FontWeight.bold, color: MeadowColors.primary)),
+                          ...s.agreedFollowUpActions.map((a) => Padding(
+                            padding: const EdgeInsets.only(left: 6, top: 2),
+                            child: Text('• $a', style: MeadowTypography.caption.copyWith(color: MeadowColors.textSecondary)),
+                          )),
+                        ],
+                      ],
+                    ),
+                  );
+                },
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  // =========================================================================
+  // ACTIONS: CHAT, WHATSAPP, REQUEST CONSULTATION, WITHDRAW CONSENT
+  // =========================================================================
   void _openChat(SpecialistCaseModel c) {
     final user = _auth.currentUser;
     if (user == null) return;
@@ -577,7 +1640,6 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
   }
 
   Future<void> _launchWhatsApp(String phone, SpecialistCaseModel c) async {
-    // Clean phone number
     final cleanPhone = phone.replaceAll(RegExp(r'[^0-9+]'), '');
     final confirmed = await showDialog<bool>(
       context: context,
@@ -587,21 +1649,18 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
           children: [
             const Icon(Icons.open_in_new, color: Color(0xFF25D366)),
             const SizedBox(width: 8),
-            Text('Open WhatsApp Consultation?', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16)),
+            Text('Open WhatsApp Consultation?', style: MeadowTypography.h3),
           ],
         ),
         content: Text(
           'You are leaving LittleLumin to communicate on WhatsApp.\n\nNotice:\n• External WhatsApp messages are conducted outside LittleLumin.\n• Your guide (${c.specialistName}) will document an authorized Consultation Summary in your child\'s LittleLumin file following your call.',
-          style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569), height: 1.4),
+          style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textSecondary, height: 1.4),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF25D366),
-              foregroundColor: Colors.white,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF25D366), foregroundColor: Colors.white),
             child: const Text('Continue to WhatsApp'),
           ),
         ],
@@ -632,16 +1691,16 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text('Request Contact Sharing', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16)),
+          title: Text('Request Contact Sharing', style: MeadowTypography.h3),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 'Request ${c.specialistName}\'s direct contact details under explicit consent.',
-                style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
+                style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textSecondary),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
               DropdownButtonFormField<ContactItemType>(
                 value: selectedItem,
                 decoration: InputDecoration(
@@ -697,22 +1756,19 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text('✅ Contact sharing request submitted to guide.'),
-                        backgroundColor: Color(0xFF10B981),
+                        backgroundColor: MeadowColors.success,
                       ),
                     );
                   }
                 } catch (e) {
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                      SnackBar(content: Text('Error: $e'), backgroundColor: MeadowColors.error),
                     );
                   }
                 }
               },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0EA5E9),
-                foregroundColor: Colors.white,
-              ),
+              style: MeadowButtons.small(),
               child: const Text('Send Request'),
             ),
           ],
@@ -731,7 +1787,7 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep')),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: MeadowColors.error, foregroundColor: Colors.white),
             child: const Text('Cancel Request'),
           ),
         ],
@@ -750,7 +1806,7 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+            SnackBar(content: Text('Error: $e'), backgroundColor: MeadowColors.error),
           );
         }
       } finally {
@@ -769,26 +1825,20 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
-            const Icon(Icons.shield_moon_outlined, color: Colors.redAccent, size: 24),
+            const Icon(Icons.shield_moon_outlined, color: MeadowColors.error, size: 24),
             const SizedBox(width: 8),
-            Text('Withdraw Consent?', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16)),
+            Text('Withdraw Consent?', style: MeadowTypography.h3),
           ],
         ),
         content: Text(
           'Are you sure you want to withdraw consent for ${c.specialistName}?\n\nUnder our privacy controls, the specialist\'s access to ${c.childName}\'s developmental progress will be terminated immediately.',
-          style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569), height: 1.4),
+          style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textSecondary, height: 1.4),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Keep Active'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep Active')),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFEF4444),
-              foregroundColor: Colors.white,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: MeadowColors.error, foregroundColor: Colors.white),
             child: const Text('Withdraw Consent'),
           ),
         ],
@@ -803,267 +1853,20 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('✅ Consent withdrawn. Specialist access terminated immediately.'),
-              backgroundColor: Color(0xFF10B981),
+              backgroundColor: MeadowColors.success,
             ),
           );
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to revoke: $e'), backgroundColor: Colors.red),
+            SnackBar(content: Text('Failed to revoke: $e'), backgroundColor: MeadowColors.error),
           );
         }
       } finally {
         if (mounted) setState(() => _isLoading = false);
       }
     }
-  }
-
-  Widget _buildExploreHeader(bool hasActiveRelationship) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Explore Other Guides & Specialists',
-          style: GoogleFonts.inter(
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-            color: const Color(0xFF0F172A),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          hasActiveRelationship
-              ? 'Your child currently has an active assigned guide above. You can view profiles of other verified guides or request an alternative for a different developmental focus.'
-              : 'Browse certified child development professionals and request tailored developmental guidance.',
-          style: GoogleFonts.inter(
-            fontSize: 13,
-            color: const Color(0xFF64748B),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSpecialistsList(Set<String> activeOrPendingIds, bool hasActiveRelationship) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: _firestore
-          .collection('llgProfiles')
-          .where('isVerified', isEqualTo: true)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        final docs = snapshot.data?.docs ?? [];
-        // Filter out specialists already requested or active so user is never confused!
-        final availableDocs = docs.where((d) => !activeOrPendingIds.contains(d.id)).toList();
-
-        if (availableDocs.isEmpty) {
-          return Container(
-            padding: const EdgeInsets.all(24),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-            ),
-            child: Column(
-              children: [
-                const Icon(Icons.check_circle_outline, size: 40, color: Color(0xFF10B981)),
-                const SizedBox(height: 12),
-                Text(
-                  activeOrPendingIds.isNotEmpty
-                      ? 'All available specialists are already connected in your consultation section above.'
-                      : 'No other verified specialists available right now.',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.inter(
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF475569),
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-
-        return ListView.separated(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: availableDocs.length,
-          separatorBuilder: (context, index) => const SizedBox(height: 16),
-          itemBuilder: (context, index) {
-            final data = availableDocs[index].data() as Map<String, dynamic>;
-            final llgId = availableDocs[index].id;
-            return _buildSpecialistCard(llgId, data, hasActiveRelationship);
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildSpecialistCard(String llgId, Map<String, dynamic> data, bool hasActiveRelationship) {
-    final name = data['name'] ?? 'Child Specialist';
-    final qualification = data['qualification'] ?? 'Development Specialist';
-    final experience = data['experience'] ?? '5+ years';
-    final specialization = data['specialization'] ?? 'Early Childhood Development';
-    final consultationMode = data['consultationMode'] ?? 'Online & In-Person';
-    final bio = data['bio'] ?? 'Dedicated to supporting healthy milestones and cognitive growth.';
-    final userType = (data['userType'] ?? 'llg').toString().toLowerCase();
-    final isClinical = userType.contains('clinical');
-
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 26,
-                backgroundColor: isClinical
-                    ? const Color(0xFF4F46E5).withOpacity(0.12)
-                    : const Color(0xFF0EA5E9).withOpacity(0.12),
-                child: Text(
-                  name.isNotEmpty ? name[0].toUpperCase() : 'S',
-                  style: GoogleFonts.inter(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: isClinical ? const Color(0xFF4F46E5) : const Color(0xFF0EA5E9),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            name,
-                            style: GoogleFonts.inter(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF0F172A),
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        const Icon(Icons.verified, size: 18, color: Color(0xFF0EA5E9)),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '$qualification • $experience experience',
-                      style: GoogleFonts.inter(
-                        fontSize: 13,
-                        color: const Color(0xFF64748B),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              _buildBadge(
-                isClinical ? Icons.medical_services_outlined : Icons.school_outlined,
-                isClinical ? 'Clinical Specialist' : 'Learning Guide',
-              ),
-              _buildBadge(Icons.psychology_outlined, specialization),
-              _buildBadge(Icons.videocam_outlined, consultationMode),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            bio,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.inter(
-              fontSize: 13,
-              color: const Color(0xFF475569),
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              OutlinedButton.icon(
-                onPressed: () => _viewGuideProfile(name, data),
-                icon: const Icon(Icons.visibility_outlined, size: 16),
-                label: const Text('View Profile'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF334155),
-                  side: const BorderSide(color: Color(0xFFCBD5E1)),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () => _openRequestReviewDialog(llgId, name, userType, hasActiveRelationship),
-                  icon: const Icon(Icons.shield_outlined, size: 16),
-                  label: Text(hasActiveRelationship ? 'Request Alternative Focus' : 'Authorize & Request Review'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: isClinical ? const Color(0xFF4F46E5) : const Color(0xFF0EA5E9),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    textStyle: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBadge(IconData icon, String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: const Color(0xFF475569)),
-          const SizedBox(width: 6),
-          Text(
-            text,
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: const Color(0xFF334155),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   void _viewGuideProfile(String name, Map<String, dynamic> data) {
@@ -1099,10 +1902,10 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
                 children: [
                   CircleAvatar(
                     radius: 30,
-                    backgroundColor: const Color(0xFF0EA5E9).withOpacity(0.15),
+                    backgroundColor: MeadowColors.primarySurface,
                     child: Text(
                       name.isNotEmpty ? name[0].toUpperCase() : 'G',
-                      style: GoogleFonts.inter(fontSize: 22, fontWeight: FontWeight.bold, color: const Color(0xFF0284C7)),
+                      style: GoogleFonts.plusJakartaSans(fontSize: 22, fontWeight: FontWeight.bold, color: MeadowColors.primary),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -1110,15 +1913,15 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(name, style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.bold)),
+                        Text(name, style: MeadowTypography.h2),
                         const SizedBox(height: 4),
-                        Text(data['qualification'] ?? 'Verified Specialist', style: GoogleFonts.inter(color: Colors.grey[600], fontSize: 13)),
+                        Text(data['qualification'] ?? 'Verified Specialist', style: MeadowTypography.caption.copyWith(color: MeadowColors.textSecondary)),
                         const SizedBox(height: 2),
-                        Row(
+                        const Row(
                           children: [
-                            const Icon(Icons.verified, size: 16, color: Color(0xFF0EA5E9)),
-                            const SizedBox(width: 4),
-                            Text('Admin Verified Credentials', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF0EA5E9), fontWeight: FontWeight.w600)),
+                            Icon(Icons.verified, size: 16, color: MeadowColors.primary),
+                            SizedBox(width: 4),
+                            Text('Admin Verified Credentials', style: TextStyle(fontSize: 12, color: MeadowColors.primary, fontWeight: FontWeight.bold)),
                           ],
                         ),
                       ],
@@ -1127,7 +1930,7 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
                 ],
               ),
               const SizedBox(height: 20),
-              const Divider(),
+              const Divider(color: MeadowColors.borderLight),
               const SizedBox(height: 12),
               _buildProfileDetailRow('Specialization', data['specialization'] ?? 'Early Childhood'),
               _buildProfileDetailRow('Experience', data['experience'] ?? '5+ years'),
@@ -1135,11 +1938,11 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
               _buildProfileDetailRow('Languages', data['languages'] ?? 'English'),
               _buildProfileDetailRow('Modes', data['consultationMode'] ?? 'Online & Clinical'),
               const SizedBox(height: 16),
-              Text('About & Clinical Philosophy', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14)),
+              Text('About & Clinical Philosophy', style: MeadowTypography.label),
               const SizedBox(height: 6),
               Text(
                 data['bio'] ?? 'Dedicated to supporting healthy milestones.',
-                style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569), height: 1.5),
+                style: MeadowTypography.body.copyWith(fontSize: 13, color: MeadowColors.textSecondary, height: 1.5),
               ),
             ],
           ),
@@ -1156,10 +1959,10 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
         children: [
           SizedBox(
             width: 120,
-            child: Text(label, style: GoogleFonts.inter(fontSize: 13, color: Colors.grey[600], fontWeight: FontWeight.w500)),
+            child: Text(label, style: MeadowTypography.caption.copyWith(color: MeadowColors.textSecondary, fontWeight: FontWeight.w600)),
           ),
           Expanded(
-            child: Text(value, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A))),
+            child: Text(value, style: MeadowTypography.body.copyWith(fontSize: 13, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -1199,12 +2002,12 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
             children: [
-              const Icon(Icons.verified_user_outlined, color: Color(0xFF0EA5E9), size: 22),
+              const Icon(Icons.verified_user_outlined, color: MeadowColors.primary, size: 22),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   'Consultation with $llgName',
-                  style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 17),
+                  style: MeadowTypography.h3,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -1219,26 +2022,23 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFEF3C7),
+                      color: MeadowColors.goldSurface,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.4)),
+                      border: Border.all(color: MeadowColors.gold.withOpacity(0.4)),
                     ),
                     child: Text(
                       'Note: $childName already has an active consultation. You are adding an additional consultation for a specific focus.',
-                      style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFFB45309)),
+                      style: MeadowTypography.caption.copyWith(color: MeadowColors.textPrimary),
                     ),
                   ),
                   const SizedBox(height: 12),
                 ],
                 Text(
                   'Specify the consultation focus and authorize targeted learning progress sharing for $childName.',
-                  style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
+                  style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textSecondary),
                 ),
                 const SizedBox(height: 16),
-                Text(
-                  'Consultation Purpose:',
-                  style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13),
-                ),
+                Text('Consultation Purpose:', style: MeadowTypography.label.copyWith(fontSize: 12)),
                 const SizedBox(height: 6),
                 DropdownButtonFormField<String>(
                   value: selectedPurpose,
@@ -1258,47 +2058,44 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
                     if (val != null) setDialogState(() => selectedPurpose = val);
                   },
                 ),
-                const SizedBox(height: 16),
-                Text(
-                  'Parent Notes / Specific Questions:',
-                  style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13),
-                ),
+                const SizedBox(height: 14),
+                Text('Parent Notes / Specific Questions:', style: MeadowTypography.label.copyWith(fontSize: 12)),
                 const SizedBox(height: 6),
                 TextField(
                   controller: noteController,
                   maxLines: 2,
                   decoration: InputDecoration(
                     hintText: 'Share any specific questions or observations (optional)...',
-                    hintStyle: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+                    hintStyle: MeadowTypography.caption.copyWith(color: MeadowColors.textTertiary),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                     contentPadding: const EdgeInsets.all(12),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
+                    color: MeadowColors.surfaceAlt,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFCBD5E1)),
+                    border: Border.all(color: MeadowColors.borderLight),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.policy_outlined, size: 16, color: Color(0xFF0EA5E9)),
+                          const Icon(Icons.policy_outlined, size: 16, color: MeadowColors.primary),
                           const SizedBox(width: 6),
                           Text(
                             'DPDP Parental Consent Notice (v1.0)',
-                            style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A)),
+                            style: MeadowTypography.label.copyWith(fontSize: 12),
                           ),
                         ],
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        '• Authorized Data: $childName\'s name, age ($childAgeYears yrs), verified domain scores, and recent learning activities.\n• Excluded Data: Sensitive birth notes, medical history, and other children remain strictly private.\n• Validity: Active for 90 days. You can withdraw consent anytime.',
-                        style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF475569), height: 1.4),
+                        '• Authorized Data: $childName\'s name, age ($childAgeYears yrs), verified domain scores, and recent learning activities.\n• Excluded Data: Sensitive birth notes and medical history remain strictly private.\n• Validity: Active for 90 days. You can withdraw consent anytime.',
+                        style: MeadowTypography.caption.copyWith(color: MeadowColors.textSecondary, height: 1.4),
                       ),
                     ],
                   ),
@@ -1307,11 +2104,11 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
                   value: consentAuthorized,
-                  activeColor: const Color(0xFF0EA5E9),
+                  activeColor: MeadowColors.primary,
                   controlAffinity: ListTileControlAffinity.leading,
                   title: Text(
                     'I explicitly authorize sharing the specified learning data with $llgName for this consultation.',
-                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
+                    style: MeadowTypography.caption.copyWith(fontWeight: FontWeight.bold),
                   ),
                   onChanged: (val) {
                     setDialogState(() => consentAuthorized = val ?? false);
@@ -1321,10 +2118,7 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
             ),
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
             ElevatedButton(
               onPressed: !consentAuthorized
                   ? null
@@ -1333,7 +2127,7 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
                       final validationError = Validators.notes(notes);
                       if (validationError != null) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(validationError), backgroundColor: Colors.red),
+                          SnackBar(content: Text(validationError), backgroundColor: MeadowColors.error),
                         );
                         return;
                       }
@@ -1360,224 +2154,26 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text('✅ Consultation request submitted! Awaiting guide acceptance.'),
-                              backgroundColor: Color(0xFF10B981),
+                              backgroundColor: MeadowColors.success,
                             ),
                           );
                         }
                       } catch (e) {
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Failed to submit request: $e'), backgroundColor: Colors.red),
+                            SnackBar(content: Text('Failed to submit request: $e'), backgroundColor: MeadowColors.error),
                           );
                         }
                       } finally {
                         if (mounted) setState(() => _isLoading = false);
                       }
                     },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0EA5E9),
-                foregroundColor: Colors.white,
-              ),
+              style: MeadowButtons.small(),
               child: const Text('Authorize & Submit'),
             ),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildConsultationSummariesSection() {
-    if (_selectedChildId == null) return const SizedBox.shrink();
-
-    return StreamBuilder<List<dynamic>>(
-      stream: _summaryService.getChildSummariesStream(_selectedChildId!),
-      builder: (context, snapshot) {
-        final summaries = snapshot.data ?? [];
-        if (summaries.isEmpty) return const SizedBox.shrink();
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Documented Consultation Summaries (${summaries.length})',
-              style: GoogleFonts.inter(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: const Color(0xFF0F172A),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Official notes from sessions conducted with your specialist.',
-              style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B)),
-            ),
-            const SizedBox(height: 14),
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: summaries.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                final s = summaries[index];
-                return Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.article_outlined, color: Color(0xFF0EA5E9), size: 20),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Session with ${s.llgName} (${s.consultationMode})',
-                            style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14),
-                          ),
-                          const Spacer(),
-                          Text(
-                            DateFormat.yMMMd().format(s.consultationDate),
-                            style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Text('Guidance Provided:', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF334155))),
-                      const SizedBox(height: 2),
-                      Text(s.guidanceProvided, style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569))),
-                      if (s.agreedFollowUpActions.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Text('Agreed Actions:', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF334155))),
-                        ...s.agreedFollowUpActions.map((a) => Text('• $a', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)))),
-                      ],
-                    ],
-                  ),
-                );
-              },
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildObservationsSection() {
-    if (_selectedChildId == null) return const SizedBox.shrink();
-
-    return StreamBuilder<QuerySnapshot>(
-      stream: _firestore
-          .collection('llgObservations')
-          .where('childId', isEqualTo: _selectedChildId)
-          .snapshots(),
-      builder: (context, snapshot) {
-        final docs = snapshot.data?.docs ?? [];
-        if (docs.isEmpty) return const SizedBox.shrink();
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Past Specialist Observations',
-              style: GoogleFonts.inter(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: const Color(0xFF0F172A),
-              ),
-            ),
-            const SizedBox(height: 12),
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: docs.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 12),
-              itemBuilder: (context, idx) {
-                final obs = docs[idx].data() as Map<String, dynamic>;
-                final llgName = obs['llgName'] ?? 'Specialist';
-                final observation = obs['observation'] ?? '';
-                final severity = obs['severity'] ?? 'normal';
-                final recommendations = List<String>.from(obs['recommendations'] ?? []);
-
-                return Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.assignment_turned_in_outlined, color: Color(0xFF0EA5E9), size: 20),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Observation by $llgName',
-                            style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14),
-                          ),
-                          const Spacer(),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: severity == 'critical'
-                                  ? Colors.red.withOpacity(0.1)
-                                  : (severity == 'high'
-                                      ? Colors.orange.withOpacity(0.1)
-                                      : Colors.blue.withOpacity(0.1)),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              severity.toUpperCase(),
-                              style: GoogleFonts.inter(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: severity == 'critical'
-                                    ? Colors.red
-                                    : (severity == 'high' ? Colors.orange : Colors.blue),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        observation,
-                        style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF334155), height: 1.4),
-                      ),
-                      if (recommendations.isNotEmpty) ...[
-                        const SizedBox(height: 10),
-                        Text(
-                          'Recommendations:',
-                          style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 12, color: const Color(0xFF64748B)),
-                        ),
-                        const SizedBox(height: 4),
-                        ...recommendations.map((r) => Padding(
-                              padding: const EdgeInsets.only(left: 4, bottom: 3),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('• ', style: TextStyle(fontWeight: FontWeight.bold)),
-                                  Expanded(
-                                    child: Text(
-                                      r,
-                                      style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            )),
-                      ],
-                    ],
-                  ),
-                );
-              },
-            ),
-          ],
-        );
-      },
     );
   }
 }
