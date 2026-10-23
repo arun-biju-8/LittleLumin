@@ -46,6 +46,25 @@ class DesktopParentCompanionScreen extends StatefulWidget {
     this.initialIsChatOpen = false,
   });
 
+  static String getFriendlyDomainLabel(String domain) {
+    switch (domain.trim().toLowerCase()) {
+      case 'cognitive':
+        return 'Thinking and Learning';
+      case 'language':
+        return 'Talking and Listening';
+      case 'motor':
+        return 'Movement and Coordination';
+      case 'social':
+        return 'Social Skills';
+      case 'emotional':
+        return 'Understanding Feelings';
+      case 'creative':
+        return 'Creativity and Imagination';
+      default:
+        return MeadowDomain.labelFor(domain);
+    }
+  }
+
   @override
   State<DesktopParentCompanionScreen> createState() =>
       _DesktopParentCompanionScreenState();
@@ -73,8 +92,12 @@ class _DesktopParentCompanionScreenState
       widget.messagingService ?? MessagingService();
   late final SpecialistCaseService _caseService =
       widget.specialistCaseService ?? SpecialistCaseService();
-  final ScoreLedgerService _scoreService = ScoreLedgerService();
-  final JourneyService _journeyService = JourneyService();
+  late final ScoreLedgerService _scoreService = ScoreLedgerService(
+    firestore: widget.firestore,
+  );
+  late final JourneyService _journeyService = JourneyService(
+    firestore: widget.firestore,
+  );
 
   User? get _currentUser {
     try {
@@ -86,7 +109,7 @@ class _DesktopParentCompanionScreenState
 
   String? _selectedChildId;
   bool _isChatOpen = false;
-  String _chartDomainFilter = 'all'; // 'all' or domain name
+  final String _chartDomainFilter = 'all'; // 'all' or domain name
   String _activeNav = 'growth'; // 'growth', 'milestones', 'history', 'llg'
 
   final GlobalKey _growthSectionKey = GlobalKey();
@@ -108,24 +131,8 @@ class _DesktopParentCompanionScreenState
     'creative',
   ];
 
-  String _getFriendlyDomainLabel(String domain) {
-    switch (domain.trim().toLowerCase()) {
-      case 'cognitive':
-        return 'Thinking and Learning';
-      case 'language':
-        return 'Talking and Listening';
-      case 'motor':
-        return 'Movement and Coordination';
-      case 'social':
-        return 'Social Skills';
-      case 'emotional':
-        return 'Understanding Feelings';
-      case 'creative':
-        return 'Creativity and Imagination';
-      default:
-        return MeadowDomain.labelFor(domain);
-    }
-  }
+  String _getFriendlyDomainLabel(String domain) =>
+      DesktopParentCompanionScreen.getFriendlyDomainLabel(domain);
 
   String _getDomainDescription(String domain) {
     switch (domain.trim().toLowerCase()) {
@@ -1018,329 +1025,24 @@ class _DesktopParentCompanionScreenState
     required Color accentColor,
     String? tooltip,
   }) {
-    final cardContent = Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: MeadowColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: MeadowColors.borderLight),
-        boxShadow: MeadowShadows.card,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.8,
-                    color: MeadowColors.textSecondary,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: accentColor.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, size: 18, color: accentColor),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            value,
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              color: MeadowColors.textPrimary,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            subtitle,
-            style: MeadowTypography.caption.copyWith(
-              color: MeadowColors.textSecondary,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-      ),
+    return DesktopKPICard(
+      title: title,
+      value: value,
+      subtitle: subtitle,
+      icon: icon,
+      accentColor: accentColor,
+      tooltip: tooltip,
     );
-
-    if (tooltip != null && tooltip.isNotEmpty) {
-      return Tooltip(
-        message: tooltip,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: MeadowColors.primaryDark,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        textStyle: GoogleFonts.plusJakartaSans(
-          color: Colors.white,
-          fontSize: 11,
-        ),
-        child: cardContent,
-      );
-    }
-    return cardContent;
   }
 
   // =========================================================================
   // PROMINENT DEVELOPMENTAL PROGRESS CHART WORKSPACE
   // =========================================================================
   Widget _buildDevelopmentalPerformanceSection(ChildModel activeChild) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: MeadowColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: MeadowColors.borderLight),
-        boxShadow: MeadowShadows.card,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header with Domain Filter Selector
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "Your Child's Progress Over Time",
-                      style: MeadowTypography.h2,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      "See how your child's recorded progress changes over time.",
-                      style: MeadowTypography.body.copyWith(
-                        fontSize: 12,
-                        color: MeadowColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 16),
-              // Domain Filter Selector Chips
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  _buildChartFilterChip('all', 'All Skills'),
-                  ..._domains.map(
-                    (d) => _buildChartFilterChip(d, _getFriendlyDomainLabel(d)),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-
-          // Chart Canvas
-          FutureBuilder<List<Map<String, dynamic>>>(
-            future: _scoreService.getScoreHistory(
-              childId: activeChild.childId,
-              skillDomain: _chartDomainFilter == 'all'
-                  ? null
-                  : _chartDomainFilter,
-            ),
-            builder: (context, snapshot) {
-              final events = snapshot.data ?? [];
-              if (events.isEmpty) {
-                return Container(
-                  height: 240,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: MeadowColors.surfaceAlt.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: MeadowColors.borderLight,
-                      style: BorderStyle.solid,
-                    ),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.auto_graph_rounded,
-                        size: 48,
-                        color: MeadowColors.sage.withOpacity(0.5),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'No recorded activities yet for ${_chartDomainFilter == 'all' ? activeChild.name : _getFriendlyDomainLabel(_chartDomainFilter)}',
-                        style: MeadowTypography.label.copyWith(
-                          color: MeadowColors.textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 420),
-                        child: Text(
-                          "As your child plays interactive games and practices skills on your phone, progress updates will show up here.",
-                          textAlign: TextAlign.center,
-                          style: MeadowTypography.caption.copyWith(
-                            color: MeadowColors.textTertiary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }
-
-              // Reverse chronologically so left-to-right is oldest-to-newest
-              final chronological = events.reversed.toList();
-              final spots = <FlSpot>[];
-              double runningScore = 0;
-
-              for (int i = 0; i < chronological.length; i++) {
-                final ev = chronological[i];
-                final delta = (ev['appliedScoreDelta'] is num)
-                    ? (ev['appliedScoreDelta'] as num).toDouble()
-                    : 0.0;
-                runningScore = (runningScore + delta).clamp(0.0, 100.0);
-                spots.add(FlSpot(i.toDouble(), runningScore));
-              }
-
-              final chartColor = _chartDomainFilter == 'all'
-                  ? MeadowColors.primary
-                  : MeadowDomain.colorFor(_chartDomainFilter);
-
-              return SizedBox(
-                height: 250,
-                child: LineChart(
-                  LineChartData(
-                    gridData: FlGridData(
-                      show: true,
-                      drawVerticalLine: false,
-                      horizontalInterval: 20,
-                      getDrawingHorizontalLine: (val) => FlLine(
-                        color: MeadowColors.borderLight,
-                        strokeWidth: 1,
-                      ),
-                    ),
-                    titlesData: FlTitlesData(
-                      rightTitles: const AxisTitles(
-                        sideTitles: SideTitles(showTitles: false),
-                      ),
-                      topTitles: const AxisTitles(
-                        sideTitles: SideTitles(showTitles: false),
-                      ),
-                      leftTitles: AxisTitles(
-                        sideTitles: SideTitles(
-                          showTitles: true,
-                          interval: 20,
-                          reservedSize: 38,
-                          getTitlesWidget: (val, meta) => Text(
-                            '${val.toInt()}%',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 10,
-                              color: MeadowColors.textTertiary,
-                            ),
-                          ),
-                        ),
-                      ),
-                      bottomTitles: AxisTitles(
-                        sideTitles: SideTitles(
-                          showTitles: true,
-                          interval: max(
-                            1,
-                            (spots.length / 5).floor(),
-                          ).toDouble(),
-                          getTitlesWidget: (val, meta) {
-                            final idx = val.toInt();
-                            if (idx >= 0 && idx < chronological.length) {
-                              final d =
-                                  (chronological[idx]['createdAt']
-                                          as Timestamp?)
-                                      ?.toDate();
-                              if (d != null) {
-                                return Padding(
-                                  padding: const EdgeInsets.only(top: 8),
-                                  child: Text(
-                                    DateFormat.MMMd().format(d),
-                                    style: GoogleFonts.plusJakartaSans(
-                                      fontSize: 9,
-                                      color: MeadowColors.textTertiary,
-                                    ),
-                                  ),
-                                );
-                              }
-                            }
-                            return const SizedBox.shrink();
-                          },
-                        ),
-                      ),
-                    ),
-                    borderData: FlBorderData(show: false),
-                    minX: 0,
-                    maxX: max(1, spots.length - 1).toDouble(),
-                    minY: 0,
-                    maxY: 100,
-                    lineBarsData: [
-                      LineChartBarData(
-                        spots: spots,
-                        isCurved: true,
-                        curveSmoothness: 0.35,
-                        color: chartColor,
-                        barWidth: 3,
-                        dotData: const FlDotData(show: true),
-                        belowBarData: BarAreaData(
-                          show: true,
-                          color: chartColor.withOpacity(0.12),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildChartFilterChip(String key, String label) {
-    final isSelected = _chartDomainFilter == key;
-    return InkWell(
-      onTap: () => setState(() => _chartDomainFilter = key),
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: isSelected ? MeadowColors.primary : MeadowColors.surfaceAlt,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? MeadowColors.primary : MeadowColors.borderLight,
-          ),
-        ),
-        child: Text(
-          label,
-          style: GoogleFonts.plusJakartaSans(
-            fontSize: 11,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-            color: isSelected ? Colors.white : MeadowColors.textSecondary,
-          ),
-        ),
-      ),
+    return DesktopDevelopmentalProgressSection(
+      activeChild: activeChild,
+      scoreService: _scoreService,
+      initialDomainFilter: _chartDomainFilter,
     );
   }
 
@@ -1351,56 +1053,58 @@ class _DesktopParentCompanionScreenState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        "Your Child's Development Skills",
-                        style: MeadowTypography.h2,
-                      ),
-                      const SizedBox(width: 6),
-                      Tooltip(
-                        message:
-                            'The Vineland Social Maturity Scale (VSMS) is an established developmental assessment tool that helps measure everyday abilities, communication, and social independence in children.',
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: MeadowColors.primaryDark,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        textStyle: GoogleFonts.plusJakartaSans(
-                          color: Colors.white,
-                          fontSize: 11,
-                        ),
-                        child: const Icon(
-                          Icons.info_outline,
-                          size: 16,
-                          color: MeadowColors.textTertiary,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Skills reviewed using the Vineland Social Maturity Scale (VSMS).',
-                    style: MeadowTypography.body.copyWith(
-                      fontSize: 12,
-                      color: MeadowColors.textSecondary,
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isCompact = constraints.maxWidth < 680;
+            final heading = Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      "Your Child's Development Skills",
+                      style: MeadowTypography.h2,
                     ),
+                    const SizedBox(width: 6),
+                    Tooltip(
+                      message:
+                          'The Vineland Social Maturity Scale (VSMS) is an established developmental assessment tool that helps measure everyday abilities, communication, and social independence in children.',
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: MeadowColors.primaryDark,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      textStyle: GoogleFonts.plusJakartaSans(
+                        color: Colors.white,
+                        fontSize: 11,
+                      ),
+                      child: const Icon(
+                        Icons.info_outline,
+                        size: 16,
+                        color: MeadowColors.textTertiary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Skills reviewed using the Vineland Social Maturity Scale (VSMS).',
+                  style: MeadowTypography.body.copyWith(
+                    fontSize: 12,
+                    color: MeadowColors.textSecondary,
                   ),
-                ],
-              ),
-            ),
-            Row(
+                ),
+              ],
+            );
+
+            final legends = Wrap(
+              spacing: 14,
+              runSpacing: 6,
               children: [
                 _buildWeightLegend(
                   'Recorded Activities',
@@ -1408,7 +1112,6 @@ class _DesktopParentCompanionScreenState
                   tooltip:
                       'Skills practiced directly and verified through activities with your child.',
                 ),
-                const SizedBox(width: 14),
                 _buildWeightLegend(
                   'AI-Assisted Activities',
                   MeadowColors.cognitive,
@@ -1416,8 +1119,24 @@ class _DesktopParentCompanionScreenState
                       'Practice exercises suggested with AI assistance to support your child\'s learning.',
                 ),
               ],
-            ),
-          ],
+            );
+
+            if (isCompact) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [heading, const SizedBox(height: 10), legends],
+              );
+            }
+
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(child: heading),
+                const SizedBox(width: 16),
+                legends,
+              ],
+            );
+          },
         ),
         const SizedBox(height: 16),
 
@@ -3173,6 +2892,462 @@ class _DesktopParentCompanionScreenState
           ),
         ),
       ],
+    );
+  }
+}
+
+class DesktopKPICard extends StatelessWidget {
+  final String title;
+  final String value;
+  final String subtitle;
+  final IconData icon;
+  final Color accentColor;
+  final String? tooltip;
+
+  const DesktopKPICard({
+    super.key,
+    required this.title,
+    required this.value,
+    required this.subtitle,
+    required this.icon,
+    required this.accentColor,
+    this.tooltip,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cardContent = Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: MeadowColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: MeadowColors.borderLight),
+        boxShadow: MeadowShadows.card,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 28),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      title,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.8,
+                        color: MeadowColors.textSecondary,
+                        height: 1.25,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: accentColor.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, size: 18, color: accentColor),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            value,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: MeadowColors.textPrimary,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 4),
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 30),
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: Text(
+                subtitle,
+                style: MeadowTypography.caption.copyWith(
+                  color: MeadowColors.textSecondary,
+                  height: 1.25,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (tooltip != null && tooltip!.isNotEmpty) {
+      return Tooltip(
+        message: tooltip!,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: MeadowColors.primaryDark,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        textStyle: GoogleFonts.plusJakartaSans(
+          color: Colors.white,
+          fontSize: 11,
+        ),
+        child: cardContent,
+      );
+    }
+    return cardContent;
+  }
+}
+
+class DesktopDevelopmentalProgressSection extends StatefulWidget {
+  final ChildModel activeChild;
+  final ScoreLedgerService? scoreService;
+  final String initialDomainFilter;
+
+  const DesktopDevelopmentalProgressSection({
+    super.key,
+    required this.activeChild,
+    this.scoreService,
+    this.initialDomainFilter = 'all',
+  });
+
+  @override
+  State<DesktopDevelopmentalProgressSection> createState() =>
+      _DesktopDevelopmentalProgressSectionState();
+}
+
+class _DesktopDevelopmentalProgressSectionState
+    extends State<DesktopDevelopmentalProgressSection> {
+  late String _chartDomainFilter;
+  late final ScoreLedgerService _scoreService;
+
+  static const List<String> _domains = [
+    'cognitive',
+    'language',
+    'motor',
+    'social',
+    'emotional',
+    'creative',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _chartDomainFilter = widget.initialDomainFilter;
+    _scoreService = widget.scoreService ?? ScoreLedgerService();
+  }
+
+  @override
+  void didUpdateWidget(DesktopDevelopmentalProgressSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.activeChild.childId != widget.activeChild.childId) {
+      _chartDomainFilter = 'all';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: MeadowColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: MeadowColors.borderLight),
+        boxShadow: MeadowShadows.card,
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isStacked = constraints.maxWidth < 800;
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header with Domain Filter Selector
+              if (isStacked) ...[
+                _buildChartHeading(),
+                const SizedBox(height: 14),
+                _buildChartFilterChips(),
+              ] else ...[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 4, child: _buildChartHeading()),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      flex: 6,
+                      child: Align(
+                        alignment: Alignment.topRight,
+                        child: _buildChartFilterChips(
+                          alignment: WrapAlignment.end,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 24),
+
+              // Chart Canvas
+              FutureBuilder<List<Map<String, dynamic>>>(
+                future: _scoreService.getScoreHistory(
+                  childId: widget.activeChild.childId,
+                  skillDomain: _chartDomainFilter == 'all'
+                      ? null
+                      : _chartDomainFilter,
+                ),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting &&
+                      !snapshot.hasData) {
+                    return Container(
+                      height: 250,
+                      width: double.infinity,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: MeadowColors.surfaceAlt.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: MeadowColors.borderLight),
+                      ),
+                      child: const CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: MeadowColors.primary,
+                      ),
+                    );
+                  }
+
+                  final events = snapshot.data ?? [];
+                  if (events.isEmpty) {
+                    return Container(
+                      height: 240,
+                      width: double.infinity,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: MeadowColors.surfaceAlt.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: MeadowColors.borderLight,
+                          style: BorderStyle.solid,
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.auto_graph_rounded,
+                            size: 48,
+                            color: MeadowColors.sage.withOpacity(0.5),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'No recorded activities yet for ${_chartDomainFilter == 'all' ? widget.activeChild.name : DesktopParentCompanionScreen.getFriendlyDomainLabel(_chartDomainFilter)}',
+                            style: MeadowTypography.label.copyWith(
+                              color: MeadowColors.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 420),
+                            child: Text(
+                              "As your child plays interactive games and practices skills on your phone, progress updates will show up here.",
+                              textAlign: TextAlign.center,
+                              style: MeadowTypography.caption.copyWith(
+                                color: MeadowColors.textTertiary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  // Reverse chronologically so left-to-right is oldest-to-newest
+                  final chronological = events.reversed.toList();
+                  final spots = <FlSpot>[];
+                  double runningScore = 0;
+
+                  for (int i = 0; i < chronological.length; i++) {
+                    final ev = chronological[i];
+                    final delta = (ev['appliedScoreDelta'] is num)
+                        ? (ev['appliedScoreDelta'] as num).toDouble()
+                        : 0.0;
+                    runningScore = (runningScore + delta).clamp(0.0, 100.0);
+                    spots.add(FlSpot(i.toDouble(), runningScore));
+                  }
+
+                  final chartColor = _chartDomainFilter == 'all'
+                      ? MeadowColors.primary
+                      : MeadowDomain.colorFor(_chartDomainFilter);
+
+                  return SizedBox(
+                    height: 250,
+                    width: double.infinity,
+                    child: LineChart(
+                      LineChartData(
+                        gridData: FlGridData(
+                          show: true,
+                          drawVerticalLine: false,
+                          horizontalInterval: 20,
+                          getDrawingHorizontalLine: (val) => FlLine(
+                            color: MeadowColors.borderLight,
+                            strokeWidth: 1,
+                          ),
+                        ),
+                        titlesData: FlTitlesData(
+                          rightTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          topTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          leftTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              interval: 20,
+                              reservedSize: 38,
+                              getTitlesWidget: (val, meta) => Text(
+                                '${val.toInt()}%',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 10,
+                                  color: MeadowColors.textTertiary,
+                                ),
+                              ),
+                            ),
+                          ),
+                          bottomTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              interval: max(
+                                1,
+                                (spots.length / 5).floor(),
+                              ).toDouble(),
+                              getTitlesWidget: (val, meta) {
+                                final idx = val.toInt();
+                                if (idx >= 0 && idx < chronological.length) {
+                                  final d =
+                                      (chronological[idx]['createdAt']
+                                              as Timestamp?)
+                                          ?.toDate();
+                                  if (d != null) {
+                                    return Padding(
+                                      padding: const EdgeInsets.only(top: 8),
+                                      child: Text(
+                                        DateFormat.MMMd().format(d),
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 9,
+                                          color: MeadowColors.textTertiary,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                }
+                                return const SizedBox.shrink();
+                              },
+                            ),
+                          ),
+                        ),
+                        borderData: FlBorderData(show: false),
+                        minX: 0,
+                        maxX: max(1, spots.length - 1).toDouble(),
+                        minY: 0,
+                        maxY: 100,
+                        lineBarsData: [
+                          LineChartBarData(
+                            spots: spots,
+                            isCurved: true,
+                            curveSmoothness: 0.35,
+                            color: chartColor,
+                            barWidth: 3,
+                            dotData: const FlDotData(show: true),
+                            belowBarData: BarAreaData(
+                              show: true,
+                              color: chartColor.withOpacity(0.12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildChartHeading() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text("Your Child's Progress Over Time", style: MeadowTypography.h2),
+        const SizedBox(height: 4),
+        Text(
+          "See how your child's recorded progress changes over time.",
+          style: MeadowTypography.body.copyWith(
+            fontSize: 12,
+            color: MeadowColors.textSecondary,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChartFilterChips({
+    WrapAlignment alignment = WrapAlignment.start,
+  }) {
+    return Wrap(
+      alignment: alignment,
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        _buildChartFilterChip('all', 'All Skills'),
+        ..._domains.map(
+          (d) => _buildChartFilterChip(
+            d,
+            DesktopParentCompanionScreen.getFriendlyDomainLabel(d),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChartFilterChip(String key, String label) {
+    final isSelected = _chartDomainFilter == key;
+    return InkWell(
+      onTap: () => setState(() => _chartDomainFilter = key),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected ? MeadowColors.primary : MeadowColors.surfaceAlt,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? MeadowColors.primary : MeadowColors.borderLight,
+          ),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 11,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            color: isSelected ? Colors.white : MeadowColors.textSecondary,
+          ),
+        ),
+      ),
     );
   }
 }
