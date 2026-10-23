@@ -7,6 +7,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
 import 'screens/auth/splash_screen.dart';
 import 'screens/auth/auth_page.dart';
+import 'screens/auth/forgot_password_page.dart';
 import 'screens/landing_page.dart';
 import 'screens/parent/parent_dashboard.dart';
 import 'screens/parent/ai_activity_generator.dart';
@@ -74,6 +75,7 @@ class MyApp extends StatelessWidget {
           '/auth-wrapper': (context) => const AuthWrapper(),
           '/login': (context) => const AuthPage(initialMode: AuthMode.login),
           '/signup': (context) => const AuthPage(initialMode: AuthMode.signup),
+          '/forgot-password': (context) => const ForgotPasswordPage(),
           '/parent-dashboard': (context) => const MobileOnlyGate(
                 userType: 'parent',
                 child: ParentDashboard(),

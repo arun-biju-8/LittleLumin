@@ -19,6 +19,7 @@ import 'widgets/quick_actions_row.dart';
 import 'widgets/growth_snapshot_card.dart';
 import 'widgets/todays_insight_card.dart';
 import 'widgets/recent_activity_card.dart';
+import '../widgets/latest_learning_update_card.dart';
 
 class HomeTab extends StatefulWidget {
   final String parentName;
@@ -388,6 +389,10 @@ class _HomeTabState extends State<HomeTab> {
                         );
                       },
                     ),
+                    const SizedBox(height: MeadowSpacing.lg),
+
+                    // Latest Learning Update (revisit entry)
+                    LatestLearningUpdateCard(child: widget.activeChild!),
 
                     // 8. Support / Flagged Alert Card (if flagged)
                     if (widget.activeChild!.isFlagged) ...[

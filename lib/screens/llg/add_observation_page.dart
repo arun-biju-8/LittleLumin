@@ -5,6 +5,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../utils/validators.dart';
 import '../../models/child_model.dart';
+import '../../services/auth_service.dart';
+import '../../services/specialist_case_service.dart';
+import '../../services/audit_log_service.dart';
 
 class AddObservationPage extends StatefulWidget {
   final ChildModel child;
@@ -26,12 +29,45 @@ class _AddObservationPageState extends State<AddObservationPage> {
   final _formKey = GlobalKey<FormState>();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final AuthService _authService = AuthService();
+  final SpecialistCaseService _caseService = SpecialistCaseService();
 
-  String _severity = 'medium';
+  String _severity = 'guidance';
   final _observationController = TextEditingController();
   final List<TextEditingController> _recControllers = [TextEditingController()];
   bool _referralNeeded = false;
   bool _isSubmitting = false;
+
+  bool _isClinicalSpecialist = false;
+  bool _isAdmin = false;
+  String _userRole = 'llg';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserRole();
+  }
+
+  Future<void> _loadUserRole() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+    try {
+      final role = await _authService.getUserRole(user.uid);
+      if (mounted) {
+        setState(() {
+          _userRole = (role ?? 'llg').toLowerCase();
+          _isAdmin = _userRole == 'admin';
+          _isClinicalSpecialist = _isAdmin || _userRole == 'clinical_specialist' || _userRole == 'clinical_professional';
+          if (_isClinicalSpecialist) {
+            _severity = 'normal';
+          } else {
+            _severity = 'guidance';
+            _referralNeeded = false;
+          }
+        });
+      }
+    } catch (_) {}
+  }
 
   @override
   void dispose() {
@@ -102,53 +138,71 @@ class _AddObservationPageState extends State<AddObservationPage> {
 
     try {
       final user = _auth.currentUser;
-      if (user == null) throw Exception('You must be logged in as an LLG specialist.');
+      if (user == null) throw Exception('You must be logged in as an authorized specialist.');
 
-      // Fetch LLG name
+      // 1. Authoritative Case Access & Consent Check
+      if (!_isAdmin) {
+        final hasAccess = await _caseService.verifySpecialistAccess(user.uid, widget.child.childId);
+        if (!hasAccess) {
+          throw Exception(
+            'Access Denied: You do not have an active, parent-consented consultation case for this child.',
+          );
+        }
+      }
+
+      // 2. Fetch Specialist profile
       final llgDoc = await _firestore.collection('llgProfiles').doc(user.uid).get();
-      final llgName = llgDoc.data()?['name'] ?? user.displayName ?? 'LLG Specialist';
+      final llgName = llgDoc.data()?['name'] ?? user.displayName ?? 'Specialist';
 
-      // 1. Immutable LLG Observation Document
+      // Enforce clinical role restriction server-side in payload
+      final recordedSeverity = _isClinicalSpecialist ? _severity : 'guidance';
+      final recordedReferral = _isClinicalSpecialist ? _referralNeeded : false;
+
+      // 3. Immutable Observation Document
       final obsRef = await _firestore.collection('llgObservations').add({
         'childId': widget.child.childId,
         'llgId': user.uid,
         'llgName': llgName,
+        'authorRole': _userRole,
+        'isClinicalGrade': _isClinicalSpecialist,
         'flagEventId': widget.flagEventId ?? '',
         'observation': obsText,
         'recommendations': recommendations,
-        'severity': _severity,
-        'referralNeeded': _referralNeeded,
+        'severity': recordedSeverity,
+        'referralNeeded': recordedReferral,
         'recordedAt': FieldValue.serverTimestamp(),
         'isImmutable': true,
       });
 
-      // 2. Notify Parent
+      // 4. Notify Parent
       if (widget.child.parentId.isNotEmpty) {
+        final title = _isClinicalSpecialist
+            ? 'New Clinical Note for ${widget.child.name}'
+            : 'New Educational Guidance for ${widget.child.name}';
         await _firestore.collection('notifications').add({
           'userId': widget.child.parentId,
           'type': 'llg_observation',
           'childId': widget.child.childId,
           'observationId': obsRef.id,
-          'title': 'New Specialist Clinical Note for ${widget.child.name}',
-          'body': '$llgName has added detailed observations and recommendations.',
+          'title': title,
+          'body': '$llgName has added observations and learning recommendations.',
           'actionRoute': '/llg-connect',
           'readAt': null,
           'createdAt': FieldValue.serverTimestamp(),
         });
       }
 
-      // 3. Admin Audit Log (Immutable)
-      await _firestore.collection('adminAuditLogs').add({
-        'action': 'llg_observation_recorded',
-        'actorId': user.uid,
-        'actorType': 'llg',
-        'actorName': llgName,
-        'targetId': widget.child.childId,
-        'observationId': obsRef.id,
-        'severity': _severity,
-        'timestamp': FieldValue.serverTimestamp(),
-        'isImmutable': true,
-      });
+      // 5. Authoritative Audit Log via Backend (Client cannot write to adminAuditLogs directly)
+      await AuditLogService.logEvent(
+        action: 'specialist_observation_recorded',
+        childId: widget.child.childId,
+        targetId: obsRef.id,
+        details: {
+          'observationId': obsRef.id,
+          'severity': recordedSeverity,
+          'isClinicalGrade': _isClinicalSpecialist,
+        },
+      );
 
       debugPrint('✅ Recorded immutable observation: ${obsRef.id} by $llgName');
 
@@ -294,6 +348,37 @@ class _AddObservationPageState extends State<AddObservationPage> {
   }
 
   Widget _buildSeverityDropdown() {
+    if (!_isClinicalSpecialist) {
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E293B),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFF334155)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.school_outlined, color: Color(0xFF0EA5E9), size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  'Educational Guidance Scope',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Your profile is registered as an Educational Learning Guide. Observations are classified as milestone & educational guidance. Clinical severity scales (High / Critical) require verified clinical professional credentials.',
+              style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8), height: 1.4),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -447,6 +532,29 @@ class _AddObservationPageState extends State<AddObservationPage> {
   }
 
   Widget _buildReferralToggle() {
+    if (!_isClinicalSpecialist) {
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E293B),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFF334155)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.info_outline, color: Color(0xFF94A3B8), size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Clinical Referrals: As an Educational Guide, formal clinical referrals are deferred to licensed pediatric clinicians. Please provide educational activity suggestions above.',
+                style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8), height: 1.4),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(

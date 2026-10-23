@@ -4,10 +4,15 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/journey_model.dart';
 import '../models/activity_model.dart';
+import '../models/learning_update_model.dart';
 
 class JourneyService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore? _customFirestore;
+  FirebaseFirestore get _firestore => _customFirestore ?? FirebaseFirestore.instance;
+
+  JourneyService({FirebaseFirestore? firestore}) : _customFirestore = firestore;
   static const String _collection = 'journeyProgress';
+  static final Map<String, LearningUpdateModel> _latestUpdatesCache = {};
 
   static const int PASSING_SCORE = 70;
   static const int MAX_LEVEL = 4;
@@ -225,17 +230,114 @@ class JourneyService {
     });
   }
 
+  /// Synchronizes journeyProgress with authoritative skillProfiles data
+  /// Recalculates domain completion and unlocks next level if all 6 domains >= PASSING_SCORE (70)
+  Future<JourneyProgress> syncJourneyWithSkillProfile(String childId) async {
+    if (childId.trim().isEmpty) throw ArgumentError('childId cannot be empty');
+
+    try {
+      await initializeJourney(childId);
+
+      final profileDoc = await _firestore.collection('skillProfiles').doc(childId).get();
+      final profileData = profileDoc.data() ?? {};
+
+      final journeyRef = _firestore.collection(_collection).doc(childId);
+      final journeyDoc = await journeyRef.get();
+      final journeyData = Map<String, dynamic>.from(journeyDoc.data() ?? {});
+
+      final currentLevel = (journeyData['currentLevel'] is num)
+          ? (journeyData['currentLevel'] as num).toInt()
+          : 1;
+      final levelKey = '$currentLevel';
+      final levels = Map<String, dynamic>.from(journeyData['levels'] ?? {});
+      final levelData = Map<String, dynamic>.from(levels[levelKey] ?? {});
+      final domains = Map<String, dynamic>.from(levelData['domains'] ?? {});
+
+      bool changed = false;
+
+      for (var d in DOMAINS) {
+        final domainMap = Map<String, dynamic>.from(domains[d] is Map ? domains[d] : {});
+        final currentScore = (domainMap['score'] is num) ? (domainMap['score'] as num).toDouble() : 0.0;
+        final profileScore = (profileData[d] is num) ? (profileData[d] as num).toDouble() : currentScore;
+
+        // Take authoritative score from profile if higher/updated
+        final effectiveScore = profileScore > currentScore ? profileScore : currentScore;
+        final isMastered = effectiveScore >= PASSING_SCORE;
+
+        if (domainMap['score'] != effectiveScore || domainMap['completed'] != isMastered) {
+          domainMap['score'] = effectiveScore;
+          domainMap['completed'] = isMastered;
+          domains[d] = domainMap;
+          changed = true;
+        } else if (!domains.containsKey(d)) {
+          domains[d] = {'score': effectiveScore, 'completed': isMastered, 'activitiesDone': 0};
+          changed = true;
+        }
+      }
+
+      levelData['domains'] = domains;
+
+      // Check if all 6 domains achieved PASSING_SCORE (70)
+      final allComplete = DOMAINS.every((d) {
+        final dd = domains[d] as Map?;
+        return dd?['completed'] == true;
+      });
+
+      final unlockedRaw = journeyData['unlockedLevels'];
+      final unlocked = (unlockedRaw is List)
+          ? unlockedRaw.map((e) => int.tryParse(e.toString()) ?? 1).toList()
+          : <int>[1];
+
+      if (allComplete) {
+        if (levelData['isCompleted'] != true) {
+          levelData['isCompleted'] = true;
+          levelData['completedAt'] = FieldValue.serverTimestamp();
+          changed = true;
+        }
+
+        final nextLevel = currentLevel + 1;
+        if (!unlocked.contains(nextLevel) && nextLevel <= MAX_LEVEL) {
+          unlocked.add(nextLevel);
+          final nextDomains = <String, dynamic>{};
+          for (var d in DOMAINS) {
+            nextDomains[d] = {'score': 0.0, 'completed': false, 'activitiesDone': 0};
+          }
+          levels['$nextLevel'] = {
+            'domains': nextDomains,
+            'isCompleted': false,
+            'completedAt': null,
+          };
+          journeyData['currentLevel'] = nextLevel;
+          changed = true;
+        }
+      }
+
+      journeyData['unlockedLevels'] = unlocked;
+      levels[levelKey] = levelData;
+      journeyData['levels'] = levels;
+
+      if (changed) {
+        journeyData['updatedAt'] = FieldValue.serverTimestamp();
+        await journeyRef.set(journeyData, SetOptions(merge: true));
+        debugPrint('✅ Reconciled journey progress with skill profile for child $childId');
+      }
+
+      return JourneyProgress.fromMap(childId, journeyData);
+    } catch (e, stack) {
+      debugPrint('❌ Error syncing journey with skill profile for $childId: $e\n$stack');
+      final fallbackDoc = await _firestore.collection(_collection).doc(childId).get();
+      return JourneyProgress.fromMap(childId, fallbackDoc.data() ?? {});
+    }
+  }
+
   /// Fetch or initialize journey progress for a child (compatible model)
   Future<JourneyProgress> getOrInitializeJourney(String childId, {int age = 4}) async {
     try {
       final doc = await _firestore.collection(_collection).doc(childId).get();
-      if (doc.exists && doc.data() != null) {
-        return JourneyProgress.fromMap(childId, doc.data()!);
+      if (!doc.exists || doc.data() == null) {
+        await initializeJourney(childId);
       }
-
-      await initializeJourney(childId);
-      final newDoc = await _firestore.collection(_collection).doc(childId).get();
-      return JourneyProgress.fromMap(childId, newDoc.data() ?? {});
+      return await syncJourneyWithSkillProfile(childId);
     } catch (e, stack) {
       debugPrint('❌ Error in getOrInitializeJourney: $e\n$stack');
       return JourneyProgress(childId: childId, levelProgress: {});
@@ -288,7 +390,7 @@ class JourneyService {
     }
   }
 
-  /// Complete Activity helper (clears activeActivity and tracks activity ID)
+  /// Complete Activity helper (clears activeActivity, tracks activity ID, and recalculates level eligibility)
   Future<Map<String, dynamic>> completeActivity({
     required String childId,
     required String activityId,
@@ -310,7 +412,20 @@ class JourneyService {
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      return {'levelCompleted': false};
+      // Reconcile and check if this level has met all mastery goals
+      final progress = await syncJourneyWithSkillProfile(childId);
+      final isNowCompleted = progress.levelProgress[level]?.isCompleted ?? false;
+      final nextLevel = level + 1;
+      final trophy = JourneyLevelConfig.defaultLevels
+          .firstWhere((l) => l.level == level, orElse: () => JourneyLevelConfig.defaultLevels.first)
+          .trophyName;
+
+      return {
+        'levelCompleted': isNowCompleted,
+        'completedLevel': level,
+        'nextLevel': nextLevel,
+        'trophyEarned': trophy,
+      };
     } catch (e, stack) {
       debugPrint('❌ Error completing activity: $e\n$stack');
       return {'levelCompleted': false};
@@ -320,6 +435,113 @@ class JourneyService {
   /// Backward-compatibility helper for journey_activity_detail_page
   Future<void> markActivityComplete(String childId, String activityId, String skillType) async {
     await completeActivity(childId: childId, activityId: activityId, level: 1);
+  }
+
+  /// Find or select a recommended practice activity for the pending domain with lowest score
+  Future<Map<String, dynamic>?> getRecommendedPracticeActivity({
+    required String childId,
+    required int childAge,
+    int level = 1,
+  }) async {
+    try {
+      final journeyDoc = await _firestore.collection(_collection).doc(childId).get();
+      if (!journeyDoc.exists || journeyDoc.data() == null) return null;
+
+      final journey = JourneyProgress.fromMap(childId, journeyDoc.data()!);
+      final pendingDomain = journey.lowestScoringPendingDomain;
+      final targetDomain = pendingDomain?.domain ?? 'cognitive';
+      final currentScore = pendingDomain?.score ?? 0.0;
+
+      // 1. Check if a recommended activity already exists in Firestore cache
+      try {
+        final recDoc = await _firestore
+            .collection('recommendedActivities')
+            .doc(childId)
+            .collection('domains')
+            .doc(targetDomain.toLowerCase())
+            .get();
+
+        if (recDoc.exists && recDoc.data() != null) {
+          final data = recDoc.data()!;
+          final actData = data['activityData'];
+          if (actData is Map<String, dynamic>) {
+            final realActId = actData['id']?.toString() ?? data['activityId']?.toString() ?? recDoc.id;
+            final act = ActivityModel.fromMap(realActId, actData);
+            final actDomain = act.skillType.isNotEmpty ? act.skillType.toLowerCase() : targetDomain.toLowerCase();
+            final reasonText = data['reason'] ?? 'Score is ${currentScore.round()} — needs more practice in $actDomain';
+            return {
+              'domain': actDomain,
+              'targetDomain': actDomain,
+              'activity': act,
+              'score': currentScore,
+              'currentScore': currentScore,
+              'reason': reasonText,
+              'rationale': reasonText,
+              'source': 'ai_recommended',
+            };
+          }
+        }
+      } catch (e) {
+        debugPrint('Note: no cached recommendation found for $targetDomain: $e');
+      }
+
+      // 2. Query preset activities library for an uncompleted activity in this domain
+      final diff = level == 1 ? 'easy' : (level == 2 ? 'medium' : 'hard');
+      final capDomain = '${targetDomain[0].toUpperCase()}${targetDomain.substring(1).toLowerCase()}';
+      QuerySnapshot<Map<String, dynamic>> snap;
+      try {
+        snap = await _firestore
+            .collection('activities')
+            .where('skillType', whereIn: [targetDomain.toLowerCase(), capDomain])
+            .where('isActive', isEqualTo: true)
+            .get();
+      } catch (_) {
+        // Fallback for emulators or collections without whereIn indexes
+        snap = await _firestore
+            .collection('activities')
+            .where('skillType', isEqualTo: capDomain)
+            .where('isActive', isEqualTo: true)
+            .get();
+        if (snap.docs.isEmpty) {
+          snap = await _firestore
+              .collection('activities')
+              .where('skillType', isEqualTo: targetDomain.toLowerCase())
+              .where('isActive', isEqualTo: true)
+              .get();
+        }
+      }
+
+      if (snap.docs.isNotEmpty) {
+        final allActs = snap.docs.map((d) => ActivityModel.fromMap(d.id, d.data())).toList();
+        final uncompleted = allActs.where((a) => !journey.isActivityCompleted(a.id ?? '')).toList();
+        final matchingDiff = uncompleted.where((a) => a.difficulty.toLowerCase() == diff).toList();
+        final selected = matchingDiff.isNotEmpty
+            ? matchingDiff.first
+            : (uncompleted.isNotEmpty ? uncompleted.first : allActs.first);
+
+        final actDomain = selected.skillType.isNotEmpty ? selected.skillType.toLowerCase() : targetDomain.toLowerCase();
+        final domainDisplay = actDomain[0].toUpperCase() + actDomain.substring(1);
+        final rationale = currentScore > 0
+            ? '$domainDisplay score is currently ${currentScore.round()}/100. Practicing this activity will help reach the 70% milestone to unlock Level 2.'
+            : 'Starting with $domainDisplay skills will build foundational confidence for Level 2.';
+
+        return {
+          'domain': actDomain,
+          'targetDomain': actDomain,
+          'activity': selected,
+          'score': currentScore,
+          'currentScore': currentScore,
+          'reason': rationale,
+          'rationale': rationale,
+          'source': 'library',
+        };
+      }
+
+      return null;
+    } catch (e, stack) {
+      debugPrint('❌ Error in getRecommendedPracticeActivity: $e\n$stack');
+      return null;
+    }
   }
 
   /// Fetch full ActivityModel list for level activity IDs
@@ -350,12 +572,23 @@ class JourneyService {
     final List<ActivityModel> activities = [];
     for (final domain in config.domainRequirements) {
       try {
-        final snapshot = await _firestore
-            .collection('activities')
-            .where('skillType', isEqualTo: domain.toLowerCase().trim())
-            .where('difficulty', isEqualTo: diff)
-            .where('isActive', isEqualTo: true)
-            .get();
+        final capDom = '${domain[0].toUpperCase()}${domain.substring(1).toLowerCase()}';
+        QuerySnapshot<Map<String, dynamic>> snapshot;
+        try {
+          snapshot = await _firestore
+              .collection('activities')
+              .where('skillType', whereIn: [domain.toLowerCase().trim(), capDom])
+              .where('difficulty', isEqualTo: diff)
+              .where('isActive', isEqualTo: true)
+              .get();
+        } catch (_) {
+          snapshot = await _firestore
+              .collection('activities')
+              .where('skillType', isEqualTo: capDom)
+              .where('difficulty', isEqualTo: diff)
+              .where('isActive', isEqualTo: true)
+              .get();
+        }
 
         if (snapshot.docs.isNotEmpty) {
           final list = snapshot.docs.map((doc) => ActivityModel.fromMap(doc.id, doc.data())).toList();
@@ -364,7 +597,7 @@ class JourneyService {
         } else {
           final fallbackSnapshot = await _firestore
               .collection('activities')
-              .where('skillType', isEqualTo: domain.toLowerCase().trim())
+              .where('skillType', whereIn: [domain.toLowerCase().trim(), capDom])
               .where('difficulty', isEqualTo: 'medium')
               .where('isActive', isEqualTo: true)
               .get();
@@ -377,5 +610,53 @@ class JourneyService {
       }
     }
     return activities;
+  }
+
+  /// Save the latest Learning Update snapshot for a specific child
+  Future<void> saveLatestLearningUpdate(String childId, LearningUpdateModel update) async {
+    if (childId.trim().isEmpty) return;
+    try {
+      _latestUpdatesCache[childId] = update;
+      await _firestore.collection(_collection).doc(childId).set({
+        'latestLearningUpdate': update.toMap(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      debugPrint('✅ Saved latest learning update for child $childId: ${update.activityTitle}');
+    } catch (e) {
+      debugPrint('⚠️ Error saving latest learning update: $e');
+    }
+  }
+
+  /// Retrieve the latest Learning Update snapshot for a specific child
+  Future<LearningUpdateModel?> getLatestLearningUpdate(String childId) async {
+    if (childId.trim().isEmpty) return null;
+    if (_latestUpdatesCache.containsKey(childId)) {
+      return _latestUpdatesCache[childId];
+    }
+    try {
+      final doc = await _firestore.collection(_collection).doc(childId).get();
+      if (doc.exists && doc.data() != null) {
+        final data = doc.data()!;
+        if (data['latestLearningUpdate'] is Map) {
+          final model = LearningUpdateModel.fromMap(
+            Map<String, dynamic>.from(data['latestLearningUpdate'] as Map),
+          );
+          _latestUpdatesCache[childId] = model;
+          return model;
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ Error getting latest learning update: $e');
+    }
+    return null;
+  }
+
+  /// Clear in-memory latest update cache (useful for testing and child profile switching)
+  static void clearLatestUpdateCache({String? childId}) {
+    if (childId != null) {
+      _latestUpdatesCache.remove(childId);
+    } else {
+      _latestUpdatesCache.clear();
+    }
   }
 }

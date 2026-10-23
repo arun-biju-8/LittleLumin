@@ -222,7 +222,13 @@ class UserModel {
   // ============================================
   // HELPER METHODS
   // ============================================
-  bool get isLLG => userType == 'llg';
+  bool get isLLG => userType == 'llg' || userType == 'learning_guide';
+  bool get isLearningGuide => userType == 'llg' || userType == 'learning_guide';
+  bool get isClinicalSpecialist => userType == 'clinical_specialist' || userType == 'clinical_professional';
+  bool get isEducationalSpecialist => userType == 'specialist' || userType == 'educational_specialist';
+  bool get isSpecialist => isLearningGuide || isClinicalSpecialist || isEducationalSpecialist;
+  bool get canSubmitClinicalObservations => (isClinicalSpecialist || isAdmin) && isVerified;
+  bool get canSubmitEducationalObservations => (isSpecialist || isAdmin) && isVerified;
   bool get isLLGPending => userType == 'llg_pending';
   bool get isRejected => userType == 'rejected';
   bool get isAdmin => userType == 'admin';

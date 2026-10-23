@@ -287,6 +287,8 @@ class MeadowDomain {
     }
   }
 
+  static Color surfaceColorFor(String domain) => surfaceFor(domain);
+
   static IconData iconFor(String domain) {
     switch (domain.trim().toLowerCase()) {
       case 'cognitive':

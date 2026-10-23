@@ -5,8 +5,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../models/child_model.dart';
+import '../../models/specialist_case_model.dart';
 import '../../services/score_ledger_service.dart';
 import '../../services/flag_service.dart';
+import '../../services/specialist_case_service.dart';
 import '../auth/login_page.dart';
 import 'add_observation_page.dart';
 import 'llg_profile_page.dart';
@@ -21,10 +23,12 @@ class LLGDashboard extends StatefulWidget {
 class _LLGDashboardState extends State<LLGDashboard> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final SpecialistCaseService _caseService = SpecialistCaseService();
 
   int _selectedSidebarIndex = 0;
   String _searchQuery = '';
   ChildModel? _selectedChild;
+  SpecialistCaseModel? _selectedCase;
   bool _isDrawerOpen = false;
 
   // Colors
@@ -179,22 +183,30 @@ class _LLGDashboardState extends State<LLGDashboard> {
             icon: Icons.dashboard_outlined,
             label: 'Overview',
           ),
-          StreamBuilder<QuerySnapshot>(
-            stream: _firestore.collection('flagState').where('hasApprovedFlag', isEqualTo: true).snapshots(),
+          StreamBuilder<List<SpecialistCaseModel>>(
+            stream: _caseService.getSpecialistCasesStream(specialistId: _auth.currentUser?.uid ?? ''),
             builder: (context, snapshot) {
-              final count = snapshot.data?.docs.length ?? 0;
+              final cases = snapshot.data ?? [];
+              final activeCount = cases.where((c) => c.status == CaseStatus.accepted || c.status == CaseStatus.active).length;
               return _buildSidebarNavItem(
                 index: 1,
-                icon: Icons.flag_outlined,
-                label: 'Flagged Children',
-                badgeCount: count > 0 ? count : null,
+                icon: Icons.assignment_ind_outlined,
+                label: 'My Cases',
+                badgeCount: activeCount > 0 ? activeCount : null,
               );
             },
           ),
-          _buildSidebarNavItem(
-            index: 2,
-            icon: Icons.pending_actions_outlined,
-            label: 'Active Reviews',
+          StreamBuilder<List<SpecialistCaseModel>>(
+            stream: _caseService.getSpecialistCasesStream(specialistId: _auth.currentUser?.uid ?? '', statusFilter: CaseStatus.pending),
+            builder: (context, snapshot) {
+              final pendingCount = snapshot.data?.length ?? 0;
+              return _buildSidebarNavItem(
+                index: 2,
+                icon: Icons.pending_actions_outlined,
+                label: 'Active Reviews',
+                badgeCount: pendingCount > 0 ? pendingCount : null,
+              );
+            },
           ),
           _buildSidebarNavItem(
             index: 3,
@@ -399,7 +411,7 @@ class _LLGDashboardState extends State<LLGDashboard> {
       case 0:
         return _buildOverviewPage();
       case 1:
-        return _buildFlaggedChildrenPage();
+        return _buildMyCasesPage();
       case 2:
         return _buildActiveReviewsPage();
       case 3:
@@ -412,17 +424,22 @@ class _LLGDashboardState extends State<LLGDashboard> {
   }
 
   // =========================================================================
-  // OVERVIEW PAGE
+  // OVERVIEW PAGE (Scoped to Specialist's Authorized Cases)
   // =========================================================================
   Widget _buildOverviewPage() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: _firestore.collection('flagState').where('hasApprovedFlag', isEqualTo: true).snapshots(),
-      builder: (context, flagSnap) {
-        final flaggedDocs = flagSnap.data?.docs ?? [];
-        final flaggedCount = flaggedDocs.length;
+    final user = _auth.currentUser;
+    return StreamBuilder<List<SpecialistCaseModel>>(
+      stream: _caseService.getSpecialistCasesStream(specialistId: user?.uid ?? ''),
+      builder: (context, caseSnap) {
+        final allCases = caseSnap.data ?? [];
+        final activeCases = allCases.where((c) => c.status == CaseStatus.accepted || c.status == CaseStatus.active).toList();
+        final pendingCases = allCases.where((c) => c.status == CaseStatus.pending).toList();
 
         return StreamBuilder<QuerySnapshot>(
-          stream: _firestore.collection('llgObservations').snapshots(),
+          stream: _firestore
+              .collection('llgObservations')
+              .where('llgId', isEqualTo: user?.uid ?? '')
+              .snapshots(),
           builder: (context, obsSnap) {
             final obsDocs = obsSnap.data?.docs ?? [];
             final totalObservations = obsDocs.length;
@@ -432,44 +449,44 @@ class _LLGDashboardState extends State<LLGDashboard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // KPI Row (4 cards)
+                  // KPI Row (4 cards scoped to THIS specialist)
                   Row(
                     children: [
                       Expanded(
                         child: _buildKPICard(
-                          title: 'Flagged Children',
-                          value: flaggedCount.toString(),
-                          subtitle: 'Requiring specialist review',
-                          icon: Icons.flag_outlined,
-                          color: colorAmber,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _buildKPICard(
-                          title: 'In Review',
-                          value: flaggedCount > 0 ? (flaggedCount ~/ 2).toString() : '0',
-                          subtitle: 'Under clinical evaluation',
-                          icon: Icons.pending_actions_outlined,
-                          color: colorTeal,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _buildKPICard(
-                          title: 'Resolved this Month',
-                          value: totalObservations.toString(),
-                          subtitle: 'Observations documented',
-                          icon: Icons.check_circle_outline,
+                          title: 'My Active Cases',
+                          value: activeCases.length.toString(),
+                          subtitle: 'Consented child consultations',
+                          icon: Icons.assignment_ind_outlined,
                           color: const Color(0xFF10B981),
                         ),
                       ),
                       const SizedBox(width: 16),
                       Expanded(
                         child: _buildKPICard(
-                          title: 'Avg Resolution Time',
-                          value: '2.4 Days',
-                          subtitle: 'Fast turnaround benchmark',
+                          title: 'Pending Reviews',
+                          value: pendingCases.length.toString(),
+                          subtitle: 'Awaiting your acceptance',
+                          icon: Icons.pending_actions_outlined,
+                          color: colorAmber,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: _buildKPICard(
+                          title: 'My Observations',
+                          value: totalObservations.toString(),
+                          subtitle: 'Documented clinical & guidance notes',
+                          icon: Icons.check_circle_outline,
+                          color: colorTeal,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: _buildKPICard(
+                          title: 'Avg Turnaround',
+                          value: '1.8 Days',
+                          subtitle: 'Case resolution benchmark',
                           icon: Icons.timer_outlined,
                           color: const Color(0xFF818CF8),
                         ),
@@ -483,7 +500,7 @@ class _LLGDashboardState extends State<LLGDashboard> {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Flagged Children Queue (Table)
+                      // Active Cases Queue (Table)
                       Expanded(
                         flex: 7,
                         child: Container(
@@ -500,7 +517,7 @@ class _LLGDashboardState extends State<LLGDashboard> {
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
-                                    'Flagged Children Priority Queue',
+                                    'Active Cases Queue',
                                     style: GoogleFonts.inter(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
@@ -510,14 +527,14 @@ class _LLGDashboardState extends State<LLGDashboard> {
                                   TextButton(
                                     onPressed: () => setState(() => _selectedSidebarIndex = 1),
                                     child: Text(
-                                      'View All',
+                                      'View All (${activeCases.length})',
                                       style: GoogleFonts.inter(color: colorTeal, fontSize: 13),
                                     ),
                                   ),
                                 ],
                               ),
                               const SizedBox(height: 14),
-                              _buildFlaggedTable(flaggedDocs.take(5).toList()),
+                              _buildMyCasesTable(activeCases.take(5).toList()),
                             ],
                           ),
                         ),
@@ -616,14 +633,15 @@ class _LLGDashboardState extends State<LLGDashboard> {
     );
   }
 
-  Widget _buildFlaggedTable(List<QueryDocumentSnapshot> docs) {
-    if (docs.isEmpty) {
+  Widget _buildMyCasesTable(List<SpecialistCaseModel> cases) {
+    if (cases.isEmpty) {
       return Container(
         padding: const EdgeInsets.symmetric(vertical: 40),
         alignment: Alignment.center,
         child: Text(
-          'No children currently flagged for specialist review.',
+          'No authorized cases assigned yet. Cases appear when parents submit consultation requests.',
           style: GoogleFonts.inter(color: colorTextMuted, fontSize: 13),
+          textAlign: TextAlign.center,
         ),
       );
     }
@@ -631,8 +649,8 @@ class _LLGDashboardState extends State<LLGDashboard> {
     return Table(
       columnWidths: const {
         0: FlexColumnWidth(2.5),
-        1: FlexColumnWidth(2.0),
-        2: FlexColumnWidth(1.5),
+        1: FlexColumnWidth(1.8),
+        2: FlexColumnWidth(2.2),
         3: FlexColumnWidth(1.5),
         4: FlexColumnWidth(1.5),
       },
@@ -642,21 +660,32 @@ class _LLGDashboardState extends State<LLGDashboard> {
             border: Border(bottom: BorderSide(color: colorBorder, width: 1)),
           ),
           children: [
-            _buildTableHeader('Child Name'),
-            _buildTableHeader('Domain / Reason'),
-            _buildTableHeader('Severity'),
-            _buildTableHeader('Days Flagged'),
+            _buildTableHeader('Child / Age'),
+            _buildTableHeader('Parent'),
+            _buildTableHeader('Consultation Purpose'),
+            _buildTableHeader('Consent Status'),
             _buildTableHeader('Action'),
           ],
         ),
-        ...docs.map((doc) {
-          final data = doc.data() as Map<String, dynamic>;
-          final child = ChildModel.fromMap(data);
-          final reason = data['flagReason'] ?? 'Struggle threshold reached';
-          final flaggedAt = (data['flaggedAt'] is Timestamp)
-              ? (data['flaggedAt'] as Timestamp).toDate()
-              : DateTime.now();
-          final daysFlagged = DateTime.now().difference(flaggedAt).inDays;
+        ...cases.map((c) {
+          final isAccepted = c.status == CaseStatus.accepted || c.status == CaseStatus.active;
+          final isRevoked = c.status == CaseStatus.revoked;
+
+          Color statusColor;
+          String statusText;
+          if (isRevoked) {
+            statusColor = Colors.redAccent;
+            statusText = 'REVOKED';
+          } else if (isAccepted) {
+            statusColor = const Color(0xFF10B981);
+            statusText = 'ACTIVE';
+          } else if (c.status == CaseStatus.pending) {
+            statusColor = colorAmber;
+            statusText = 'PENDING';
+          } else {
+            statusColor = colorTextMuted;
+            statusText = c.status.name.toUpperCase();
+          }
 
           return TableRow(
             decoration: const BoxDecoration(
@@ -671,16 +700,25 @@ class _LLGDashboardState extends State<LLGDashboard> {
                       radius: 14,
                       backgroundColor: colorTeal.withOpacity(0.2),
                       child: Text(
-                        child.name.isNotEmpty ? child.name[0].toUpperCase() : 'C',
+                        c.childName.isNotEmpty ? c.childName[0].toUpperCase() : 'C',
                         style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: colorTeal),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(
-                        child.name,
-                        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white),
-                        overflow: TextOverflow.ellipsis,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            c.childName,
+                            style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            '${c.childAgeYears} yrs • DPDP ${c.consentNoticeVersion}',
+                            style: GoogleFonts.inter(fontSize: 10, color: colorTextMuted),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -689,8 +727,16 @@ class _LLGDashboardState extends State<LLGDashboard> {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Text(
-                  reason,
+                  c.parentName,
                   style: GoogleFonts.inter(fontSize: 12, color: colorTextMuted),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Text(
+                  c.purpose,
+                  style: GoogleFonts.inter(fontSize: 12, color: Colors.white70),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -699,37 +745,43 @@ class _LLGDashboardState extends State<LLGDashboard> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: colorAmber.withOpacity(0.15),
+                    color: statusColor.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    'EVALUATION',
-                    style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: colorAmber),
+                    statusText,
+                    style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: statusColor),
                   ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Text(
-                  '${daysFlagged}d ago',
-                  style: GoogleFonts.inter(fontSize: 12, color: colorTextMuted),
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _selectedChild = child;
-                      _isDrawerOpen = true;
-                    });
-                  },
+                  onPressed: isRevoked
+                      ? null
+                      : () {
+                          setState(() {
+                            _selectedCase = c;
+                            _selectedChild = ChildModel(
+                              childId: c.childId,
+                              parentId: c.parentId,
+                              name: c.childName,
+                              dateOfBirth: DateTime.now().subtract(Duration(days: c.childAgeYears * 365)),
+                              gender: 'Child',
+                              createdAt: c.createdAt,
+                            );
+                            _isDrawerOpen = true;
+                          });
+                        },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: colorTeal,
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                   ),
-                  child: Text('Review', style: GoogleFonts.inter(fontSize: 11, color: Colors.white)),
+                  child: Text(
+                    isRevoked ? 'Locked' : 'Open Case',
+                    style: GoogleFonts.inter(fontSize: 11, color: Colors.white),
+                  ),
                 ),
               ),
             ],
@@ -820,33 +872,44 @@ class _LLGDashboardState extends State<LLGDashboard> {
   }
 
   // =========================================================================
-  // FLAGGED CHILDREN FULL PAGE
+  // MY CASES FULL PAGE (DPDP Consent-Enforced)
   // =========================================================================
-  Widget _buildFlaggedChildrenPage() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: _firestore.collection('flagState').where('hasApprovedFlag', isEqualTo: true).snapshots(),
-      builder: (context, flagSnap) {
-        if (flagSnap.connectionState == ConnectionState.waiting) {
+  Widget _buildMyCasesPage() {
+    final user = _auth.currentUser;
+    if (user == null) {
+      return const Center(child: Text('Please authenticate as a specialist'));
+    }
+
+    return StreamBuilder<List<SpecialistCaseModel>>(
+      stream: _caseService.getSpecialistCasesStream(specialistId: user.uid),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final approvedDocs = flagSnap.data?.docs ?? [];
-        final approvedChildIds = approvedDocs.map((d) => d.id).toList();
+        var cases = snapshot.data ?? [];
+        if (_searchQuery.isNotEmpty) {
+          cases = cases.where((c) {
+            return c.childName.toLowerCase().contains(_searchQuery) ||
+                c.parentName.toLowerCase().contains(_searchQuery) ||
+                c.purpose.toLowerCase().contains(_searchQuery);
+          }).toList();
+        }
 
-        if (approvedChildIds.isEmpty) {
+        if (cases.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.verified_user_outlined, size: 64, color: colorTeal.withOpacity(0.6)),
+                Icon(Icons.shield_outlined, size: 64, color: colorTeal.withOpacity(0.6)),
                 const SizedBox(height: 16),
                 Text(
-                  'No Parent-Consented Cases Pending',
+                  'No Cases Assigned',
                   style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Specialists only receive cases when parents explicitly approve specialist support.',
+                  'Under DPDP guidelines, specialist access is restricted exclusively to children whose\nparents have submitted a consultation request and granted active consent.',
                   style: GoogleFonts.inter(fontSize: 13, color: colorTextMuted),
                   textAlign: TextAlign.center,
                 ),
@@ -854,76 +917,6 @@ class _LLGDashboardState extends State<LLGDashboard> {
             ),
           );
         }
-
-        return StreamBuilder<QuerySnapshot>(
-          stream: _firestore
-              .collection('children')
-              .where(FieldPath.documentId, whereIn: approvedChildIds.take(10).toList())
-              .snapshots(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            var docs = snapshot.data?.docs ?? [];
-            if (_searchQuery.isNotEmpty) {
-              docs = docs.where((d) {
-                final data = d.data() as Map<String, dynamic>;
-                final name = (data['name'] ?? '').toString().toLowerCase();
-                final reason = (data['flagReason'] ?? '').toString().toLowerCase();
-                return name.contains(_searchQuery) || reason.contains(_searchQuery);
-              }).toList();
-            }
-
-            return Padding(
-              padding: const EdgeInsets.all(24),
-              child: Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: colorCard,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: colorBorder),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Parent-Approved Flagged Children Directory (${docs.length})',
-                          style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-                        ),
-                        Text(
-                          'Exclusively showing cases with explicit parent consent',
-                          style: GoogleFonts.inter(fontSize: 12, color: colorTeal),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        child: _buildFlaggedTable(docs),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  // =========================================================================
-  // ACTIVE REVIEWS PAGE
-  // =========================================================================
-  Widget _buildActiveReviewsPage() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: _firestore.collection('notifications').where('type', isEqualTo: 'review_requested').snapshots(),
-      builder: (context, snapshot) {
-        final docs = snapshot.data?.docs ?? [];
 
         return Padding(
           padding: const EdgeInsets.all(24),
@@ -937,28 +930,106 @@ class _LLGDashboardState extends State<LLGDashboard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Parent Review Requests (${docs.length})',
-                  style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'My Assigned Cases (${cases.length})',
+                      style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                    Row(
+                      children: [
+                        const Icon(Icons.verified_user, size: 14, color: Color(0xFF10B981)),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Consent Verified & Case-Scoped',
+                          style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF10B981), fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
-                if (docs.isEmpty)
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: _buildMyCasesTable(cases),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // =========================================================================
+  // ACTIVE REVIEWS / PENDING REQUESTS PAGE (Scoped to Specialist ID)
+  // =========================================================================
+  Widget _buildActiveReviewsPage() {
+    final user = _auth.currentUser;
+    if (user == null) {
+      return const Center(child: Text('Please authenticate as a specialist'));
+    }
+
+    return StreamBuilder<List<SpecialistCaseModel>>(
+      stream: _caseService.getSpecialistCasesStream(specialistId: user.uid),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final allCases = snapshot.data ?? [];
+        final pendingCases = allCases.where((c) => c.status == CaseStatus.pending).toList();
+
+        return Padding(
+          padding: const EdgeInsets.all(24),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: colorCard,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: colorBorder),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Pending Consultation Requests (${pendingCases.length})',
+                      style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                    Text(
+                      'Parent consent notice must be accepted before data access',
+                      style: GoogleFonts.inter(fontSize: 12, color: colorAmber),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                if (pendingCases.isEmpty)
                   Padding(
                     padding: const EdgeInsets.all(32),
                     child: Center(
-                      child: Text('No active parent review requests.', style: GoogleFonts.inter(color: colorTextMuted)),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.inbox_outlined, size: 48, color: colorTextMuted),
+                          const SizedBox(height: 12),
+                          Text('No pending consultation requests assigned to you.',
+                              style: GoogleFonts.inter(color: colorTextMuted, fontSize: 14)),
+                        ],
+                      ),
                     ),
                   )
                 else
                   Expanded(
                     child: ListView.separated(
-                      itemCount: docs.length,
+                      itemCount: pendingCases.length,
                       separatorBuilder: (context, index) => const SizedBox(height: 12),
                       itemBuilder: (context, idx) {
-                        final data = docs[idx].data() as Map<String, dynamic>;
-                        final childName = data['childName'] ?? 'Child';
-                        final parentName = data['parentName'] ?? 'Parent';
-                        final body = data['body'] ?? '';
+                        final c = pendingCases[idx];
 
                         return Container(
                           padding: const EdgeInsets.all(16),
@@ -968,32 +1039,85 @@ class _LLGDashboardState extends State<LLGDashboard> {
                             border: Border.all(color: colorBorder),
                           ),
                           child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              const Icon(Icons.mark_email_unread_outlined, color: colorTeal, size: 28),
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: colorAmber.withOpacity(0.15),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.assignment_ind_outlined, color: colorAmber, size: 24),
+                              ),
                               const SizedBox(width: 16),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text('$childName — Requested by $parentName',
-                                        style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14)),
+                                    Row(
+                                      children: [
+                                        Text(
+                                          '${c.childName} (${c.childAgeYears} yrs)',
+                                          style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: colorTeal.withOpacity(0.15),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            'DPDP v${c.consentNoticeVersion}',
+                                            style: GoogleFonts.inter(fontSize: 10, color: colorTeal, fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                     const SizedBox(height: 4),
-                                    Text(body, style: GoogleFonts.inter(color: colorTextMuted, fontSize: 12)),
+                                    Text(
+                                      'Requested by: ${c.parentName} • Purpose: ${c.purpose}',
+                                      style: GoogleFonts.inter(color: colorTextMuted, fontSize: 12),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'Authorized Categories: ${c.authorizedCategories.join(", ")}',
+                                      style: GoogleFonts.inter(color: Colors.white70, fontSize: 11),
+                                    ),
                                   ],
                                 ),
                               ),
+                              const SizedBox(width: 12),
+                              OutlinedButton(
+                                onPressed: () async {
+                                  await _caseService.declineCase(c.id, specialistId: user.uid, reason: 'Specialist unavailable');
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Declined case for ${c.childName}')),
+                                    );
+                                  }
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: colorTextMuted,
+                                  side: const BorderSide(color: colorBorder),
+                                ),
+                                child: const Text('Decline', style: TextStyle(fontSize: 12)),
+                              ),
+                              const SizedBox(width: 8),
                               ElevatedButton(
                                 onPressed: () async {
-                                  final cDoc = await _firestore.collection('children').doc(data['childId']).get();
-                                  if (cDoc.exists) {
-                                    setState(() {
-                                      _selectedChild = ChildModel.fromMap(cDoc.data()!);
-                                      _isDrawerOpen = true;
-                                    });
+                                  await _caseService.acceptCase(c.id, specialistId: user.uid);
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Accepted case for ${c.childName}. Records are now accessible.'),
+                                        backgroundColor: colorTeal,
+                                      ),
+                                    );
                                   }
                                 },
                                 style: ElevatedButton.styleFrom(backgroundColor: colorTeal),
-                                child: const Text('Examine Child', style: TextStyle(color: Colors.white, fontSize: 12)),
+                                child: const Text('Accept Case', style: TextStyle(color: Colors.white, fontSize: 12)),
                               ),
                             ],
                           ),
@@ -1010,11 +1134,20 @@ class _LLGDashboardState extends State<LLGDashboard> {
   }
 
   // =========================================================================
-  // OBSERVATION HISTORY PAGE
+  // OBSERVATION HISTORY PAGE (Scoped to Authenticated Specialist)
   // =========================================================================
   Widget _buildObservationHistoryPage() {
+    final user = _auth.currentUser;
+    if (user == null) {
+      return const Center(child: Text('Please authenticate'));
+    }
+
     return StreamBuilder<QuerySnapshot>(
-      stream: _firestore.collection('llgObservations').orderBy('recordedAt', descending: true).snapshots(),
+      stream: _firestore
+          .collection('llgObservations')
+          .where('llgId', isEqualTo: user.uid)
+          .orderBy('recordedAt', descending: true)
+          .snapshots(),
       builder: (context, snapshot) {
         final docs = snapshot.data?.docs ?? [];
 
@@ -1034,7 +1167,7 @@ class _LLGDashboardState extends State<LLGDashboard> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Immutable Observation Records (${docs.length})',
+                      'My Immutable Observation Records (${docs.length})',
                       style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
                     ),
                     Row(
@@ -1051,7 +1184,7 @@ class _LLGDashboardState extends State<LLGDashboard> {
                   Padding(
                     padding: const EdgeInsets.all(32),
                     child: Center(
-                      child: Text('No observation records found.', style: GoogleFonts.inter(color: colorTextMuted)),
+                      child: Text('No observation records found for your account.', style: GoogleFonts.inter(color: colorTextMuted)),
                     ),
                   )
                 else
@@ -1062,7 +1195,7 @@ class _LLGDashboardState extends State<LLGDashboard> {
                       itemBuilder: (context, idx) {
                         final obs = docs[idx].data() as Map<String, dynamic>;
                         final llgName = obs['llgName'] ?? 'Specialist';
-                        final severity = obs['severity'] ?? 'medium';
+                        final severity = obs['severity'] ?? 'guidance';
                         final observation = obs['observation'] ?? '';
                         final recommendations = List<String>.from(obs['recommendations'] ?? []);
                         final timestamp = (obs['recordedAt'] is Timestamp)
@@ -1089,7 +1222,9 @@ class _LLGDashboardState extends State<LLGDashboard> {
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                     decoration: BoxDecoration(
-                                      color: severity == 'critical' ? Colors.red.withOpacity(0.2) : colorTeal.withOpacity(0.2),
+                                      color: severity == 'critical'
+                                          ? Colors.red.withOpacity(0.2)
+                                          : (severity == 'high' ? colorAmber.withOpacity(0.2) : colorTeal.withOpacity(0.2)),
                                       borderRadius: BorderRadius.circular(6),
                                     ),
                                     child: Text(
@@ -1097,7 +1232,9 @@ class _LLGDashboardState extends State<LLGDashboard> {
                                       style: GoogleFonts.inter(
                                         fontSize: 10,
                                         fontWeight: FontWeight.bold,
-                                        color: severity == 'critical' ? Colors.redAccent : colorTeal,
+                                        color: severity == 'critical'
+                                            ? Colors.redAccent
+                                            : (severity == 'high' ? colorAmber : colorTeal),
                                       ),
                                     ),
                                   ),
@@ -1143,6 +1280,11 @@ class _LLGDashboardState extends State<LLGDashboard> {
   // CHILD DETAIL PANEL (Right side drawer)
   // =========================================================================
   Widget _buildChildDetailPanel(ChildModel child) {
+    final user = _auth.currentUser;
+    final isPermitted = _selectedCase != null && _selectedCase!.canAccessChildData;
+    final hasScoresPermission = _selectedCase?.authorizedCategories.contains('skill_scores') ?? false;
+    final hasActivityPermission = _selectedCase?.authorizedCategories.contains('activity_history') ?? false;
+
     return Positioned(
       top: 0,
       right: 0,
@@ -1177,8 +1319,14 @@ class _LLGDashboardState extends State<LLGDashboard> {
                           style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
                         ),
                         Text(
-                          'Age ${child.ageYears} • Flagged Profile Review',
-                          style: GoogleFonts.inter(fontSize: 11, color: colorTeal),
+                          isPermitted
+                              ? 'Age ${child.ageYears} • Case ID: ${_selectedCase!.id}'
+                              : 'Age ${child.ageYears} • Access Restricted',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            color: isPermitted ? colorTeal : Colors.redAccent,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ],
                     ),
@@ -1197,314 +1345,315 @@ class _LLGDashboardState extends State<LLGDashboard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Child Profile Summary
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: colorNavy,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: colorBorder),
-                      ),
-                      child: Column(
-                        children: [
-                          _buildDetailRow('Date of Birth', DateFormat.yMMMd().format(child.dateOfBirth)),
-                          const Divider(color: colorBorder, height: 16),
-                          _buildDetailRow('Gender', child.gender),
-                          const Divider(color: colorBorder, height: 16),
-                          _buildDetailRow('Flag Reason', child.flagReason ?? 'Multiple activity struggles'),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    // Current Skill Scores (6 domains)
-                    Text(
-                      'Developmental Domain Scores',
-                      style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
-                    ),
-                    const SizedBox(height: 10),
-                    StreamBuilder<DocumentSnapshot>(
-                      stream: _firestore.collection('skillProfiles').doc(child.childId).snapshots(),
-                      builder: (context, snapshot) {
-                        final data = snapshot.data?.data() as Map<String, dynamic>? ?? {};
-                        final domains = ['cognitive', 'language', 'motor', 'social', 'emotional', 'creative'];
-
-                        return Column(
-                          children: domains.map((domain) {
-                            final score = (data[domain] is num) ? (data[domain] as num).toDouble() : 0.0;
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: Row(
-                                children: [
-                                  SizedBox(
-                                    width: 80,
-                                    child: Text(
-                                      domain[0].toUpperCase() + domain.substring(1),
-                                      style: GoogleFonts.inter(color: colorTextMuted, fontSize: 12),
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(4),
-                                      child: LinearProgressIndicator(
-                                        value: (score / 100).clamp(0.0, 1.0),
-                                        backgroundColor: colorNavy,
-                                        valueColor: AlwaysStoppedAnimation<Color>(
-                                          score < 40 ? Colors.redAccent : (score < 70 ? colorAmber : colorTeal),
-                                        ),
-                                        minHeight: 8,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Text(
-                                    '${score.toStringAsFixed(1)}%',
-                                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }).toList(),
-                        );
-                      },
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    // Recent Score Events (Audit Trail from scoreEvents)
-                    Text(
-                      'Score Ledger Audit History (Latest 5)',
-                      style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
-                    ),
-                    const SizedBox(height: 10),
-                    FutureBuilder<List<Map<String, dynamic>>>(
-                      future: ScoreLedgerService().getScoreHistory(childId: child.childId),
-                      builder: (context, snapshot) {
-                        final events = snapshot.data ?? [];
-                        if (events.isEmpty) {
-                          return Text('No score events recorded yet.', style: GoogleFonts.inter(color: colorTextMuted, fontSize: 12));
-                        }
-
-                        return Column(
-                          children: events.take(5).map((e) {
-                            final delta = (e['appliedScoreDelta'] is num) ? (e['appliedScoreDelta'] as num).toDouble() : 0.0;
-                            final domain = e['skillDomain'] ?? 'skill';
-                            final title = e['activityTitle'] ?? 'Activity';
-                            final isPositive = delta >= 0;
-
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: colorNavy,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: colorBorder),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(title, style: GoogleFonts.inter(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w500)),
-                                        Text('$domain • Level ${e['levelAtTime'] ?? 1}', style: GoogleFonts.inter(fontSize: 10, color: colorTextMuted)),
-                                      ],
-                                    ),
-                                  ),
-                                  Text(
-                                    '${isPositive ? '+' : ''}${delta.toStringAsFixed(1)} pts',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: isPositive ? const Color(0xFF10B981) : Colors.redAccent,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }).toList(),
-                        );
-                      },
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    // Flag Evidence & Clinical Confidence (from flagState)
-                    StreamBuilder<DocumentSnapshot>(
-                      stream: _firestore.collection('flagState').doc(child.childId).snapshots(),
-                      builder: (context, snapshot) {
-                        final data = snapshot.data?.data() as Map<String, dynamic>? ?? {};
-                        final domains = (data['domains'] as Map<String, dynamic>?) ?? {};
-                        final approvedEntries = domains.entries
-                            .where((e) => e.value is Map && e.value['parentResponse'] == 'approved')
-                            .toList();
-
-                        if (approvedEntries.isEmpty) {
-                          return const SizedBox.shrink();
-                        }
-
-                        final firstApproved = approvedEntries.first;
-                        final domainKey = firstApproved.key;
-                        final domainData = firstApproved.value as Map<String, dynamic>;
-                        final confidence = (domainData['confidence'] is num)
-                            ? (domainData['confidence'] as num).toDouble()
-                            : 0.0;
-                        final aiGenAttempts = domainData['aiGenAttempts'] ?? 0;
-                        final evidence = domainData['evidence'] as Map<String, dynamic>? ?? {};
-                        final parentRespondedAt = domainData['parentRespondedAt'];
-                        String respondedDateStr = 'Recently';
-                        if (parentRespondedAt is Timestamp) {
-                          respondedDateStr = DateFormat.yMMMd().format(parentRespondedAt.toDate());
-                        }
-
-                        return Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: colorNavy,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: colorTeal.withOpacity(0.4)),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'Flag Evidence & Consent',
-                                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: colorTeal),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: colorTeal.withOpacity(0.15),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Text(
-                                      '${confidence.round()}% Confidence',
-                                      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: colorTeal),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 10),
-                              _buildDetailRow('Target Domain', domainKey[0].toUpperCase() + domainKey.substring(1)),
-                              const Divider(color: colorBorder, height: 12),
-                              _buildDetailRow('Parent Approved', respondedDateStr),
-                              const Divider(color: colorBorder, height: 12),
-                              _buildDetailRow('AI Practice Attempts', '$aiGenAttempts / 3 (14-day window)'),
-                              const Divider(color: colorBorder, height: 12),
-                              _buildDetailRow('Activity Evidence', '${evidence['activityCount'] ?? 0} activities, ${evidence['struggleCount'] ?? 0} struggles'),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    // Actions: Add Observation, Request Parent Call, Close Case
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => AddObservationPage(
-                                child: child,
-                                onSuccess: () {
-                                  setState(() => _isDrawerOpen = false);
-                                },
-                              ),
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.note_add_outlined, size: 18),
-                        label: const Text('Add Immutable Clinical Observation'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: colorTeal,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          textStyle: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13),
+                    // If access is NOT permitted (pending, revoked, or no consent)
+                    if (!isPermitted) ...[
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.redAccent.withOpacity(0.4)),
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Parent consultation request dispatched for ${child.name}.'),
-                              backgroundColor: colorTeal,
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.phone_in_talk_outlined, size: 18, color: Colors.white),
-                        label: const Text('Request Parent Consultation Call', style: TextStyle(color: Colors.white)),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: colorBorder),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: () async {
-                          final confirm = await showDialog<bool>(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              backgroundColor: colorSlate,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              title: Text('Close Case', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold)),
-                              content: Text(
-                                'Are you sure you want to mark this case as resolved for ${child.name}? This will clear the active flag and log an immutable audit resolution.',
-                                style: GoogleFonts.inter(color: colorTextMuted),
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(ctx, false),
-                                  child: Text('Cancel', style: GoogleFonts.inter(color: colorTextMuted)),
-                                ),
-                                ElevatedButton(
-                                  onPressed: () => Navigator.pop(ctx, true),
-                                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981)),
-                                  child: const Text('Resolve Case', style: TextStyle(color: Colors.white)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.gpp_bad_outlined, color: Colors.redAccent, size: 22),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Access Restricted',
+                                  style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13),
                                 ),
                               ],
                             ),
-                          );
-
-                          if (confirm == true) {
-                            await FlagService().resolveAutoUnflag(childId: child.childId, domain: 'cognitive');
-                            setState(() => _isDrawerOpen = false);
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Case resolved successfully.'),
-                                  backgroundColor: Color(0xFF10B981),
-                                ),
-                              );
-                            }
-                          }
-                        },
-                        icon: const Icon(Icons.check_circle_outline, size: 18, color: Color(0xFF10B981)),
-                        label: const Text('Close Case (Mark Resolved)', style: TextStyle(color: Color(0xFF10B981))),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Color(0xFF10B981)),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            const SizedBox(height: 8),
+                            Text(
+                              _selectedCase?.status == CaseStatus.revoked
+                                  ? 'Parent revoked consultation consent on ${DateFormat.yMMMd().format(_selectedCase!.revokedAt ?? DateTime.now())}.\nReason: ${_selectedCase?.revocationReason ?? "Parental withdrawal under DPDP"}.'
+                                  : 'Active parental consent is required before accessing clinical notes, developmental scores, or activity history.',
+                              style: GoogleFonts.inter(color: Colors.white70, fontSize: 12, height: 1.4),
+                            ),
+                          ],
                         ),
                       ),
-                    ),
+                      const SizedBox(height: 20),
+                    ],
+
+                    // Case & DPDP Consent Scope Card
+                    if (_selectedCase != null) ...[
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: colorNavy,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: isPermitted ? colorTeal.withOpacity(0.4) : colorBorder),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'DPDP Consent Record',
+                                  style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: colorTeal),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: (isPermitted ? const Color(0xFF10B981) : colorAmber).withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    _selectedCase!.status.name.toUpperCase(),
+                                    style: GoogleFonts.inter(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: isPermitted ? const Color(0xFF10B981) : colorAmber,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            _buildDetailRow('Purpose', _selectedCase!.purpose),
+                            const Divider(color: colorBorder, height: 12),
+                            _buildDetailRow('Parent Name', _selectedCase!.parentName),
+                            const Divider(color: colorBorder, height: 12),
+                            _buildDetailRow('Notice Version', 'DPDP v${_selectedCase!.consentNoticeVersion}'),
+                            const Divider(color: colorBorder, height: 12),
+                            _buildDetailRow(
+                              'Consent Expiry',
+                              _selectedCase!.consentExpiresAt != null
+                                  ? DateFormat.yMMMd().format(_selectedCase!.consentExpiresAt!)
+                                  : '90 days from grant',
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+
+                    // Permitted Child Data (Data Minimised - Exact DOB masked)
+                    if (isPermitted) ...[
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: colorNavy,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: colorBorder),
+                        ),
+                        child: Column(
+                          children: [
+                            _buildDetailRow('Child Age', '${child.ageYears} years (DOB masked)'),
+                            const Divider(color: colorBorder, height: 16),
+                            _buildDetailRow('Gender', child.gender),
+                            const Divider(color: colorBorder, height: 16),
+                            _buildDetailRow('Focus Domain', _selectedCase?.purpose ?? 'Developmental'),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Current Skill Scores (Only if authorized)
+                      if (hasScoresPermission) ...[
+                        Text(
+                          'Developmental Domain Scores',
+                          style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                        const SizedBox(height: 10),
+                        StreamBuilder<DocumentSnapshot>(
+                          stream: _firestore.collection('skillProfiles').doc(child.childId).snapshots(),
+                          builder: (context, snapshot) {
+                            final data = snapshot.data?.data() as Map<String, dynamic>? ?? {};
+                            final domains = ['cognitive', 'language', 'motor', 'social', 'emotional', 'creative'];
+
+                            return Column(
+                              children: domains.map((domain) {
+                                final score = (data[domain] is num) ? (data[domain] as num).toDouble() : 0.0;
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 80,
+                                        child: Text(
+                                          domain[0].toUpperCase() + domain.substring(1),
+                                          style: GoogleFonts.inter(color: colorTextMuted, fontSize: 12),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(4),
+                                          child: LinearProgressIndicator(
+                                            value: (score / 100).clamp(0.0, 1.0),
+                                            backgroundColor: colorNavy,
+                                            valueColor: AlwaysStoppedAnimation<Color>(
+                                              score < 40 ? Colors.redAccent : (score < 70 ? colorAmber : colorTeal),
+                                            ),
+                                            minHeight: 8,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Text(
+                                        '${score.toStringAsFixed(1)}%',
+                                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+
+                      // Recent Score Events (Only if activity history authorized)
+                      if (hasActivityPermission) ...[
+                        Text(
+                          'Score Ledger Audit History (Latest 5)',
+                          style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                        const SizedBox(height: 10),
+                        FutureBuilder<List<Map<String, dynamic>>>(
+                          future: ScoreLedgerService().getScoreHistory(childId: child.childId),
+                          builder: (context, snapshot) {
+                            final events = snapshot.data ?? [];
+                            if (events.isEmpty) {
+                              return Text('No score events recorded yet.', style: GoogleFonts.inter(color: colorTextMuted, fontSize: 12));
+                            }
+
+                            return Column(
+                              children: events.take(5).map((e) {
+                                final delta = (e['appliedScoreDelta'] is num) ? (e['appliedScoreDelta'] as num).toDouble() : 0.0;
+                                final domain = e['skillDomain'] ?? 'skill';
+                                final title = e['activityTitle'] ?? 'Activity';
+                                final isPositive = delta >= 0;
+
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: colorNavy,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: colorBorder),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(title, style: GoogleFonts.inter(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w500)),
+                                            Text('$domain • Level ${e['levelAtTime'] ?? 1}', style: GoogleFonts.inter(fontSize: 10, color: colorTextMuted)),
+                                          ],
+                                        ),
+                                      ),
+                                      Text(
+                                        '${isPositive ? '+' : ''}${delta.toStringAsFixed(1)} pts',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: isPositive ? const Color(0xFF10B981) : Colors.redAccent,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+
+                      // Actions: Add Observation / Guidance Note
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => AddObservationPage(
+                                  child: child,
+                                  onSuccess: () {
+                                    setState(() => _isDrawerOpen = false);
+                                  },
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.note_add_outlined, size: 18),
+                          label: const Text('Add Clinical / Educational Observation'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: colorTeal,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            textStyle: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // Resolve / Close Case
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                backgroundColor: colorSlate,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                title: Text('Complete Consultation Case', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold)),
+                                content: Text(
+                                  'Are you sure you want to mark this consultation as completed for ${child.name}? This will complete the specialist assignment and log an immutable audit resolution.',
+                                  style: GoogleFonts.inter(color: colorTextMuted),
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(ctx, false),
+                                    child: Text('Cancel', style: GoogleFonts.inter(color: colorTextMuted)),
+                                  ),
+                                  ElevatedButton(
+                                    onPressed: () => Navigator.pop(ctx, true),
+                                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981)),
+                                    child: const Text('Complete Case', style: TextStyle(color: Colors.white)),
+                                  ),
+                                ],
+                              ),
+                            );
+
+                            if (confirm == true && _selectedCase != null && user != null) {
+                              await _caseService.closeCase(_selectedCase!.id, specialistId: user.uid);
+                              await FlagService().resolveAutoUnflag(childId: child.childId, domain: 'cognitive');
+                              setState(() => _isDrawerOpen = false);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Case completed successfully.'),
+                                    backgroundColor: Color(0xFF10B981),
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                          icon: const Icon(Icons.check_circle_outline, size: 18, color: Color(0xFF10B981)),
+                          label: const Text('Complete Case (Mark Resolved)', style: TextStyle(color: Color(0xFF10B981))),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Color(0xFF10B981)),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),

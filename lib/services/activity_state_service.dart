@@ -61,11 +61,12 @@ class ActivityStateService {
       return;
     }
 
-    await _collection.doc(childId).update({
+    await _collection.doc(childId).set({
+      'childId': childId,
       'status': 'completed_pending_feedback',
       'completedAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
-    });
+    }, SetOptions(merge: true));
   }
 
   /// Called when parent submits feedback
@@ -82,10 +83,11 @@ class ActivityStateService {
       return;
     }
 
-    await _collection.doc(childId).update({
+    await _collection.doc(childId).set({
+      'childId': childId,
       'status': 'completed',
       'updatedAt': FieldValue.serverTimestamp(),
-    });
+    }, SetOptions(merge: true));
   }
 
   /// Get current active activity for a child

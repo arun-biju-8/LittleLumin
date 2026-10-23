@@ -121,17 +121,21 @@ class CompactScorePreview extends StatelessWidget {
     List<Map<String, dynamic>> events,
     Map<String, dynamic> journey,
   ) {
-    // 1. Calculate overall score
+    // 1. Calculate domain stats & overall score
     double totalScore = 0;
-    int domainCount = 0;
+    int assessedDomainsCount = 0;
+    int masteredDomainsCount = 0;
     for (final d in _domains) {
       final s = _getScore(profile, d);
       if (s > 0) {
         totalScore += s;
-        domainCount++;
+        assessedDomainsCount++;
+      }
+      if (s >= 70.0) {
+        masteredDomainsCount++;
       }
     }
-    final overallScore = domainCount > 0 ? (totalScore / domainCount) : 0.0;
+    final overallScore = assessedDomainsCount > 0 ? (totalScore / assessedDomainsCount) : 0.0;
     final scoreInt = overallScore.round();
 
     // 2. Journey level info
@@ -141,7 +145,10 @@ class CompactScorePreview extends StatelessWidget {
       orElse: () => JourneyLevelConfig.defaultLevels.first,
     );
     final completedCount = (journey['completedActivities'] as List?)?.length ?? 0;
-    final totalSkillsCount = levelConfig.domainRequirements.length;
+    final totalDomainsCount = _domains.length;
+    final levelTitle = levelConfig.title.toLowerCase().startsWith('level $currentLevel')
+        ? levelConfig.title
+        : 'Level $currentLevel: ${levelConfig.title}';
 
     // 3. Calculate 7-day trend per domain
     final now = DateTime.now();
@@ -185,9 +192,30 @@ class CompactScorePreview extends StatelessWidget {
         children: [
           // Header: 📊 Overall Growth
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('📊 ', style: TextStyle(fontSize: 18)),
-              Text('Overall Growth', style: MeadowTypography.h2),
+              Row(
+                children: [
+                  const Text('📊 ', style: TextStyle(fontSize: 18)),
+                  Text('Overall Growth', style: MeadowTypography.h2),
+                ],
+              ),
+              if (assessedDomainsCount > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: MeadowColors.primarySurface,
+                    borderRadius: BorderRadius.circular(MeadowRadius.pill),
+                  ),
+                  child: Text(
+                    '$assessedDomainsCount/6 domains assessed',
+                    style: MeadowTypography.caption.copyWith(
+                      color: MeadowColors.primary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
             ],
           ),
           const SizedBox(height: MeadowSpacing.lg),
@@ -230,16 +258,28 @@ class CompactScorePreview extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Level $currentLevel · ${levelConfig.title}',
+                      levelTitle,
                       style: MeadowTypography.label.copyWith(
                         color: MeadowColors.textPrimary,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '$completedCount activities completed',
+                      style: MeadowTypography.body.copyWith(
+                        color: MeadowColors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
                     const SizedBox(height: 2),
                     Text(
-                      '$completedCount of $totalSkillsCount skills explored',
-                      style: MeadowTypography.caption.copyWith(color: MeadowColors.textSecondary),
+                      '$masteredDomainsCount of $totalDomainsCount domains mastered (70% goal)',
+                      style: MeadowTypography.caption.copyWith(
+                        color: MeadowColors.textSecondary,
+                        fontSize: 12,
+                      ),
                     ),
                   ],
                 ),

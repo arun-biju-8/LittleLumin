@@ -82,8 +82,9 @@ void main() {
       expect(find.text('Growth'), findsOneWidget);
 
       // Level information
-      expect(find.text('Level 1 · Level 1: Foundation Skills'), findsOneWidget);
-      expect(find.text('4 of 6 skills explored'), findsOneWidget);
+      expect(find.text('Level 1: Foundation Skills'), findsOneWidget);
+      expect(find.text('4 activities completed'), findsOneWidget);
+      expect(find.text('2 of 6 domains mastered (70% goal)'), findsOneWidget);
     });
 
     testWidgets('Renders all 6 domain cards with scores and domain labels', (tester) async {

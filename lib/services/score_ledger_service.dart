@@ -1,13 +1,23 @@
 // ignore_for_file: constant_identifier_names
 // lib/services/score_ledger_service.dart
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 
 class ScoreLedgerService {
   final FirebaseFirestore? _customFirestore;
+  final http.Client? _customHttpClient;
   FirebaseFirestore get _firestore => _customFirestore ?? FirebaseFirestore.instance;
 
-  ScoreLedgerService({FirebaseFirestore? firestore}) : _customFirestore = firestore;
+  static const String backendUrl = 'https://littlelumin-backend.onrender.com';
+
+  ScoreLedgerService({
+    FirebaseFirestore? firestore,
+    http.Client? httpClient,
+  })  : _customFirestore = firestore,
+        _customHttpClient = httpClient;
 
   static const List<String> DOMAINS = [
     'cognitive',
@@ -26,7 +36,7 @@ class ScoreLedgerService {
     return 1.0;
   }
 
-  /// Record an immutable score event and update the profile cache
+  /// Record an authoritative score event via backend or simulated fallback in test mode
   Future<Map<String, dynamic>> recordScoreEvent({
     required String childId,
     required String activityId,
@@ -55,6 +65,57 @@ class ScoreLedgerService {
 
     final weight = getWeight(activitySource, levelAtTime);
     final appliedDelta = rawScoreDelta * weight;
+
+    // Secure flow: In production, route score events to the authoritative backend endpoint
+    // to calculate deltas and create ledger records server-side via Firebase Admin SDK.
+    if (_customFirestore == null) {
+      try {
+        final idToken = await FirebaseAuth.instance.currentUser?.getIdToken();
+        if (idToken != null && idToken.isNotEmpty) {
+          final uri = Uri.parse('$backendUrl/api/cases/record-activity-score');
+          final client = _customHttpClient ?? http.Client();
+          final response = await client.post(
+            uri,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $idToken',
+            },
+            body: jsonEncode({
+              'child_id': childId,
+              'activity_id': activityId,
+              'activity_title': activityTitle,
+              'activity_source': activitySource,
+              'skill_domain': normalizedDomain,
+              'difficulty': difficulty,
+              'child_response': feedback['childResponse']?.toString() ?? 'great',
+              'engagement': feedback['engagement']?.toString() ?? 'high',
+              'confidence': feedback['confidence']?.toString() ?? 'confident',
+              'time_estimate': feedback['timeEstimate']?.toString(),
+              'notes': feedback['notes']?.toString(),
+            }),
+          ).timeout(const Duration(seconds: 10));
+
+          if (response.statusCode == 200 || response.statusCode == 201) {
+            final data = jsonDecode(response.body) as Map<String, dynamic>;
+            return {
+              'eventId': data['event_id'] ?? 'server_evt_${DateTime.now().millisecondsSinceEpoch}',
+              'scoreBefore': (data['score_before'] as num?)?.toDouble() ?? 0.0,
+              'scoreAfter': (data['score_after'] as num?)?.toDouble() ?? 0.0,
+              'rawDelta': rawScoreDelta,
+              'appliedDelta': (data['applied_score_delta'] as num?)?.toDouble() ?? appliedDelta,
+              'weight': (data['weight_applied'] as num?)?.toDouble() ?? weight,
+              'source': activitySource,
+              'isDomainMastered': data['is_domain_mastered'] ?? false,
+              'isLevelCompleted': data['is_level_completed'] ?? false,
+              'currentLevel': data['current_level'],
+              'unlockedLevels': data['unlocked_levels'],
+            };
+          }
+        }
+      } catch (err) {
+        debugPrint('⚠️ Backend growth endpoint call failed or offline, using fallback: $err');
+      }
+    }
 
     try {
       final profileRef = _firestore.collection('skillProfiles').doc(childId);

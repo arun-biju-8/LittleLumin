@@ -138,11 +138,15 @@ class _GrowthAnalyticsScreenState extends State<GrowthAnalyticsScreen> {
     // 1. Calculate overall score
     double totalScore = 0;
     int domainsWithScores = 0;
+    int masteredDomains = 0;
     for (final domain in _domains) {
       final s = _getScore(profile, domain);
       if (s > 0) {
         totalScore += s;
         domainsWithScores++;
+      }
+      if (s >= 70.0) {
+        masteredDomains++;
       }
     }
     final overallScore = domainsWithScores > 0 ? (totalScore / domainsWithScores) : 0.0;
@@ -240,6 +244,8 @@ class _GrowthAnalyticsScreenState extends State<GrowthAnalyticsScreen> {
           levelName: levelConfig.title,
           completedCount: completedActivities,
           totalSkillsCount: totalSkillsForLevel,
+          masteredDomains: masteredDomains,
+          assessedDomains: domainsWithScores,
         ),
         const SizedBox(height: MeadowSpacing.xxl),
 
@@ -294,8 +300,13 @@ class _GrowthAnalyticsScreenState extends State<GrowthAnalyticsScreen> {
     required String levelName,
     required int completedCount,
     required int totalSkillsCount,
+    int masteredDomains = 0,
+    int assessedDomains = 0,
   }) {
     final scoreInt = overallScore.round();
+    final levelDisplayName = levelName.toLowerCase().startsWith('level $currentLevel')
+        ? levelName
+        : 'Level $currentLevel · $levelName';
 
     return Container(
       padding: const EdgeInsets.all(MeadowSpacing.xl),
@@ -363,7 +374,7 @@ class _GrowthAnalyticsScreenState extends State<GrowthAnalyticsScreen> {
                     borderRadius: BorderRadius.circular(MeadowRadius.pill),
                   ),
                   child: Text(
-                    'Level $currentLevel · $levelName',
+                    levelDisplayName,
                     style: MeadowTypography.caption.copyWith(
                       color: MeadowColors.textPrimary,
                       fontWeight: FontWeight.w700,
@@ -376,10 +387,18 @@ class _GrowthAnalyticsScreenState extends State<GrowthAnalyticsScreen> {
                   'Milestone Progress',
                   style: MeadowTypography.h3,
                 ),
+                const SizedBox(height: 3),
+                Text(
+                  '$completedCount activities completed',
+                  style: MeadowTypography.body.copyWith(
+                    color: MeadowColors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 const SizedBox(height: 2),
                 Text(
-                  '$completedCount of $totalSkillsCount skills explored',
-                  style: MeadowTypography.body.copyWith(
+                  '$masteredDomains of $totalSkillsCount domains mastered (70% goal)',
+                  style: MeadowTypography.caption.copyWith(
                     color: MeadowColors.textSecondary,
                   ),
                 ),
@@ -856,21 +875,24 @@ class _GrowthAnalyticsScreenState extends State<GrowthAnalyticsScreen> {
     required IconData icon,
     required Color color,
   }) {
-    return ListTile(
-      leading: Container(
-        width: 38,
-        height: 38,
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.15),
-          shape: BoxShape.circle,
+    return Material(
+      color: Colors.transparent,
+      child: ListTile(
+        leading: Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.15),
+            shape: BoxShape.circle,
+          ),
+          alignment: Alignment.center,
+          child: Icon(icon, color: color, size: 20),
         ),
-        alignment: Alignment.center,
-        child: Icon(icon, color: color, size: 20),
-      ),
-      title: Text(title, style: MeadowTypography.label),
-      subtitle: Text(
-        subtitle,
-        style: MeadowTypography.caption.copyWith(color: MeadowColors.textSecondary),
+        title: Text(title, style: MeadowTypography.label),
+        subtitle: Text(
+          subtitle,
+          style: MeadowTypography.caption.copyWith(color: MeadowColors.textSecondary),
+        ),
       ),
     );
   }

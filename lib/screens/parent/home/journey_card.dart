@@ -8,42 +8,35 @@ import '../parent_theme.dart';
 class JourneyCard extends StatelessWidget {
   final ChildModel child;
   final VoidCallback onContinueJourney;
+  final Stream<JourneyProgress?>? journeyStream;
 
   const JourneyCard({
     super.key,
     required this.child,
     required this.onContinueJourney,
+    this.journeyStream,
   });
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<JourneyProgress?>(
-      stream: JourneyService().getJourneyProgress(child.childId),
+      stream: journeyStream ?? JourneyService().getJourneyProgress(child.childId),
       builder: (context, snapshot) {
         final journey = snapshot.data;
         final level = journey?.currentLevel ?? 1;
         final lvlProg = journey?.currentLevelProgress ?? LevelProgress(completed: []);
 
-        final completedCount = lvlProg.completed.length;
-        final totalCount = lvlProg.total > 0 ? lvlProg.total : 6;
-        final progressFraction = (completedCount / totalCount).clamp(0.0, 1.0);
-        final percent = (progressFraction * 100).round();
-
-        const defaultDomains = [
-          'Cognitive',
-          'Language',
-          'Motor',
-          'Social',
-          'Emotional',
-          'Creative',
-        ];
+        final masteredCount = lvlProg.masteredDomainCount;
+        final totalCount = lvlProg.totalDomains;
+        final completedActivitiesCount = journey?.completedActivities.length ?? 0;
+        final progressFraction = lvlProg.progressFraction;
+        final percent = lvlProg.progressPercent;
 
         String nextDomain = 'Level Completed! 🏆';
-        for (final domain in defaultDomains) {
-          if (!lvlProg.completed.contains(domain)) {
-            nextDomain = domain;
-            break;
-          }
+        final pending = journey?.pendingDomainKeys ?? [];
+        if (pending.isNotEmpty) {
+          final firstPending = pending.first;
+          nextDomain = firstPending[0].toUpperCase() + firstPending.substring(1);
         }
 
         return Container(
@@ -102,15 +95,30 @@ class JourneyCard extends StatelessWidget {
               ),
               const SizedBox(height: 16),
 
-              // Level & skills completed with percentage
+              // Level & domains mastered with percentage
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Level $level · $completedCount/$totalCount skills',
-                    style: ParentTypography.cardTitle.copyWith(
-                      color: Colors.white,
-                      fontSize: 16,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Level $level · $masteredCount/$totalCount domains mastered',
+                          style: ParentTypography.cardTitle.copyWith(
+                            color: Colors.white,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '$completedActivitiesCount activities completed (70% domain mastery goal)',
+                          style: ParentTypography.caption.copyWith(
+                            color: Colors.white.withOpacity(0.8),
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   Container(

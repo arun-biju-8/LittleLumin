@@ -11,6 +11,7 @@ import '../../widgets/auth_loading_overlay.dart';
 import '../admin/admin_dashboard.dart';
 import '../llg/llg_dashboard.dart';
 import '../parent/parent_dashboard.dart';
+import 'forgot_password_page.dart';
 
 enum AuthMode { login, signup }
 
@@ -283,6 +284,24 @@ class _AuthPageState extends State<AuthPage>
       context,
       MaterialPageRoute(builder: (_) => destination),
     );
+  }
+
+  void _openForgotPassword() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ForgotPasswordPage(
+          initialEmail: _loginEmailController.text.trim(),
+          authService: _authService,
+        ),
+      ),
+    ).then((result) {
+      if (result is String && result.isNotEmpty && mounted) {
+        setState(() {
+          _loginEmailController.text = result;
+        });
+      }
+    });
   }
 
   void _showError(String message) {
@@ -926,21 +945,49 @@ class _AuthPageState extends State<AuthPage>
           ),
           const SizedBox(height: 12),
 
-          // Remember me checkbox
-          Row(
+          // Remember me & Forgot Password
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            runSpacing: 4,
             children: [
-              Checkbox(
-                key: const ValueKey('remember_me_checkbox'),
-                value: _rememberMe,
-                activeColor: brandPurple,
-                onChanged: (val) => setState(() => _rememberMe = val ?? false),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(4),
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Checkbox(
+                    key: const ValueKey('remember_me_checkbox'),
+                    value: _rememberMe,
+                    activeColor: brandPurple,
+                    onChanged: (val) => setState(() => _rememberMe = val ?? false),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  const SizedBox(width: 4),
+                  const Text(
+                    'Remember me',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                ],
               ),
-              const Text(
-                'Remember me',
-                style: TextStyle(fontSize: 14),
+              TextButton(
+                key: const ValueKey('forgot_password_btn'),
+                onPressed: _openForgotPassword,
+                style: TextButton.styleFrom(
+                  foregroundColor: brandPurple,
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text(
+                  'Forgot Password?',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
               ),
             ],
           ),

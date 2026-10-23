@@ -41,6 +41,7 @@ void main() {
       expect(find.byKey(const ValueKey('login_email_field')), findsOneWidget);
       expect(find.byKey(const ValueKey('login_password_field')), findsOneWidget);
       expect(find.byKey(const ValueKey('remember_me_checkbox')), findsOneWidget);
+      expect(find.byKey(const ValueKey('forgot_password_btn')), findsOneWidget);
       expect(find.byKey(const ValueKey('login_submit_btn')), findsOneWidget);
       expect(find.byKey(const ValueKey('google_sign_in_btn')), findsOneWidget);
       expect(find.byKey(const ValueKey('toggle_to_signup_btn')), findsOneWidget);
@@ -48,6 +49,32 @@ void main() {
       // Signup fields should NOT be visible initially
       expect(find.byKey(const ValueKey('signup_name_field')), findsNothing);
       expect(find.byKey(const ValueKey('signup_phone_field')), findsNothing);
+    });
+
+    testWidgets('Tapping "Forgot Password?" opens ForgotPasswordPage with prefilled email', (tester) async {
+      setDesktopSize(tester);
+      addTearDown(() => resetSize(tester));
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: AuthPage(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('login_email_field')),
+        'parent@example.com',
+      );
+
+      expect(find.byKey(const ValueKey('forgot_password_btn')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('forgot_password_btn')));
+      await tester.pumpAndSettle();
+
+      // ForgotPasswordPage is now shown with pre-filled email
+      expect(find.byKey(const ValueKey('forgot_password_email_field')), findsOneWidget);
+      expect(find.text('parent@example.com'), findsOneWidget);
+      expect(find.byKey(const ValueKey('send_reset_link_btn')), findsOneWidget);
     });
 
     testWidgets('Tapping "Sign Up" toggles to signup mode with all signup fields', (tester) async {

@@ -5,13 +5,22 @@ import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
 
 class AuthService extends ChangeNotifier {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth? _authOverride;
+  final FirebaseFirestore? _firestoreOverride;
 
-  AuthService() {
-    _auth.authStateChanges().listen((User? user) {
-      notifyListeners();
-    });
+  FirebaseAuth get _auth => _authOverride ?? FirebaseAuth.instance;
+  FirebaseFirestore get _firestore => _firestoreOverride ?? FirebaseFirestore.instance;
+
+  AuthService({FirebaseAuth? auth, FirebaseFirestore? firestore})
+      : _authOverride = auth,
+        _firestoreOverride = firestore {
+    try {
+      _auth.authStateChanges().listen((User? user) {
+        notifyListeners();
+      });
+    } catch (_) {
+      // Allows testing in environments where Firebase is not initialized
+    }
   }
 
   // Get current user
@@ -108,6 +117,46 @@ class AuthService extends ChangeNotifier {
     } catch (e) {
       debugPrint('❌ Login error: $e');
       throw Exception('Login failed. Please try again.');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // ============ PASSWORD RESET ============
+  Future<void> sendPasswordResetEmail({required String email}) async {
+    final cleanEmail = email.trim();
+    if (cleanEmail.isEmpty) {
+      throw ArgumentError('Email cannot be empty');
+    }
+
+    _isLoading = true;
+    notifyListeners();
+    try {
+      debugPrint('🔵 Requesting password reset email');
+      await _auth.sendPasswordResetEmail(email: cleanEmail);
+      debugPrint('✅ Password reset email request processed successfully');
+    } on FirebaseAuthException catch (e) {
+      debugPrint('❌ Password reset error: ${e.code} - ${e.message}');
+      switch (e.code) {
+        case 'invalid-email':
+          throw Exception('Please enter a valid email address.');
+        case 'user-disabled':
+          throw Exception('This account has been disabled. Please contact support.');
+        case 'too-many-requests':
+          throw Exception('Too many attempts. Please wait a few moments and try again.');
+        case 'network-request-failed':
+          throw Exception('Network error. Check your internet connection.');
+        case 'user-not-found':
+          // Security / Enumeration protection: do not reveal that user doesn't exist
+          debugPrint('ℹ️ User not found, suppressing error to prevent email enumeration');
+          return;
+        default:
+          throw Exception(_getAuthErrorMessage(e.code));
+      }
+    } catch (e) {
+      debugPrint('❌ Password reset unexpected error: $e');
+      throw Exception('Unable to send reset email. Please try again.');
     } finally {
       _isLoading = false;
       notifyListeners();

@@ -11,6 +11,7 @@ class GlobalHeader extends StatefulWidget implements PreferredSizeWidget {
   final VoidCallback? onBellTap;
   final VoidCallback? onAvatarTap;
   final VoidCallback? onBackTap;
+  final VoidCallback? onBack;
   final String? title;
 
   const GlobalHeader({
@@ -22,6 +23,7 @@ class GlobalHeader extends StatefulWidget implements PreferredSizeWidget {
     this.onBellTap,
     this.onAvatarTap,
     this.onBackTap,
+    this.onBack,
     this.title,
   });
 
@@ -79,6 +81,11 @@ class _GlobalHeaderState extends State<GlobalHeader> {
   void _handleLogoTap(BuildContext ctx) {
     if (widget.onLogoTap != null) {
       widget.onLogoTap!();
+      return;
+    }
+    // If showBack is true or title is set, this is a sub-page/detail screen.
+    // Do not hijack tap to navigate to home.
+    if (widget.showBack || widget.title != null) {
       return;
     }
     // Default navigate to Home
@@ -167,6 +174,8 @@ class _GlobalHeaderState extends State<GlobalHeader> {
                       onPressed: () {
                         if (widget.onBackTap != null) {
                           widget.onBackTap!();
+                        } else if (widget.onBack != null) {
+                          widget.onBack!();
                         } else {
                           Navigator.pop(ctx);
                         }

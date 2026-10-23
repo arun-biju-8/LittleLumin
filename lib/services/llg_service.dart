@@ -2,6 +2,7 @@
 // lib/services/llg_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'audit_log_service.dart';
 
 class LLGService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -298,16 +299,14 @@ class LLGService {
       'isImmutable': true,
     }, SetOptions(merge: true));
 
-    // 2. Log admin action
-    await _firestore.collection('adminAuditLogs').add({
-      'action': 'certificate_verified',
-      'actorId': adminId,
-      'actorType': 'admin',
-      'targetId': llgId,
-      'certType': certType,
-      'timestamp': FieldValue.serverTimestamp(),
-      'isImmutable': true,
-    });
+    // 2. Log admin action via authoritative backend
+    await AuditLogService.logEvent(
+      action: 'certificate_verified',
+      targetId: llgId,
+      details: {
+        'certType': certType,
+      },
+    );
 
     // 3. Check if all required certificates are now verified
     await _checkAndPromoteIfAllVerified(llgId, adminId);
@@ -346,17 +345,15 @@ class LLGService {
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
-    // Log admin action
-    await _firestore.collection('adminAuditLogs').add({
-      'action': 'certificate_rejected',
-      'actorId': adminId,
-      'actorType': 'admin',
-      'targetId': llgId,
-      'certType': certType,
-      'reason': reason,
-      'timestamp': FieldValue.serverTimestamp(),
-      'isImmutable': true,
-    });
+    // Log admin action via authoritative backend
+    await AuditLogService.logEvent(
+      action: 'certificate_rejected',
+      targetId: llgId,
+      details: {
+        'certType': certType,
+        'reason': reason,
+      },
+    );
   }
 
   /// Check if all uploaded certificates for LLG are verified
@@ -392,14 +389,10 @@ class LLGService {
       // Promote LLG user
       await approveLLG(llgId);
 
-      await _firestore.collection('adminAuditLogs').add({
-        'action': 'llg_fully_verified_and_promoted',
-        'actorId': adminId,
-        'actorType': 'admin',
-        'targetId': llgId,
-        'timestamp': FieldValue.serverTimestamp(),
-        'isImmutable': true,
-      });
+      await AuditLogService.logEvent(
+        action: 'llg_fully_verified_and_promoted',
+        targetId: llgId,
+      );
 
       return true;
     }

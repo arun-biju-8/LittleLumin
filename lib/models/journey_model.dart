@@ -54,29 +54,90 @@ class JourneyLevelConfig {
   ];
 }
 
+class DomainProgress {
+  final String domain;
+  final double score;
+  final bool isCompleted;
+  final int activitiesDone;
+
+  const DomainProgress({
+    required this.domain,
+    required this.score,
+    required this.isCompleted,
+    this.activitiesDone = 0,
+  });
+
+  bool get isMastered => isCompleted || score >= 70.0;
+
+  String get status {
+    if (isMastered) return 'Mastered';
+    if (activitiesDone > 0 && score < 70.0) return 'Practice Recommended';
+    if (activitiesDone > 0 || score > 0.0) return 'In Progress';
+    return 'Not Started';
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'score': score,
+      'completed': isCompleted,
+      'activitiesDone': activitiesDone,
+    };
+  }
+
+  factory DomainProgress.fromMap(String domain, Map<String, dynamic> map) {
+    final sc = (map['score'] is num) ? (map['score'] as num).toDouble() : 0.0;
+    final comp = map['completed'] == true || sc >= 70.0;
+    final done = (map['activitiesDone'] is num) ? (map['activitiesDone'] as num).toInt() : 0;
+    return DomainProgress(
+      domain: domain,
+      score: sc,
+      isCompleted: comp,
+      activitiesDone: done,
+    );
+  }
+}
+
 class LevelProgress {
   final List<String> completed;
   final int total;
   final bool isUnlocked;
   final List<String> activityIds;
+  final Map<String, DomainProgress> domains;
 
   LevelProgress({
     required this.completed,
     this.total = 6,
     this.isUnlocked = false,
     this.activityIds = const [],
+    this.domains = const {},
   });
 
-  bool get isCompleted => completed.length >= total && total > 0;
-  double get progressFraction => total > 0 ? (completed.length / total).clamp(0.0, 1.0) : 0.0;
+  /// Domain-level mastery counts (score >= 70)
+  int get masteredDomainCount {
+    if (domains.isNotEmpty) {
+      return domains.values.where((d) => d.isMastered).length;
+    }
+    return completed.length;
+  }
+
+  int get totalDomains => domains.isNotEmpty ? domains.length : (total > 0 ? total : 6);
+
+  /// Level mastery is satisfied ONLY when all 6 domains meet 70% threshold
+  bool get isCompleted => masteredDomainCount >= totalDomains && totalDomains > 0;
+
+  double get progressFraction => totalDomains > 0 ? (masteredDomainCount / totalDomains).clamp(0.0, 1.0) : 0.0;
   int get progressPercent => (progressFraction * 100).round();
 
   Map<String, dynamic> toMap() {
+    final domainMap = <String, dynamic>{};
+    domains.forEach((k, v) => domainMap[k] = v.toMap());
+
     return {
       'completed': completed,
       'total': total,
       'isUnlocked': isUnlocked,
       'activityIds': activityIds,
+      'domains': domainMap,
     };
   }
 
@@ -90,11 +151,21 @@ class LevelProgress {
     final totalCount = (map['total'] is num) ? (map['total'] as num).toInt() : 6;
     final isUnl = map['isUnlocked'] ?? (completedList.length >= totalCount);
 
+    Map<String, DomainProgress> parsedDomains = {};
+    if (map['domains'] is Map) {
+      (map['domains'] as Map).forEach((k, v) {
+        if (v is Map) {
+          parsedDomains[k.toString()] = DomainProgress.fromMap(k.toString(), Map<String, dynamic>.from(v));
+        }
+      });
+    }
+
     return LevelProgress(
       completed: completedList,
       total: totalCount,
       isUnlocked: isUnl,
       activityIds: parseList(map['activityIds']),
+      domains: parsedDomains,
     );
   }
 }
@@ -167,6 +238,30 @@ class JourneyProgress {
 
   LevelProgress? get currentLevelProgress => levelProgress[currentLevel];
 
+  Map<String, DomainProgress> get currentLevelDomains => levelProgress[currentLevel]?.domains ?? {};
+
+  int get masteredDomainCount => levelProgress[currentLevel]?.masteredDomainCount ?? 0;
+
+  List<String> get pendingDomainKeys {
+    final curDomains = currentLevelDomains;
+    if (curDomains.isEmpty) {
+      return ['cognitive', 'language', 'motor', 'social', 'emotional', 'creative'];
+    }
+    return curDomains.entries
+        .where((e) => !e.value.isMastered)
+        .map((e) => e.key)
+        .toList();
+  }
+
+  DomainProgress? get lowestScoringPendingDomain {
+    final curDomains = currentLevelDomains;
+    if (curDomains.isEmpty) return null;
+    final pending = curDomains.values.where((d) => !d.isMastered).toList();
+    if (pending.isEmpty) return null;
+    pending.sort((a, b) => a.score.compareTo(b.score));
+    return pending.first;
+  }
+
   bool isActivityCompleted(String activityId) {
     return completedActivities.contains(activityId);
   }
@@ -223,11 +318,16 @@ class JourneyProgress {
           final lvl = int.tryParse(key.toString()) ?? 1;
           if (value is Map) {
             final domains = value['domains'] as Map?;
-            int completedCount = 0;
+            Map<String, DomainProgress> domainMap = {};
+            List<String> masteredDomains = [];
             if (domains != null) {
-              domains.forEach((_, dVal) {
-                if (dVal is Map && dVal['completed'] == true) {
-                  completedCount++;
+              domains.forEach((dKey, dVal) {
+                if (dVal is Map) {
+                  final dp = DomainProgress.fromMap(dKey.toString(), Map<String, dynamic>.from(dVal));
+                  domainMap[dKey.toString()] = dp;
+                  if (dp.isMastered) {
+                    masteredDomains.add(dKey.toString());
+                  }
                 }
               });
             }
@@ -235,9 +335,10 @@ class JourneyProgress {
                 ? (rawMap['unlockedLevels'] as List).map((e) => int.tryParse(e.toString()) ?? 1).contains(lvl)
                 : (lvl == 1);
             result[lvl] = LevelProgress(
-              completed: List.generate(completedCount, (i) => 'domain_$i'),
+              completed: masteredDomains,
               total: 6,
               isUnlocked: isUnl,
+              domains: domainMap,
             );
           }
         });

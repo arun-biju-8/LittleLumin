@@ -7,10 +7,10 @@ import '../../utils/validators.dart';
 import '../../services/ai_service.dart';
 import '../../services/journey_service.dart';
 import '../../services/activity_state_service.dart';
+import '../../models/child_model.dart';
+import '../../models/learning_update_model.dart';
 import '../../widgets/global_header.dart';
-import '../../widgets/journey_dialogs.dart';
-import 'journey_activity_detail_page.dart';
-import 'widgets/post_feedback_guidance_sheet.dart';
+import 'learning_update_screen.dart';
 
 class FeedbackForm extends StatefulWidget {
   final String? activityId;
@@ -147,84 +147,87 @@ class _FeedbackFormState extends State<FeedbackForm> {
       final journeyResult = results[2] as Map<String, dynamic>;
 
       String childName = 'Your child';
+      ChildModel activeChildModel;
       try {
         final childDoc = await _firestore.collection('children').doc(childId).get();
         if (childDoc.exists && childDoc.data() != null) {
-          childName = childDoc.data()!['name']?.toString() ?? 'Your child';
+          final data = Map<String, dynamic>.from(childDoc.data()!);
+          data['childId'] ??= childDoc.id;
+          activeChildModel = ChildModel.fromMap(data);
+          childName = activeChildModel.name.isNotEmpty ? activeChildModel.name : childName;
+        } else {
+          activeChildModel = ChildModel(
+            childId: childId,
+            parentId: currentUserId,
+            name: childName,
+            dateOfBirth: DateTime.now().subtract(const Duration(days: 365 * 4)),
+            gender: 'unspecified',
+            createdAt: DateTime.now(),
+          );
         }
-      } catch (_) {}
+      } catch (_) {
+        activeChildModel = ChildModel(
+          childId: childId,
+          parentId: currentUserId,
+          name: childName,
+          dateOfBirth: DateTime.now().subtract(const Duration(days: 365 * 4)),
+          gender: 'unspecified',
+          createdAt: DateTime.now(),
+        );
+      }
 
-      if (!mounted) return;
+      final rJourney = result.journeyResult;
+      final isLevelCompleted = journeyResult['levelCompleted'] == true ||
+          (rJourney != null && rJourney['levelCompleted'] == true);
+      final isMastered = journeyResult['isMastered'] == true ||
+          (rJourney != null && rJourney['isMastered'] == true) ||
+          result.scoreAfter >= 70.0;
+      final nextLevel = (journeyResult['nextLevel'] is num)
+          ? (journeyResult['nextLevel'] as num).toInt()
+          : ((rJourney != null && rJourney['nextLevel'] is num)
+              ? (rJourney['nextLevel'] as num).toInt()
+              : level + 1);
 
-      // Show Post-Feedback Guidance Sheet
-      await showPostFeedbackGuidance(
-        context,
+      final learningUpdate = LearningUpdateModel(
+        childId: childId,
         childName: childName,
+        activityId: activityId,
+        activityTitle: widget.activityTitle ?? 'Practice Activity',
         domain: result.domain,
+        level: level,
         scoreBefore: result.scoreBefore,
         scoreAfter: result.scoreAfter,
-        delta: result.delta,
+        scoreDelta: result.delta,
+        isMastered: isMastered,
+        levelCompleted: isLevelCompleted,
+        nextLevel: nextLevel,
+        ratings: {
+          'childResponse': _childResponse,
+          'engagement': _engagement,
+          'difficulty': _difficulty,
+          'confidence': _confidence,
+          'timeEstimate': _timeEstimate,
+          'notes': notesText,
+        },
+        completedAt: DateTime.now(),
         nextActivity: result.nextActivity,
       );
 
+      // Persist to authoritative journey record
+      await journeyService.saveLatestLearningUpdate(childId, learningUpdate);
+
       if (!mounted) return;
 
-      // Check for Level Complete celebration
-      if (journeyResult['levelCompleted'] == true) {
-        final completedLevel = (journeyResult['completedLevel'] is num)
-            ? (journeyResult['completedLevel'] as num).toInt()
-            : level;
-        final nextLevel = (journeyResult['nextLevel'] is num)
-            ? (journeyResult['nextLevel'] as num).toInt()
-            : level + 1;
-        final trophyName = journeyResult['trophyEarned']?.toString() ?? 'Level Badge 🏆';
-
-        await JourneyDialogs.showLevelCompleteDialog(
-          context: context,
-          completedLevel: completedLevel,
-          nextLevel: nextLevel,
-          trophyEarned: trophyName,
-          onContinueJourney: () {
-            Navigator.of(context).popUntil((route) => route.isFirst);
-          },
-          onBrowseActivities: () {
-            Navigator.of(context).popUntil((route) => route.isFirst);
-          },
-        );
-        return;
-      }
-
-      // Proceed directly to Next Activity if recommended
-      if (result.nextActivity != null && result.nextActivity!.id != null) {
-        await journeyService.startActivity(
-          childId: childId,
-          activityId: result.nextActivity!.id!,
-          activityTitle: result.nextActivity!.title,
-          level: level,
-        );
-        await ActivityStateService().startActivity(
-          childId: childId,
-          activityId: result.nextActivity!.id!,
-          activityTitle: result.nextActivity!.title,
-          skillDomain: result.nextActivity!.skillType,
-        );
-
-        if (!mounted) return;
-
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(
-            builder: (_) => JourneyActivityDetailPage(
-              activityId: result.nextActivity!.id!,
-              childId: childId,
-            ),
+      // Navigate to dedicated Learning Update Screen
+      await Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => LearningUpdateScreen(
+            update: learningUpdate,
+            activeChild: activeChildModel,
           ),
-          (route) => route.isFirst,
-        );
-      } else {
-        // Pop back to journey/dashboard if no direct next activity
-        Navigator.of(context).popUntil((route) => route.isFirst);
-      }
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

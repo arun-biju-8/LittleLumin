@@ -16,6 +16,7 @@ import '../app_shell.dart';
 import '../journey_view.dart';
 import 'skill_detail_screen.dart';
 import 'activity_library_screen.dart';
+import '../widgets/latest_learning_update_card.dart';
 
 class ActivitiesTab extends StatefulWidget {
   final ChildModel? activeChild;
@@ -453,17 +454,16 @@ class ActivitiesTabState extends State<ActivitiesTab> {
       builder: (context, snapshot) {
         final journey = snapshot.data;
         final level = journey?.currentLevel ?? 1;
-        final completedSkills = journey?.currentLevelProgress?.completed.length ?? 3;
-        final totalSkills = journey?.currentLevelProgress?.total ?? 6;
+        final masteredDomains = journey?.masteredDomainCount ?? 0;
+        final totalDomains = journey?.currentLevelProgress?.totalDomains ?? 6;
+        final completedActivities = journey?.completedActivities.length ?? 0;
 
-        const allDomains = ['Cognitive', 'Language', 'Motor', 'Social', 'Emotional', 'Creative'];
         String nextFocus = 'Cognitive';
-        if (journey != null && journey.currentLevelProgress != null) {
-          for (final d in allDomains) {
-            if (!journey.currentLevelProgress!.completed.contains(d)) {
-              nextFocus = d;
-              break;
-            }
+        if (journey != null) {
+          final pending = journey.pendingDomainKeys;
+          if (pending.isNotEmpty) {
+            final nextKey = pending.first;
+            nextFocus = nextKey[0].toUpperCase() + nextKey.substring(1);
           }
         }
 
@@ -490,12 +490,12 @@ class ActivitiesTabState extends State<ActivitiesTab> {
               ),
               const SizedBox(height: 10),
               Text(
-                'Level $level · Foundation',
+                'Level $level: Foundation Skills',
                 style: MeadowTypography.h2,
               ),
               const SizedBox(height: 4),
               Text(
-                '$completedSkills of $totalSkills skills explored',
+                '$completedActivities activities completed · $masteredDomains of $totalDomains domains mastered',
                 style: MeadowTypography.body.copyWith(color: MeadowColors.textSecondary),
               ),
               const SizedBox(height: 4),
@@ -1023,6 +1023,12 @@ class ActivitiesTabState extends State<ActivitiesTab> {
 
                 // 1. Jump Back In
                 _buildJumpBackInSection(allActivities),
+
+                // Latest Learning Update (revisit entry)
+                if (widget.activeChild != null) ...[
+                  LatestLearningUpdateCard(child: widget.activeChild!),
+                  const SizedBox(height: MeadowSpacing.xl),
+                ],
 
                 // 2. Continue Your Journey
                 _buildJourneyCard(),
