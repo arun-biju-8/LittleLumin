@@ -20,6 +20,7 @@ import 'widgets/growth_snapshot_card.dart';
 import 'widgets/todays_insight_card.dart';
 import 'widgets/recent_activity_card.dart';
 import '../widgets/latest_learning_update_card.dart';
+import 'widgets/specialist_support_card.dart';
 
 class HomeTab extends StatefulWidget {
   final String parentName;
