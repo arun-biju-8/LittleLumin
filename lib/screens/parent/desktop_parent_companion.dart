@@ -47,10 +47,12 @@ class DesktopParentCompanionScreen extends StatefulWidget {
   });
 
   @override
-  State<DesktopParentCompanionScreen> createState() => _DesktopParentCompanionScreenState();
+  State<DesktopParentCompanionScreen> createState() =>
+      _DesktopParentCompanionScreenState();
 }
 
-class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScreen> {
+class _DesktopParentCompanionScreenState
+    extends State<DesktopParentCompanionScreen> {
   FirebaseAuth? get _auth {
     try {
       return widget.auth ?? FirebaseAuth.instance;
@@ -67,8 +69,10 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
     }
   }
 
-  late final MessagingService _messagingService = widget.messagingService ?? MessagingService();
-  late final SpecialistCaseService _caseService = widget.specialistCaseService ?? SpecialistCaseService();
+  late final MessagingService _messagingService =
+      widget.messagingService ?? MessagingService();
+  late final SpecialistCaseService _caseService =
+      widget.specialistCaseService ?? SpecialistCaseService();
   final ScoreLedgerService _scoreService = ScoreLedgerService();
   final JourneyService _journeyService = JourneyService();
 
@@ -103,6 +107,44 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
     'emotional',
     'creative',
   ];
+
+  String _getFriendlyDomainLabel(String domain) {
+    switch (domain.trim().toLowerCase()) {
+      case 'cognitive':
+        return 'Thinking and Learning';
+      case 'language':
+        return 'Talking and Listening';
+      case 'motor':
+        return 'Movement and Coordination';
+      case 'social':
+        return 'Social Skills';
+      case 'emotional':
+        return 'Understanding Feelings';
+      case 'creative':
+        return 'Creativity and Imagination';
+      default:
+        return MeadowDomain.labelFor(domain);
+    }
+  }
+
+  String _getDomainDescription(String domain) {
+    switch (domain.trim().toLowerCase()) {
+      case 'cognitive':
+        return 'Problem solving, memory, exploration, and understanding patterns.';
+      case 'language':
+        return 'Speaking words, listening, expressing thoughts, and understanding speech.';
+      case 'motor':
+        return 'Using hands and fingers (fine motor) and whole body movement (gross motor).';
+      case 'social':
+        return 'Playing with others, sharing, taking turns, and interacting with family and friends.';
+      case 'emotional':
+        return 'Expressing feelings, recognizing emotions, and calming down with gentle support.';
+      case 'creative':
+        return 'Pretend play, drawing, storytelling, and imaginative exploration.';
+      default:
+        return 'Developmental skill area.';
+    }
+  }
 
   @override
   void initState() {
@@ -155,7 +197,11 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                         color: MeadowColors.primarySurface,
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.phone_android, size: 64, color: MeadowColors.primary),
+                      child: const Icon(
+                        Icons.phone_android,
+                        size: 64,
+                        color: MeadowColors.primary,
+                      ),
                     ),
                     const SizedBox(height: 24),
                     Text(
@@ -176,9 +222,17 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        _buildStoreBadge(Icons.android, 'Google Play', 'Coming soon'),
+                        _buildStoreBadge(
+                          Icons.android,
+                          'Google Play',
+                          'Coming soon',
+                        ),
                         const SizedBox(width: 8),
-                        _buildStoreBadge(Icons.apple, 'App Store', 'Coming soon'),
+                        _buildStoreBadge(
+                          Icons.apple,
+                          'App Store',
+                          'Coming soon',
+                        ),
                       ],
                     ),
                     const SizedBox(height: 24),
@@ -208,7 +262,8 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
         stream: ChildService().getChildren(),
         builder: (context, childSnap) {
           final children = childSnap.data ?? [];
-          if (children.isEmpty && childSnap.connectionState != ConnectionState.waiting) {
+          if (children.isEmpty &&
+              childSnap.connectionState != ConnectionState.waiting) {
             return _buildNoChildrenDashboard(user);
           }
 
@@ -223,7 +278,9 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                 : ChildModel(
                     childId: 'default',
                     name: 'Your Child',
-                    dateOfBirth: DateTime.now().subtract(const Duration(days: 365 * 4)),
+                    dateOfBirth: DateTime.now().subtract(
+                      const Duration(days: 365 * 4),
+                    ),
                     gender: 'Child',
                     parentId: user.uid,
                     createdAt: DateTime.now(),
@@ -240,7 +297,12 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                   Column(
                     children: [
                       // 1. Horizontal Desktop Website Header
-                      _buildDesktopWebHeader(user, activeChild, children, isDesktop),
+                      _buildDesktopWebHeader(
+                        user,
+                        activeChild,
+                        children,
+                        isDesktop,
+                      ),
 
                       // 2. Main Scrollable Workspace
                       Expanded(
@@ -255,13 +317,15 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                               constraints: const BoxConstraints(maxWidth: 1480),
                               child: isDesktop
                                   ? Row(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         // Primary Main Column (~67% width)
                                         Expanded(
                                           flex: 67,
                                           child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
                                               // Overview KPI Cards
                                               _buildOverviewCards(activeChild),
@@ -270,25 +334,35 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                                               // Chart Workspace (Key: growth)
                                               Container(
                                                 key: _growthSectionKey,
-                                                child: _buildDevelopmentalPerformanceSection(activeChild),
+                                                child:
+                                                    _buildDevelopmentalPerformanceSection(
+                                                      activeChild,
+                                                    ),
                                               ),
                                               const SizedBox(height: 28),
 
                                               // Domain Scores Summary Grid
-                                              _buildDomainScoresSection(activeChild),
+                                              _buildDomainScoresSection(
+                                                activeChild,
+                                              ),
                                               const SizedBox(height: 28),
 
                                               // Milestones Workspace (Key: milestones)
                                               Container(
                                                 key: _milestonesSectionKey,
-                                                child: _buildMilestonesSection(activeChild),
+                                                child: _buildMilestonesSection(
+                                                  activeChild,
+                                                ),
                                               ),
                                               const SizedBox(height: 28),
 
                                               // Activity History Timeline (Key: history)
                                               Container(
                                                 key: _historySectionKey,
-                                                child: _buildActivityHistorySection(activeChild),
+                                                child:
+                                                    _buildActivityHistorySection(
+                                                      activeChild,
+                                                    ),
                                               ),
                                               const SizedBox(height: 100),
                                             ],
@@ -300,7 +374,8 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                                         Expanded(
                                           flex: 33,
                                           child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
                                               // Mobile App Companion Card
                                               _buildMobileAppSidebarCard(),
@@ -309,16 +384,23 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                                               // Assigned Guide Status Card (Key: llg)
                                               Container(
                                                 key: _llgSectionKey,
-                                                child: _buildGuideCaseCard(activeChild, user),
+                                                child: _buildGuideCaseCard(
+                                                  activeChild,
+                                                  user,
+                                                ),
                                               ),
                                               const SizedBox(height: 24),
 
                                               // Recommendations Feed
-                                              _buildRecommendationsSidePanel(activeChild),
+                                              _buildRecommendationsSidePanel(
+                                                activeChild,
+                                              ),
                                               const SizedBox(height: 24),
 
                                               // Consultation Summaries
-                                              _buildConsultationsSidePanel(activeChild),
+                                              _buildConsultationsSidePanel(
+                                                activeChild,
+                                              ),
                                               const SizedBox(height: 100),
                                             ],
                                           ),
@@ -326,7 +408,8 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                                       ],
                                     )
                                   : Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         _buildMobileAppNoticeBanner(),
                                         const SizedBox(height: 20),
@@ -334,29 +417,43 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                                         const SizedBox(height: 24),
                                         Container(
                                           key: _growthSectionKey,
-                                          child: _buildDevelopmentalPerformanceSection(activeChild),
+                                          child:
+                                              _buildDevelopmentalPerformanceSection(
+                                                activeChild,
+                                              ),
                                         ),
                                         const SizedBox(height: 24),
                                         _buildDomainScoresSection(activeChild),
                                         const SizedBox(height: 24),
                                         Container(
                                           key: _milestonesSectionKey,
-                                          child: _buildMilestonesSection(activeChild),
+                                          child: _buildMilestonesSection(
+                                            activeChild,
+                                          ),
                                         ),
                                         const SizedBox(height: 24),
                                         Container(
                                           key: _historySectionKey,
-                                          child: _buildActivityHistorySection(activeChild),
+                                          child: _buildActivityHistorySection(
+                                            activeChild,
+                                          ),
                                         ),
                                         const SizedBox(height: 24),
                                         Container(
                                           key: _llgSectionKey,
-                                          child: _buildGuideCaseCard(activeChild, user),
+                                          child: _buildGuideCaseCard(
+                                            activeChild,
+                                            user,
+                                          ),
                                         ),
                                         const SizedBox(height: 24),
-                                        _buildRecommendationsSidePanel(activeChild),
+                                        _buildRecommendationsSidePanel(
+                                          activeChild,
+                                        ),
                                         const SizedBox(height: 24),
-                                        _buildConsultationsSidePanel(activeChild),
+                                        _buildConsultationsSidePanel(
+                                          activeChild,
+                                        ),
                                         const SizedBox(height: 100),
                                       ],
                                     ),
@@ -405,7 +502,9 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
       padding: const EdgeInsets.symmetric(horizontal: 28),
       decoration: BoxDecoration(
         color: MeadowColors.surface,
-        border: const Border(bottom: BorderSide(color: MeadowColors.borderLight, width: 1.2)),
+        border: const Border(
+          bottom: BorderSide(color: MeadowColors.borderLight, width: 1.2),
+        ),
         boxShadow: MeadowShadows.soft,
       ),
       child: Row(
@@ -423,7 +522,11 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                     color: MeadowColors.primarySurface,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.eco_rounded, color: MeadowColors.primary, size: 22),
+                  child: const Icon(
+                    Icons.eco_rounded,
+                    color: MeadowColors.primary,
+                    size: 22,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Column(
@@ -444,7 +547,10 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                         ),
                         const SizedBox(width: 6),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: MeadowColors.primarySurface,
                             borderRadius: BorderRadius.circular(4),
@@ -463,7 +569,10 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                     ),
                     Text(
                       'Child Growth & Development',
-                      style: MeadowTypography.caption.copyWith(fontSize: 10, color: MeadowColors.textSecondary),
+                      style: MeadowTypography.caption.copyWith(
+                        fontSize: 10,
+                        color: MeadowColors.textSecondary,
+                      ),
                     ),
                   ],
                 ),
@@ -479,28 +588,28 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
             // Horizontal Navigation Links
             _buildNavTab(
               id: 'growth',
-              label: 'Child Growth',
+              label: "Child's Progress",
               icon: Icons.show_chart_rounded,
               keyRef: _growthSectionKey,
             ),
             const SizedBox(width: 8),
             _buildNavTab(
               id: 'milestones',
-              label: 'Milestones',
+              label: 'Achievements',
               icon: Icons.flag_outlined,
               keyRef: _milestonesSectionKey,
             ),
             const SizedBox(width: 8),
             _buildNavTab(
               id: 'history',
-              label: 'Activity History',
+              label: 'Past Activities',
               icon: Icons.history_edu_outlined,
               keyRef: _historySectionKey,
             ),
             const SizedBox(width: 8),
             _buildNavTab(
               id: 'llg',
-              label: 'LLG Recommendations',
+              label: 'Suggestions from Your Guide',
               icon: Icons.lightbulb_outline,
               keyRef: _llgSectionKey,
             ),
@@ -524,8 +633,14 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                     radius: 13,
                     backgroundColor: MeadowColors.primary,
                     child: Text(
-                      activeChild.name.isNotEmpty ? activeChild.name[0].toUpperCase() : 'C',
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
+                      activeChild.name.isNotEmpty
+                          ? activeChild.name[0].toUpperCase()
+                          : 'C',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -539,7 +654,10 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                       ),
                       Text(
                         '${activeChild.ageDisplay} • ${activeChild.gender}',
-                        style: MeadowTypography.caption.copyWith(fontSize: 9, color: MeadowColors.textSecondary),
+                        style: MeadowTypography.caption.copyWith(
+                          fontSize: 9,
+                          color: MeadowColors.textSecondary,
+                        ),
                       ),
                     ],
                   ),
@@ -548,13 +666,19 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                     DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         value: _selectedChildId,
-                        icon: const Icon(Icons.keyboard_arrow_down, size: 16, color: MeadowColors.textSecondary),
+                        icon: const Icon(
+                          Icons.keyboard_arrow_down,
+                          size: 16,
+                          color: MeadowColors.textSecondary,
+                        ),
                         items: children.map((c) {
                           return DropdownMenuItem<String>(
                             value: c.childId,
                             child: Text(
                               '${c.name} (${c.ageYears} yrs)',
-                              style: MeadowTypography.body.copyWith(fontSize: 12),
+                              style: MeadowTypography.body.copyWith(
+                                fontSize: 12,
+                              ),
                             ),
                           );
                         }).toList(),
@@ -574,7 +698,11 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
 
           // Notifications Button
           IconButton(
-            icon: const Icon(Icons.notifications_none_outlined, color: MeadowColors.textSecondary, size: 22),
+            icon: const Icon(
+              Icons.notifications_none_outlined,
+              color: MeadowColors.textSecondary,
+              size: 22,
+            ),
             tooltip: 'Notifications',
             onPressed: () {
               Navigator.push(
@@ -601,15 +729,25 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
               }
             },
             offset: const Offset(0, 48),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             itemBuilder: (context) => [
               PopupMenuItem(
                 enabled: false,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(user.displayName ?? 'Parent Account', style: MeadowTypography.label),
-                    Text(user.email ?? '', style: MeadowTypography.caption.copyWith(color: MeadowColors.textSecondary)),
+                    Text(
+                      user.displayName ?? 'Parent Account',
+                      style: MeadowTypography.label,
+                    ),
+                    Text(
+                      user.email ?? '',
+                      style: MeadowTypography.caption.copyWith(
+                        color: MeadowColors.textSecondary,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -620,7 +758,14 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                   children: [
                     Icon(Icons.logout, size: 16, color: MeadowColors.error),
                     SizedBox(width: 8),
-                    Text('Sign Out', style: TextStyle(color: MeadowColors.error, fontSize: 13, fontWeight: FontWeight.bold)),
+                    Text(
+                      'Sign Out',
+                      style: TextStyle(
+                        color: MeadowColors.error,
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -632,7 +777,9 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                   radius: 16,
                   backgroundColor: MeadowColors.sageLight,
                   child: Text(
-                    user.displayName?.isNotEmpty == true ? user.displayName![0].toUpperCase() : 'P',
+                    user.displayName?.isNotEmpty == true
+                        ? user.displayName![0].toUpperCase()
+                        : 'P',
                     style: GoogleFonts.plusJakartaSans(
                       fontWeight: FontWeight.bold,
                       color: MeadowColors.primaryDark,
@@ -647,7 +794,11 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                     style: MeadowTypography.label.copyWith(fontSize: 13),
                   ),
                   const SizedBox(width: 4),
-                  const Icon(Icons.keyboard_arrow_down, size: 16, color: MeadowColors.textSecondary),
+                  const Icon(
+                    Icons.keyboard_arrow_down,
+                    size: 16,
+                    color: MeadowColors.textSecondary,
+                  ),
                 ],
               ],
             ),
@@ -680,7 +831,9 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
             Icon(
               icon,
               size: 16,
-              color: isSelected ? MeadowColors.primary : MeadowColors.textSecondary,
+              color: isSelected
+                  ? MeadowColors.primary
+                  : MeadowColors.textSecondary,
             ),
             const SizedBox(width: 6),
             Text(
@@ -688,7 +841,9 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 13,
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected ? MeadowColors.primary : MeadowColors.textSecondary,
+                color: isSelected
+                    ? MeadowColors.primary
+                    : MeadowColors.textSecondary,
               ),
             ),
           ],
@@ -702,7 +857,10 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
   // =========================================================================
   Widget _buildOverviewCards(ChildModel activeChild) {
     return FutureBuilder<JourneyProgress>(
-      future: _journeyService.getOrInitializeJourney(activeChild.childId, age: activeChild.ageYears),
+      future: _journeyService.getOrInitializeJourney(
+        activeChild.childId,
+        age: activeChild.ageYears,
+      ),
       builder: (context, journeySnap) {
         final journey = journeySnap.data;
         final currentLevel = journey?.currentLevel ?? 1;
@@ -710,7 +868,10 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
 
         return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
           stream: _firestore != null
-              ? _firestore!.collection('skillProfiles').doc(activeChild.childId).snapshots()
+              ? _firestore!
+                    .collection('skillProfiles')
+                    .doc(activeChild.childId)
+                    .snapshots()
               : const Stream.empty(),
           builder: (context, profileSnap) {
             final profile = profileSnap.data?.data() ?? {};
@@ -723,16 +884,21 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                 scoredDomains++;
               }
             }
-            final avgScore = scoredDomains > 0 ? (scoreSum / scoredDomains) : 0.0;
+            final avgScore = scoredDomains > 0
+                ? (scoreSum / scoredDomains)
+                : 0.0;
 
             return FutureBuilder<List<Map<String, dynamic>>>(
-              future: _scoreService.getScoreHistory(childId: activeChild.childId),
+              future: _scoreService.getScoreHistory(
+                childId: activeChild.childId,
+              ),
               builder: (context, historySnap) {
                 final history = historySnap.data ?? [];
                 double recentChange = 0;
                 String latestMilestone = 'Baseline Evaluation';
                 if (history.isNotEmpty) {
-                  latestMilestone = history.first['activityTitle'] ?? 'Baseline Evaluation';
+                  latestMilestone =
+                      history.first['activityTitle'] ?? 'Baseline Evaluation';
                   for (final ev in history.take(5)) {
                     final delta = ev['appliedScoreDelta'];
                     if (delta is num) recentChange += delta.toDouble();
@@ -744,8 +910,8 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                     final cardWidth = constraints.maxWidth < 600
                         ? constraints.maxWidth
                         : (constraints.maxWidth < 950
-                            ? (constraints.maxWidth - 16) / 2
-                            : (constraints.maxWidth - 48) / 4);
+                              ? (constraints.maxWidth - 16) / 2
+                              : (constraints.maxWidth - 48) / 4);
 
                     return Wrap(
                       spacing: 16,
@@ -754,45 +920,67 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                         SizedBox(
                           width: cardWidth,
                           child: _buildKPICard(
-                            title: 'DEVELOPMENTAL LEVEL',
+                            title: "YOUR CHILD'S LEARNING STAGE",
                             value: 'Level $currentLevel',
                             subtitle: _getLevelTitle(currentLevel),
                             icon: Icons.military_tech_outlined,
                             accentColor: MeadowColors.gold,
+                            tooltip:
+                                'The learning stage your child is currently exploring based on completed activities.',
                           ),
                         ),
                         SizedBox(
                           width: cardWidth,
                           child: _buildKPICard(
-                            title: 'OVERALL PROGRESS',
-                            value: scoredDomains > 0 ? '${avgScore.toStringAsFixed(1)}%' : 'Pending',
+                            title: "YOUR CHILD'S PROGRESS",
+                            value: scoredDomains > 0
+                                ? '${avgScore.toStringAsFixed(1)}%'
+                                : 'Pending',
                             subtitle: recentChange > 0
-                                ? '+${recentChange.toStringAsFixed(1)} pts recent trend'
-                                : (scoredDomains > 0 ? 'Baseline established' : 'Awaiting first evaluation'),
+                                ? '+${recentChange.toStringAsFixed(1)} pts compared with previous period'
+                                : (scoredDomains > 0
+                                      ? 'Starting skills recorded'
+                                      : 'Waiting for first activity'),
                             icon: Icons.trending_up,
                             accentColor: MeadowColors.primary,
+                            tooltip:
+                                'Average progress across skill areas, showing points gained compared with earlier activities.',
                           ),
                         ),
                         SizedBox(
                           width: cardWidth,
                           child: _buildKPICard(
-                            title: 'ACTIVITIES COMPLETED',
-                            value: '$completedCount Done',
-                            subtitle: '$scoredDomains of 6 domains active',
+                            title: 'ACTIVITIES FINISHED',
+                            value: '$completedCount Finished',
+                            subtitle: scoredDomains == 6
+                                ? 'Activities across 6 skill areas'
+                                : (scoredDomains == 1
+                                      ? 'Activities in 1 skill area'
+                                      : 'Activities across $scoredDomains of 6 skill areas'),
                             icon: Icons.task_alt_outlined,
                             accentColor: MeadowColors.motor,
+                            tooltip:
+                                'Total activities completed across key learning and developmental skill areas.',
                           ),
                         ),
                         SizedBox(
                           width: cardWidth,
                           child: _buildKPICard(
-                            title: 'LATEST MILESTONE',
-                            value: latestMilestone,
+                            title: 'LATEST ACHIEVEMENT',
+                            value: latestMilestone == 'Baseline Evaluation'
+                                ? 'First Milestone Check'
+                                : latestMilestone,
                             subtitle: history.isNotEmpty
-                                ? DateFormat.yMMMd().format((history.first['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now())
-                                : 'Initial baseline',
+                                ? DateFormat.yMMMd().format(
+                                    (history.first['createdAt'] as Timestamp?)
+                                            ?.toDate() ??
+                                        DateTime.now(),
+                                  )
+                                : 'Starting point',
                             icon: Icons.emoji_events_outlined,
                             accentColor: MeadowColors.creative,
+                            tooltip:
+                                'The most recent achievement or activity completed with your child.',
                           ),
                         ),
                       ],
@@ -810,7 +998,7 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
   String _getLevelTitle(int level) {
     switch (level) {
       case 1:
-        return 'Foundation Skills';
+        return 'Basic Everyday Skills';
       case 2:
         return 'Building Skills';
       case 3:
@@ -818,7 +1006,7 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
       case 4:
         return 'Mastery Challenges';
       default:
-        return 'Foundation Skills';
+        return 'Basic Everyday Skills';
     }
   }
 
@@ -828,8 +1016,9 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
     required String subtitle,
     required IconData icon,
     required Color accentColor,
+    String? tooltip,
   }) {
-    return Container(
+    final cardContent = Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: MeadowColors.surface,
@@ -843,15 +1032,20 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                title,
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.8,
-                  color: MeadowColors.textSecondary,
+              Expanded(
+                child: Text(
+                  title,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.8,
+                    color: MeadowColors.textSecondary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
+              const SizedBox(width: 6),
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
@@ -876,13 +1070,32 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
           const SizedBox(height: 4),
           Text(
             subtitle,
-            style: MeadowTypography.caption.copyWith(color: MeadowColors.textSecondary),
+            style: MeadowTypography.caption.copyWith(
+              color: MeadowColors.textSecondary,
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
     );
+
+    if (tooltip != null && tooltip.isNotEmpty) {
+      return Tooltip(
+        message: tooltip,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: MeadowColors.primaryDark,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        textStyle: GoogleFonts.plusJakartaSans(
+          color: Colors.white,
+          fontSize: 11,
+        ),
+        child: cardContent,
+      );
+    }
+    return cardContent;
   }
 
   // =========================================================================
@@ -908,11 +1121,17 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Developmental Progress & Growth Trends', style: MeadowTypography.h2),
+                    Text(
+                      "Your Child's Progress Over Time",
+                      style: MeadowTypography.h2,
+                    ),
                     const SizedBox(height: 4),
                     Text(
-                      '30-day interactive developmental trajectory synthesized from immutable score ledger records',
-                      style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textSecondary),
+                      "See how your child's recorded progress changes over time.",
+                      style: MeadowTypography.body.copyWith(
+                        fontSize: 12,
+                        color: MeadowColors.textSecondary,
+                      ),
                     ),
                   ],
                 ),
@@ -923,8 +1142,10 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                 spacing: 6,
                 runSpacing: 6,
                 children: [
-                  _buildChartFilterChip('all', 'All Domains'),
-                  ..._domains.map((d) => _buildChartFilterChip(d, MeadowDomain.labelFor(d))),
+                  _buildChartFilterChip('all', 'All Skills'),
+                  ..._domains.map(
+                    (d) => _buildChartFilterChip(d, _getFriendlyDomainLabel(d)),
+                  ),
                 ],
               ),
             ],
@@ -935,7 +1156,9 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
           FutureBuilder<List<Map<String, dynamic>>>(
             future: _scoreService.getScoreHistory(
               childId: activeChild.childId,
-              skillDomain: _chartDomainFilter == 'all' ? null : _chartDomainFilter,
+              skillDomain: _chartDomainFilter == 'all'
+                  ? null
+                  : _chartDomainFilter,
             ),
             builder: (context, snapshot) {
               final events = snapshot.data ?? [];
@@ -946,24 +1169,35 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                   decoration: BoxDecoration(
                     color: MeadowColors.surfaceAlt.withOpacity(0.5),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: MeadowColors.borderLight, style: BorderStyle.solid),
+                    border: Border.all(
+                      color: MeadowColors.borderLight,
+                      style: BorderStyle.solid,
+                    ),
                   ),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.auto_graph_rounded, size: 48, color: MeadowColors.sage.withOpacity(0.5)),
+                      Icon(
+                        Icons.auto_graph_rounded,
+                        size: 48,
+                        color: MeadowColors.sage.withOpacity(0.5),
+                      ),
                       const SizedBox(height: 12),
                       Text(
-                        'No score ledger history recorded yet for ${_chartDomainFilter == 'all' ? activeChild.name : MeadowDomain.labelFor(_chartDomainFilter)}',
-                        style: MeadowTypography.label.copyWith(color: MeadowColors.textSecondary),
+                        'No recorded activities yet for ${_chartDomainFilter == 'all' ? activeChild.name : _getFriendlyDomainLabel(_chartDomainFilter)}',
+                        style: MeadowTypography.label.copyWith(
+                          color: MeadowColors.textSecondary,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 420),
                         child: Text(
-                          'Evaluated scores logged through mobile interactive play or developmental assessments will automatically chart here.',
+                          "As your child plays interactive games and practices skills on your phone, progress updates will show up here.",
                           textAlign: TextAlign.center,
-                          style: MeadowTypography.caption.copyWith(color: MeadowColors.textTertiary),
+                          style: MeadowTypography.caption.copyWith(
+                            color: MeadowColors.textTertiary,
+                          ),
                         ),
                       ),
                     ],
@@ -978,7 +1212,9 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
 
               for (int i = 0; i < chronological.length; i++) {
                 final ev = chronological[i];
-                final delta = (ev['appliedScoreDelta'] is num) ? (ev['appliedScoreDelta'] as num).toDouble() : 0.0;
+                final delta = (ev['appliedScoreDelta'] is num)
+                    ? (ev['appliedScoreDelta'] as num).toDouble()
+                    : 0.0;
                 runningScore = (runningScore + delta).clamp(0.0, 100.0);
                 spots.add(FlSpot(i.toDouble(), runningScore));
               }
@@ -1001,8 +1237,12 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                       ),
                     ),
                     titlesData: FlTitlesData(
-                      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
                       leftTitles: AxisTitles(
                         sideTitles: SideTitles(
                           showTitles: true,
@@ -1010,24 +1250,36 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                           reservedSize: 38,
                           getTitlesWidget: (val, meta) => Text(
                             '${val.toInt()}%',
-                            style: GoogleFonts.plusJakartaSans(fontSize: 10, color: MeadowColors.textTertiary),
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 10,
+                              color: MeadowColors.textTertiary,
+                            ),
                           ),
                         ),
                       ),
                       bottomTitles: AxisTitles(
                         sideTitles: SideTitles(
                           showTitles: true,
-                          interval: max(1, (spots.length / 5).floor()).toDouble(),
+                          interval: max(
+                            1,
+                            (spots.length / 5).floor(),
+                          ).toDouble(),
                           getTitlesWidget: (val, meta) {
                             final idx = val.toInt();
                             if (idx >= 0 && idx < chronological.length) {
-                              final d = (chronological[idx]['createdAt'] as Timestamp?)?.toDate();
+                              final d =
+                                  (chronological[idx]['createdAt']
+                                          as Timestamp?)
+                                      ?.toDate();
                               if (d != null) {
                                 return Padding(
                                   padding: const EdgeInsets.only(top: 8),
                                   child: Text(
                                     DateFormat.MMMd().format(d),
-                                    style: GoogleFonts.plusJakartaSans(fontSize: 9, color: MeadowColors.textTertiary),
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 9,
+                                      color: MeadowColors.textTertiary,
+                                    ),
                                   ),
                                 );
                               }
@@ -1076,7 +1328,9 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
         decoration: BoxDecoration(
           color: isSelected ? MeadowColors.primary : MeadowColors.surfaceAlt,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: isSelected ? MeadowColors.primary : MeadowColors.borderLight),
+          border: Border.all(
+            color: isSelected ? MeadowColors.primary : MeadowColors.borderLight,
+          ),
         ),
         child: Text(
           label,
@@ -1100,22 +1354,67 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Developmental Domains (VSMS)', style: MeadowTypography.h2),
-                const SizedBox(height: 4),
-                Text(
-                  'Core skill areas evaluated against the Vineland Social Maturity Scale',
-                  style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textSecondary),
-                ),
-              ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        "Your Child's Development Skills",
+                        style: MeadowTypography.h2,
+                      ),
+                      const SizedBox(width: 6),
+                      Tooltip(
+                        message:
+                            'The Vineland Social Maturity Scale (VSMS) is an established developmental assessment tool that helps measure everyday abilities, communication, and social independence in children.',
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: MeadowColors.primaryDark,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        textStyle: GoogleFonts.plusJakartaSans(
+                          color: Colors.white,
+                          fontSize: 11,
+                        ),
+                        child: const Icon(
+                          Icons.info_outline,
+                          size: 16,
+                          color: MeadowColors.textTertiary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Skills reviewed using the Vineland Social Maturity Scale (VSMS).',
+                    style: MeadowTypography.body.copyWith(
+                      fontSize: 12,
+                      color: MeadowColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
             ),
             Row(
               children: [
-                _buildWeightLegend('Measured (1.0x)', MeadowColors.success),
+                _buildWeightLegend(
+                  'Recorded Activities',
+                  MeadowColors.success,
+                  tooltip:
+                      'Skills practiced directly and verified through activities with your child.',
+                ),
                 const SizedBox(width: 14),
-                _buildWeightLegend('AI Guided (0.5x)', MeadowColors.cognitive),
+                _buildWeightLegend(
+                  'AI-Assisted Activities',
+                  MeadowColors.cognitive,
+                  tooltip:
+                      'Practice exercises suggested with AI assistance to support your child\'s learning.',
+                ),
               ],
             ),
           ],
@@ -1124,7 +1423,10 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
 
         StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
           stream: _firestore != null
-              ? _firestore!.collection('skillProfiles').doc(activeChild.childId).snapshots()
+              ? _firestore!
+                    .collection('skillProfiles')
+                    .doc(activeChild.childId)
+                    .snapshots()
               : const Stream.empty(),
           builder: (context, snapshot) {
             final profile = snapshot.data?.data() ?? {};
@@ -1149,75 +1451,113 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                     final raw = profile[d];
                     final score = (raw is num) ? raw.toDouble() : 0.0;
                     final color = MeadowDomain.colorFor(d);
+                    final domainLabel = _getFriendlyDomainLabel(d);
+                    final domainDesc = _getDomainDescription(d);
 
-                    return Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: MeadowColors.surface,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: MeadowColors.borderLight),
-                        boxShadow: MeadowShadows.card,
+                    return Tooltip(
+                      message: domainDesc,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(
-                                  color: color.withOpacity(0.12),
-                                  borderRadius: BorderRadius.circular(8),
+                      decoration: BoxDecoration(
+                        color: MeadowColors.primaryDark,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      textStyle: GoogleFonts.plusJakartaSans(
+                        color: Colors.white,
+                        fontSize: 11,
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: MeadowColors.surface,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: MeadowColors.borderLight),
+                          boxShadow: MeadowShadows.card,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: color.withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Icon(
+                                    MeadowDomain.iconFor(d),
+                                    size: 16,
+                                    color: color,
+                                  ),
                                 ),
-                                child: Icon(MeadowDomain.iconFor(d), size: 16, color: color),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  MeadowDomain.labelFor(d),
-                                  style: MeadowTypography.label.copyWith(fontSize: 13),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    domainLabel,
+                                    style: MeadowTypography.label.copyWith(
+                                      fontSize: 13,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
-                              ),
-                              Text(
-                                '${score.toStringAsFixed(1)}%',
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 14,
-                                  color: color,
+                                Text(
+                                  '${score.toStringAsFixed(1)}%',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 14,
+                                    color: color,
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(4),
-                            child: LinearProgressIndicator(
-                              value: (score / 100).clamp(0.0, 1.0),
-                              backgroundColor: MeadowColors.creamDark,
-                              color: color,
-                              minHeight: 6,
+                              ],
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                score >= 70 ? 'Mastered' : (score > 0 ? 'In Progress' : 'Pending Baseline'),
-                                style: MeadowTypography.caption.copyWith(
-                                  color: score >= 70 ? MeadowColors.success : MeadowColors.textTertiary,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 10,
+                            const SizedBox(height: 10),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: (score / 100).clamp(0.0, 1.0),
+                                backgroundColor: MeadowColors.creamDark,
+                                color: color,
+                                minHeight: 6,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  score >= 70
+                                      ? 'Achieved'
+                                      : (score > 0
+                                            ? 'In Progress'
+                                            : 'Getting Started'),
+                                  style: MeadowTypography.caption.copyWith(
+                                    color: score >= 70
+                                        ? MeadowColors.success
+                                        : MeadowColors.textTertiary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 10,
+                                  ),
                                 ),
-                              ),
-                              Text(
-                                'VSMS Standard Benchmark',
-                                style: MeadowTypography.caption.copyWith(fontSize: 10, color: MeadowColors.textTertiary),
-                              ),
-                            ],
-                          ),
-                        ],
+                                Tooltip(
+                                  message:
+                                      'A score of 70% or higher indicates strong, consistent progress in this skill area.',
+                                  child: Text(
+                                    'Standard goal (70%)',
+                                    style: MeadowTypography.caption.copyWith(
+                                      fontSize: 10,
+                                      color: MeadowColors.textTertiary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     );
                   },
@@ -1230,15 +1570,50 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
     );
   }
 
-  Widget _buildWeightLegend(String label, Color color) {
-    return Row(
+  Widget _buildWeightLegend(String label, Color color, {String? tooltip}) {
+    final row = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
         const SizedBox(width: 5),
-        Text(label, style: MeadowTypography.caption.copyWith(fontSize: 11, color: MeadowColors.textSecondary)),
+        Text(
+          label,
+          style: MeadowTypography.caption.copyWith(
+            fontSize: 11,
+            color: MeadowColors.textSecondary,
+          ),
+        ),
+        if (tooltip != null) ...[
+          const SizedBox(width: 4),
+          const Icon(
+            Icons.info_outline,
+            size: 12,
+            color: MeadowColors.textTertiary,
+          ),
+        ],
       ],
     );
+
+    if (tooltip != null && tooltip.isNotEmpty) {
+      return Tooltip(
+        message: tooltip,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: MeadowColors.primaryDark,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        textStyle: GoogleFonts.plusJakartaSans(
+          color: Colors.white,
+          fontSize: 11,
+        ),
+        child: row,
+      );
+    }
+    return row;
   }
 
   // =========================================================================
@@ -1262,22 +1637,35 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Milestones & Developmental Targets', style: MeadowTypography.h2),
+                  Text(
+                    'Achievements & Skill Milestones',
+                    style: MeadowTypography.h2,
+                  ),
                   const SizedBox(height: 4),
                   Text(
-                    'Core milestones tracked for your child\'s developmental age bracket',
-                    style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textSecondary),
+                    "Important skills and achievements for your child's age group.",
+                    style: MeadowTypography.body.copyWith(
+                      fontSize: 12,
+                      color: MeadowColors.textSecondary,
+                    ),
                   ),
                 ],
               ),
-              const Icon(Icons.flag_circle_outlined, color: MeadowColors.primary, size: 26),
+              const Icon(
+                Icons.flag_circle_outlined,
+                color: MeadowColors.primary,
+                size: 26,
+              ),
             ],
           ),
           const SizedBox(height: 20),
 
           StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
             stream: _firestore != null
-                ? _firestore!.collection('skillProfiles').doc(activeChild.childId).snapshots()
+                ? _firestore!
+                      .collection('skillProfiles')
+                      .doc(activeChild.childId)
+                      .snapshots()
                 : const Stream.empty(),
             builder: (context, profileSnap) {
               final profile = profileSnap.data?.data() ?? {};
@@ -1285,38 +1673,44 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
               final milestones = [
                 {
                   'domain': 'cognitive',
-                  'title': 'Problem Solving & Cause-Effect Reasoning',
-                  'desc': 'Identifies patterns and tests solutions during structured interactive play.',
+                  'title': 'Solving Everyday Problems',
+                  'desc':
+                      'Notices patterns, tries different ways to solve problems, and explores how things work.',
                   'ageRange': '3–5 Years',
                 },
                 {
                   'domain': 'language',
-                  'title': 'Expressive Vocabulary & Sentence Flow',
-                  'desc': 'Communicates full thoughts using descriptive words and listening comprehension.',
+                  'title': 'Talking and Sharing Thoughts',
+                  'desc':
+                      'Uses words to share feelings and ideas, and listens when others talk.',
                   'ageRange': '3–5 Years',
                 },
                 {
                   'domain': 'motor',
-                  'title': 'Fine Motor Dexterity & Precision Grasp',
-                  'desc': 'Exhibits steady hand-eye coordination in drawing and manipulation exercises.',
+                  'title': 'Hand and Finger Coordination',
+                  'desc':
+                      'Holds crayons, turns pages, and builds with small objects comfortably.',
                   'ageRange': '3–5 Years',
                 },
                 {
                   'domain': 'social',
-                  'title': 'Cooperative Play & Empathetic Sharing',
-                  'desc': 'Demonstrates turn-taking and responsive social cues in group scenarios.',
+                  'title': 'Playing with Others & Sharing',
+                  'desc':
+                      'Takes turns, shares toys, and enjoys playing together with family and friends.',
                   'ageRange': '3–5 Years',
                 },
                 {
                   'domain': 'emotional',
-                  'title': 'Emotional Expression & Self-Regulation',
-                  'desc': 'Recognizes personal emotional states and employs calming strategies.',
+                  'title': 'Expressing and Managing Feelings',
+                  'desc':
+                      'Names feelings like happy or upset, and calms down with gentle reassurance.',
                   'ageRange': '3–5 Years',
                 },
                 {
                   'domain': 'creative',
-                  'title': 'Imaginative Role-Play & Storytelling',
-                  'desc': 'Constructs original narratives and uses objects symbolically.',
+                  'title': 'Imaginative Play & Storytelling',
+                  'desc':
+                      'Makes up pretend stories, plays dress-up, and uses toys in imaginative ways.',
                   'ageRange': '3–5 Years',
                 },
               ];
@@ -1325,7 +1719,8 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: milestones.length,
-                separatorBuilder: (context, i) => const Divider(height: 1, color: MeadowColors.borderLight),
+                separatorBuilder: (context, i) =>
+                    const Divider(height: 1, color: MeadowColors.borderLight),
                 itemBuilder: (context, i) {
                   final m = milestones[i];
                   final domain = m['domain']!;
@@ -1349,7 +1744,9 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                             shape: BoxShape.circle,
                           ),
                           child: Icon(
-                            isAchieved ? Icons.check_circle_rounded : MeadowDomain.iconFor(domain),
+                            isAchieved
+                                ? Icons.check_circle_rounded
+                                : MeadowDomain.iconFor(domain),
                             size: 18,
                             color: isAchieved ? MeadowColors.primary : color,
                           ),
@@ -1363,17 +1760,22 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                                 children: [
                                   Text(
                                     m['title']!,
-                                    style: MeadowTypography.label.copyWith(fontSize: 14),
+                                    style: MeadowTypography.label.copyWith(
+                                      fontSize: 14,
+                                    ),
                                   ),
                                   const SizedBox(width: 8),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: MeadowDomain.surfaceFor(domain),
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                     child: Text(
-                                      MeadowDomain.labelFor(domain),
+                                      _getFriendlyDomainLabel(domain),
                                       style: GoogleFonts.plusJakartaSans(
                                         fontSize: 9,
                                         fontWeight: FontWeight.bold,
@@ -1386,38 +1788,57 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                               const SizedBox(height: 4),
                               Text(
                                 m['desc']!,
-                                style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textSecondary),
+                                style: MeadowTypography.body.copyWith(
+                                  fontSize: 12,
+                                  color: MeadowColors.textSecondary,
+                                ),
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'Target Age: ${m['ageRange']} • VSMS Standard Item',
-                                style: MeadowTypography.caption.copyWith(fontSize: 10, color: MeadowColors.textTertiary),
+                                'Age Guide: ${m['ageRange']} • Key developmental skill',
+                                style: MeadowTypography.caption.copyWith(
+                                  fontSize: 10,
+                                  color: MeadowColors.textTertiary,
+                                ),
                               ),
                             ],
                           ),
                         ),
                         const SizedBox(width: 12),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: isAchieved
                                 ? MeadowColors.primarySurface
-                                : (isInProgress ? MeadowColors.goldSurface : MeadowColors.surfaceAlt),
+                                : (isInProgress
+                                      ? MeadowColors.goldSurface
+                                      : MeadowColors.surfaceAlt),
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
                               color: isAchieved
                                   ? MeadowColors.primary.withOpacity(0.3)
-                                  : (isInProgress ? MeadowColors.gold.withOpacity(0.3) : MeadowColors.borderLight),
+                                  : (isInProgress
+                                        ? MeadowColors.gold.withOpacity(0.3)
+                                        : MeadowColors.borderLight),
                             ),
                           ),
                           child: Text(
-                            isAchieved ? 'Achieved' : (isInProgress ? '${score.toInt()}% In Progress' : 'Target Milestone'),
+                            isAchieved
+                                ? 'Achieved'
+                                : (isInProgress
+                                      ? '${score.toInt()}% In Progress'
+                                      : 'Upcoming Goal'),
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
                               color: isAchieved
                                   ? MeadowColors.primary
-                                  : (isInProgress ? MeadowColors.primaryDark : MeadowColors.textTertiary),
+                                  : (isInProgress
+                                        ? MeadowColors.primaryDark
+                                        : MeadowColors.textTertiary),
                             ),
                           ),
                         ),
@@ -1454,15 +1875,25 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Recent Activity History & Audit Ledger', style: MeadowTypography.h2),
+                  Text(
+                    'Past Activities & Practice Log',
+                    style: MeadowTypography.h2,
+                  ),
                   const SizedBox(height: 4),
                   Text(
-                    'Immutable audit ledger verifying genuine evaluations and practice sessions',
-                    style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textSecondary),
+                    'A verified record of all activities, games, and skills practiced with your child.',
+                    style: MeadowTypography.body.copyWith(
+                      fontSize: 12,
+                      color: MeadowColors.textSecondary,
+                    ),
                   ),
                 ],
               ),
-              const Icon(Icons.history_edu, color: MeadowColors.primary, size: 24),
+              const Icon(
+                Icons.history_edu,
+                color: MeadowColors.primary,
+                size: 24,
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -1477,16 +1908,24 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                     padding: const EdgeInsets.all(28),
                     child: Column(
                       children: [
-                        const Icon(Icons.event_note_outlined, size: 36, color: MeadowColors.sage),
+                        const Icon(
+                          Icons.event_note_outlined,
+                          size: 36,
+                          color: MeadowColors.sage,
+                        ),
                         const SizedBox(height: 10),
                         Text(
-                          'No activity events recorded yet',
-                          style: MeadowTypography.label.copyWith(color: MeadowColors.textSecondary),
+                          'No activities recorded yet',
+                          style: MeadowTypography.label.copyWith(
+                            color: MeadowColors.textSecondary,
+                          ),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Complete interactive milestone games on mobile to see score entries verified here.',
-                          style: MeadowTypography.caption.copyWith(color: MeadowColors.textTertiary),
+                          "Play interactive games and milestone activities on your phone to see your child's progress recorded here.",
+                          style: MeadowTypography.caption.copyWith(
+                            color: MeadowColors.textTertiary,
+                          ),
                           textAlign: TextAlign.center,
                         ),
                       ],
@@ -1499,14 +1938,19 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: events.take(8).length,
-                separatorBuilder: (context, i) => const Divider(height: 1, color: MeadowColors.borderLight),
+                separatorBuilder: (context, i) =>
+                    const Divider(height: 1, color: MeadowColors.borderLight),
                 itemBuilder: (context, i) {
                   final e = events[i];
                   final title = e['activityTitle'] ?? 'Activity Completed';
                   final domain = (e['skillDomain'] ?? 'general').toString();
                   final source = (e['activitySource'] ?? 'preset').toString();
-                  final delta = (e['appliedScoreDelta'] is num) ? (e['appliedScoreDelta'] as num).toDouble() : 0.0;
-                  final time = (e['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+                  final delta = (e['appliedScoreDelta'] is num)
+                      ? (e['appliedScoreDelta'] as num).toDouble()
+                      : 0.0;
+                  final time =
+                      (e['createdAt'] as Timestamp?)?.toDate() ??
+                      DateTime.now();
                   final isAi = source == 'ai_generated';
 
                   return Padding(
@@ -1516,34 +1960,54 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                         CircleAvatar(
                           radius: 18,
                           backgroundColor: MeadowDomain.surfaceFor(domain),
-                          child: Icon(MeadowDomain.iconFor(domain), size: 16, color: MeadowDomain.colorFor(domain)),
+                          child: Icon(
+                            MeadowDomain.iconFor(domain),
+                            size: 16,
+                            color: MeadowDomain.colorFor(domain),
+                          ),
                         ),
                         const SizedBox(width: 14),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(title, style: MeadowTypography.label.copyWith(fontSize: 13)),
+                              Text(
+                                title,
+                                style: MeadowTypography.label.copyWith(
+                                  fontSize: 13,
+                                ),
+                              ),
                               const SizedBox(height: 2),
                               Row(
                                 children: [
                                   Text(
-                                    '${MeadowDomain.labelFor(domain)} • ${DateFormat.yMMMd().format(time)}',
-                                    style: MeadowTypography.caption.copyWith(color: MeadowColors.textTertiary),
+                                    '${_getFriendlyDomainLabel(domain)} • ${DateFormat.yMMMd().format(time)}',
+                                    style: MeadowTypography.caption.copyWith(
+                                      color: MeadowColors.textTertiary,
+                                    ),
                                   ),
                                   const SizedBox(width: 8),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
                                     decoration: BoxDecoration(
-                                      color: isAi ? MeadowColors.cognitiveSurface : MeadowColors.primarySurface,
+                                      color: isAi
+                                          ? MeadowColors.cognitiveSurface
+                                          : MeadowColors.primarySurface,
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                     child: Text(
-                                      isAi ? 'AI Guided (0.5x)' : 'Measured (1.0x)',
+                                      isAi
+                                          ? 'AI-Assisted Activities'
+                                          : 'Recorded Activities',
                                       style: GoogleFonts.plusJakartaSans(
                                         fontSize: 9,
                                         fontWeight: FontWeight.bold,
-                                        color: isAi ? MeadowColors.cognitive : MeadowColors.primary,
+                                        color: isAi
+                                            ? MeadowColors.cognitive
+                                            : MeadowColors.primary,
                                       ),
                                     ),
                                   ),
@@ -1552,12 +2016,16 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                             ],
                           ),
                         ),
-                        Text(
-                          '+${delta.toStringAsFixed(1)} pts',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontWeight: FontWeight.w800,
-                            color: MeadowColors.success,
-                            fontSize: 13,
+                        Tooltip(
+                          message:
+                              'Points added toward ${_getFriendlyDomainLabel(domain)} from completing this activity.',
+                          child: Text(
+                            '+${delta.toStringAsFixed(1)} pts',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontWeight: FontWeight.w800,
+                              color: MeadowColors.success,
+                              fontSize: 13,
+                            ),
                           ),
                         ),
                       ],
@@ -1595,15 +2063,28 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                   color: MeadowColors.primarySurface,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.phone_android_rounded, color: MeadowColors.primary, size: 20),
+                child: const Icon(
+                  Icons.phone_android_rounded,
+                  color: MeadowColors.primary,
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Mobile App Companion', style: MeadowTypography.label.copyWith(fontSize: 14)),
-                    Text('LittleLumin is Mobile-Only for Parents', style: MeadowTypography.caption.copyWith(fontSize: 10, color: MeadowColors.textSecondary)),
+                    Text(
+                      'Use LittleLumin on Your Phone',
+                      style: MeadowTypography.label.copyWith(fontSize: 14),
+                    ),
+                    Text(
+                      'Interactive games & daily activities on mobile',
+                      style: MeadowTypography.caption.copyWith(
+                        fontSize: 10,
+                        color: MeadowColors.textSecondary,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -1611,15 +2092,27 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
           ),
           const SizedBox(height: 12),
           Text(
-            'Interactive activities, bedtime stories, and tactile milestone play are optimized for touchscreens on our mobile app. This desktop website gives you complete visibility into long-term growth and specialist guidance.',
-            style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textSecondary, height: 1.45),
+            'Interactive activities, bedtime stories, and milestone activities are available on the mobile app. You can use this website anytime to view your child\'s progress and read guidance notes from your learning guide.',
+            style: MeadowTypography.body.copyWith(
+              fontSize: 12,
+              color: MeadowColors.textSecondary,
+              height: 1.45,
+            ),
           ),
           const SizedBox(height: 14),
           Row(
             children: [
-              Expanded(child: _buildStoreBadge(Icons.android, 'Google Play', 'Mobile App')),
+              Expanded(
+                child: _buildStoreBadge(
+                  Icons.android,
+                  'Google Play',
+                  'Mobile App',
+                ),
+              ),
               const SizedBox(width: 8),
-              Expanded(child: _buildStoreBadge(Icons.apple, 'App Store', 'Mobile App')),
+              Expanded(
+                child: _buildStoreBadge(Icons.apple, 'App Store', 'Mobile App'),
+              ),
             ],
           ),
         ],
@@ -1638,19 +2131,27 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
       ),
       child: Row(
         children: [
-          const Icon(Icons.phone_android_rounded, color: MeadowColors.primary, size: 20),
+          const Icon(
+            Icons.phone_android_rounded,
+            color: MeadowColors.primary,
+            size: 20,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: RichText(
               text: TextSpan(
-                style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textPrimary),
+                style: MeadowTypography.body.copyWith(
+                  fontSize: 12,
+                  color: MeadowColors.textPrimary,
+                ),
                 children: [
                   const TextSpan(
-                    text: 'LittleLumin is Mobile-Only for Parents • Desktop Companion Active: ',
+                    text: 'Use LittleLumin on Your Phone: ',
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                   TextSpan(
-                    text: 'Interactive activities and daily milestone play are available on mobile.',
+                    text:
+                        'Interactive activities, bedtime stories, and milestone activities are available on the mobile app.',
                     style: TextStyle(color: MeadowColors.textSecondary),
                   ),
                 ],
@@ -1680,8 +2181,21 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(storeName, style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.bold, color: MeadowColors.textPrimary)),
-                Text(subtitle, style: GoogleFonts.plusJakartaSans(fontSize: 8, color: MeadowColors.textSecondary)),
+                Text(
+                  storeName,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: MeadowColors.textPrimary,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 8,
+                    color: MeadowColors.textSecondary,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1695,7 +2209,10 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
   // =========================================================================
   Widget _buildGuideCaseCard(ChildModel activeChild, User user) {
     return StreamBuilder<List<SpecialistCaseModel>>(
-      stream: _caseService.getParentCasesStream(user.uid, childId: activeChild.childId),
+      stream: _caseService.getParentCasesStream(
+        user.uid,
+        childId: activeChild.childId,
+      ),
       builder: (context, caseSnap) {
         final cases = caseSnap.data ?? [];
         if (cases.isEmpty) {
@@ -1712,17 +2229,27 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.shield_outlined, size: 28, color: MeadowColors.sage),
+                    const Icon(
+                      Icons.shield_outlined,
+                      size: 28,
+                      color: MeadowColors.sage,
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: Text('No Learning Guide Assigned Yet', style: MeadowTypography.h3.copyWith(fontSize: 15)),
+                      child: Text(
+                        'No Learning Guide Assigned Yet',
+                        style: MeadowTypography.h3.copyWith(fontSize: 15),
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Request a verified specialist through the mobile app to receive clinical consultation and personalized growth recommendations.',
-                  style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textSecondary),
+                  'Connect with a certified learning guide through your phone to receive personalized advice and guidance for your child.',
+                  style: MeadowTypography.body.copyWith(
+                    fontSize: 12,
+                    color: MeadowColors.textSecondary,
+                  ),
                 ),
               ],
             ),
@@ -1730,7 +2257,8 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
         }
 
         final activeCase = cases.firstWhere(
-          (c) => c.status == CaseStatus.accepted || c.status == CaseStatus.active,
+          (c) =>
+              c.status == CaseStatus.accepted || c.status == CaseStatus.active,
           orElse: () => cases.first,
         );
 
@@ -1751,8 +2279,14 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                     radius: 20,
                     backgroundColor: MeadowColors.primarySurface,
                     child: Text(
-                      activeCase.specialistName.isNotEmpty ? activeCase.specialistName[0].toUpperCase() : 'S',
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: MeadowColors.primary, fontSize: 16),
+                      activeCase.specialistName.isNotEmpty
+                          ? activeCase.specialistName[0].toUpperCase()
+                          : 'S',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: MeadowColors.primary,
+                        fontSize: 16,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -1760,19 +2294,32 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(activeCase.specialistName, style: MeadowTypography.h3.copyWith(fontSize: 15)),
+                        Text(
+                          activeCase.specialistName,
+                          style: MeadowTypography.h3.copyWith(fontSize: 15),
+                        ),
                         const SizedBox(height: 2),
                         Text(
-                          activeCase.specialistRole.replaceAll('_', ' ').toUpperCase(),
-                          style: MeadowTypography.caption.copyWith(color: MeadowColors.textSecondary, fontSize: 10),
+                          activeCase.specialistRole
+                              .replaceAll('_', ' ')
+                              .toUpperCase(),
+                          style: MeadowTypography.caption.copyWith(
+                            color: MeadowColors.textSecondary,
+                            fontSize: 10,
+                          ),
                         ),
                       ],
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
                     decoration: BoxDecoration(
-                      color: activeCase.status == CaseStatus.accepted || activeCase.status == CaseStatus.active
+                      color:
+                          activeCase.status == CaseStatus.accepted ||
+                              activeCase.status == CaseStatus.active
                           ? MeadowColors.primarySurface
                           : MeadowColors.goldSurface,
                       borderRadius: BorderRadius.circular(6),
@@ -1782,7 +2329,9 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 9,
                         fontWeight: FontWeight.bold,
-                        color: activeCase.status == CaseStatus.accepted || activeCase.status == CaseStatus.active
+                        color:
+                            activeCase.status == CaseStatus.accepted ||
+                                activeCase.status == CaseStatus.active
                             ? MeadowColors.primary
                             : MeadowColors.gold,
                       ),
@@ -1792,8 +2341,11 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
               ),
               const SizedBox(height: 14),
               Text(
-                'Consultation Purpose: ${activeCase.purpose}',
-                style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textSecondary),
+                'Consultation Focus: ${activeCase.purpose}',
+                style: MeadowTypography.body.copyWith(
+                  fontSize: 12,
+                  color: MeadowColors.textSecondary,
+                ),
               ),
               const SizedBox(height: 14),
               SizedBox(
@@ -1801,7 +2353,7 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                 child: ElevatedButton.icon(
                   onPressed: () => setState(() => _isChatOpen = true),
                   icon: const Icon(Icons.chat_bubble_outline, size: 16),
-                  label: const Text('Message Guide'),
+                  label: const Text('Message Your Guide'),
                   style: MeadowButtons.small(),
                 ),
               ),
@@ -1830,14 +2382,23 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('LLG Recommendations', style: MeadowTypography.h3.copyWith(fontSize: 15)),
-              const Icon(Icons.lightbulb_outline, size: 18, color: MeadowColors.primary),
+              Text(
+                'Suggestions from Your Guide',
+                style: MeadowTypography.h3.copyWith(fontSize: 15),
+              ),
+              const Icon(
+                Icons.lightbulb_outline,
+                size: 18,
+                color: MeadowColors.primary,
+              ),
             ],
           ),
           const SizedBox(height: 12),
 
           StreamBuilder<List<RecommendationModel>>(
-            stream: RecommendationService().getChildRecommendationsStream(activeChild.childId),
+            stream: RecommendationService().getChildRecommendationsStream(
+              activeChild.childId,
+            ),
             builder: (context, snapshot) {
               final recs = snapshot.data ?? [];
               if (recs.isEmpty) {
@@ -1845,9 +2406,12 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Text(
-                      'No personalized recommendations assigned yet for ${activeChild.name}.',
+                      'Your guide hasn\'t added any suggestions yet for ${activeChild.name}. Check back later.',
                       textAlign: TextAlign.center,
-                      style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textSecondary),
+                      style: MeadowTypography.body.copyWith(
+                        fontSize: 12,
+                        color: MeadowColors.textSecondary,
+                      ),
                     ),
                   ),
                 );
@@ -1857,7 +2421,8 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: recs.take(4).length,
-                separatorBuilder: (context, i) => const Divider(height: 16, color: MeadowColors.borderLight),
+                separatorBuilder: (context, i) =>
+                    const Divider(height: 16, color: MeadowColors.borderLight),
                 itemBuilder: (context, i) => _buildRecommendationCard(recs[i]),
               );
             },
@@ -1875,7 +2440,13 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Expanded(
-              child: Text(rec.title, style: MeadowTypography.label.copyWith(fontSize: 13, fontWeight: FontWeight.bold)),
+              child: Text(
+                rec.title,
+                style: MeadowTypography.label.copyWith(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -1896,12 +2467,21 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
         ),
         const SizedBox(height: 4),
         Text(
-          'By ${rec.llgName} • Domain: ${MeadowDomain.labelFor(rec.skillDomain)}',
-          style: MeadowTypography.caption.copyWith(fontSize: 10, color: MeadowColors.textSecondary),
+          'By ${rec.llgName} • Skill: ${_getFriendlyDomainLabel(rec.skillDomain)}',
+          style: MeadowTypography.caption.copyWith(
+            fontSize: 10,
+            color: MeadowColors.textSecondary,
+          ),
         ),
         if (rec.rationale.isNotEmpty) ...[
           const SizedBox(height: 6),
-          Text(rec.rationale, style: MeadowTypography.body.copyWith(fontSize: 11, color: MeadowColors.textPrimary)),
+          Text(
+            rec.rationale,
+            style: MeadowTypography.body.copyWith(
+              fontSize: 11,
+              color: MeadowColors.textPrimary,
+            ),
+          ),
         ],
         if (rec.hasParentResponded) ...[
           const SizedBox(height: 6),
@@ -1913,12 +2493,19 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
             ),
             child: Row(
               children: [
-                const Icon(Icons.check_circle_outline, size: 12, color: MeadowColors.primary),
+                const Icon(
+                  Icons.check_circle_outline,
+                  size: 12,
+                  color: MeadowColors.primary,
+                ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    'Responded: "${rec.parentFeedback ?? rec.parentResponse.name}"',
-                    style: MeadowTypography.caption.copyWith(fontSize: 10, fontWeight: FontWeight.w600),
+                    'Your reply: "${rec.parentFeedback ?? rec.parentResponse.name}"',
+                    style: MeadowTypography.caption.copyWith(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
@@ -1947,14 +2534,23 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Consultation Summaries', style: MeadowTypography.h3.copyWith(fontSize: 15)),
-              const Icon(Icons.assignment_outlined, size: 18, color: MeadowColors.primary),
+              Text(
+                'Notes from Your Sessions',
+                style: MeadowTypography.h3.copyWith(fontSize: 15),
+              ),
+              const Icon(
+                Icons.assignment_outlined,
+                size: 18,
+                color: MeadowColors.primary,
+              ),
             ],
           ),
           const SizedBox(height: 12),
 
           StreamBuilder<List<ConsultationSummaryModel>>(
-            stream: ConsultationSummaryService().getChildSummariesStream(activeChild.childId),
+            stream: ConsultationSummaryService().getChildSummariesStream(
+              activeChild.childId,
+            ),
             builder: (context, snapshot) {
               final summaries = snapshot.data ?? [];
               if (summaries.isEmpty) {
@@ -1962,9 +2558,12 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Text(
-                      'No external consultation summaries logged yet.',
+                      'No session notes have been added yet.',
                       textAlign: TextAlign.center,
-                      style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textSecondary),
+                      style: MeadowTypography.body.copyWith(
+                        fontSize: 12,
+                        color: MeadowColors.textSecondary,
+                      ),
                     ),
                   ),
                 );
@@ -1974,8 +2573,10 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: summaries.take(3).length,
-                separatorBuilder: (context, i) => const Divider(height: 16, color: MeadowColors.borderLight),
-                itemBuilder: (context, i) => _buildConsultationSummaryCard(summaries[i]),
+                separatorBuilder: (context, i) =>
+                    const Divider(height: 16, color: MeadowColors.borderLight),
+                itemBuilder: (context, i) =>
+                    _buildConsultationSummaryCard(summaries[i]),
               );
             },
           ),
@@ -1994,14 +2595,21 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: MeadowColors.primarySurface,
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
                     s.consultationMode.toUpperCase(),
-                    style: GoogleFonts.plusJakartaSans(color: MeadowColors.primary, fontWeight: FontWeight.bold, fontSize: 9),
+                    style: GoogleFonts.plusJakartaSans(
+                      color: MeadowColors.primary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 9,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -2013,20 +2621,45 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
             ),
             Text(
               DateFormat.yMMMd().format(s.consultationDate),
-              style: MeadowTypography.caption.copyWith(fontSize: 10, color: MeadowColors.textTertiary),
+              style: MeadowTypography.caption.copyWith(
+                fontSize: 10,
+                color: MeadowColors.textTertiary,
+              ),
             ),
           ],
         ),
         const SizedBox(height: 6),
-        Text('Focus: ${s.consultationReason}', style: MeadowTypography.body.copyWith(fontSize: 11, fontWeight: FontWeight.w600)),
+        Text(
+          'Session Focus: ${s.consultationReason}',
+          style: MeadowTypography.body.copyWith(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         const SizedBox(height: 2),
-        Text(s.guidanceProvided, style: MeadowTypography.body.copyWith(fontSize: 11, color: MeadowColors.textSecondary)),
+        Text(
+          s.guidanceProvided,
+          style: MeadowTypography.body.copyWith(
+            fontSize: 11,
+            color: MeadowColors.textSecondary,
+          ),
+        ),
         if (s.agreedFollowUpActions.isNotEmpty) ...[
           const SizedBox(height: 4),
-          ...s.agreedFollowUpActions.take(2).map((a) => Padding(
-            padding: const EdgeInsets.only(top: 1),
-            child: Text('• $a', style: MeadowTypography.caption.copyWith(fontSize: 10, color: MeadowColors.primary)),
-          )),
+          ...s.agreedFollowUpActions
+              .take(2)
+              .map(
+                (a) => Padding(
+                  padding: const EdgeInsets.only(top: 1),
+                  child: Text(
+                    '• Next step: $a',
+                    style: MeadowTypography.caption.copyWith(
+                      fontSize: 10,
+                      color: MeadowColors.primary,
+                    ),
+                  ),
+                ),
+              ),
         ],
       ],
     );
@@ -2037,10 +2670,16 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
   // =========================================================================
   Widget _buildFloatingChatLauncher(ChildModel activeChild, User user) {
     return StreamBuilder<List<SpecialistCaseModel>>(
-      stream: _caseService.getParentCasesStream(user.uid, childId: activeChild.childId),
+      stream: _caseService.getParentCasesStream(
+        user.uid,
+        childId: activeChild.childId,
+      ),
       builder: (context, snapshot) {
         final cases = snapshot.data ?? [];
-        final hasActiveCase = cases.any((c) => c.status == CaseStatus.accepted || c.status == CaseStatus.active);
+        final hasActiveCase = cases.any(
+          (c) =>
+              c.status == CaseStatus.accepted || c.status == CaseStatus.active,
+        );
 
         return Material(
           elevation: 8,
@@ -2054,10 +2693,14 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.chat_bubble_outline, color: Colors.white, size: 20),
+                  const Icon(
+                    Icons.chat_bubble_outline,
+                    color: Colors.white,
+                    size: 20,
+                  ),
                   const SizedBox(width: 9),
                   Text(
-                    hasActiveCase ? 'Chat with Guide' : 'Guide Chat',
+                    hasActiveCase ? 'Chat with Your Guide' : 'Chat with Guide',
                     style: GoogleFonts.plusJakartaSans(
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
@@ -2090,12 +2733,17 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
     final panelHeight = min(530.0, screenSize.height - 80);
 
     return StreamBuilder<List<SpecialistCaseModel>>(
-      stream: _caseService.getParentCasesStream(user.uid, childId: activeChild.childId),
+      stream: _caseService.getParentCasesStream(
+        user.uid,
+        childId: activeChild.childId,
+      ),
       builder: (context, snapshot) {
         final cases = snapshot.data ?? [];
         final SpecialistCaseModel? targetCase = cases.isNotEmpty
             ? cases.firstWhere(
-                (c) => c.status == CaseStatus.accepted || c.status == CaseStatus.active,
+                (c) =>
+                    c.status == CaseStatus.accepted ||
+                    c.status == CaseStatus.active,
                 orElse: () => cases.first,
               )
             : null;
@@ -2123,7 +2771,10 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
               children: [
                 // Chat Header
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   decoration: const BoxDecoration(
                     color: MeadowColors.primary,
                     borderRadius: BorderRadius.only(
@@ -2137,10 +2788,15 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                         radius: 16,
                         backgroundColor: MeadowColors.sageLight,
                         child: Text(
-                          targetCase != null && targetCase.specialistName.isNotEmpty
+                          targetCase != null &&
+                                  targetCase.specialistName.isNotEmpty
                               ? targetCase.specialistName[0].toUpperCase()
                               : 'G',
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: MeadowColors.primaryDark, fontSize: 13),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: MeadowColors.primaryDark,
+                            fontSize: 13,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -2149,7 +2805,8 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              targetCase?.specialistName ?? 'LittleLumin Guide',
+                              targetCase?.specialistName ??
+                                  'Your Learning Guide',
                               style: GoogleFonts.plusJakartaSans(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
@@ -2157,18 +2814,26 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
-                            Text(
-                              'For ${activeChild.name} • Secure DPDP Protected',
-                              style: GoogleFonts.plusJakartaSans(
-                                color: Colors.white.withOpacity(0.8),
-                                fontSize: 11,
+                            Tooltip(
+                              message:
+                                  "Protected under India's Digital Personal Data Protection (DPDP) Act for child privacy.",
+                              child: Text(
+                                'For ${activeChild.name} • Private & secure',
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: Colors.white.withOpacity(0.85),
+                                  fontSize: 11,
+                                ),
                               ),
                             ),
                           ],
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.close, color: Colors.white, size: 20),
+                        icon: const Icon(
+                          Icons.close,
+                          color: Colors.white,
+                          size: 20,
+                        ),
                         tooltip: 'Close chat',
                         onPressed: () => setState(() => _isChatOpen = false),
                       ),
@@ -2185,17 +2850,23 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Icon(Icons.chat_bubble_outline, size: 40, color: MeadowColors.sage),
+                                const Icon(
+                                  Icons.chat_bubble_outline,
+                                  size: 40,
+                                  color: MeadowColors.sage,
+                                ),
                                 const SizedBox(height: 12),
                                 Text(
-                                  'No active consultation case',
+                                  'No Active Session Connected',
                                   style: MeadowTypography.label,
                                   textAlign: TextAlign.center,
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  'Request an LLG guide from the mobile app to begin two-way secure messaging.',
-                                  style: MeadowTypography.caption.copyWith(color: MeadowColors.textSecondary),
+                                  'Connect with a learning guide on the mobile app to start messaging.',
+                                  style: MeadowTypography.caption.copyWith(
+                                    color: MeadowColors.textSecondary,
+                                  ),
                                   textAlign: TextAlign.center,
                                 ),
                               ],
@@ -2203,10 +2874,17 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                           ),
                         )
                       : StreamBuilder<List<MessageModel>>(
-                          stream: _messagingService.getMessagesStream(targetCase.caseId),
+                          stream: _messagingService.getMessagesStream(
+                            targetCase.caseId,
+                          ),
                           builder: (context, msgSnap) {
-                            if (msgSnap.connectionState == ConnectionState.waiting) {
-                              return const Center(child: CircularProgressIndicator(color: MeadowColors.primary));
+                            if (msgSnap.connectionState ==
+                                ConnectionState.waiting) {
+                              return const Center(
+                                child: CircularProgressIndicator(
+                                  color: MeadowColors.primary,
+                                ),
+                              );
                             }
 
                             final messages = msgSnap.data ?? [];
@@ -2217,7 +2895,11 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      const Icon(Icons.forum_outlined, size: 36, color: MeadowColors.sage),
+                                      const Icon(
+                                        Icons.forum_outlined,
+                                        size: 36,
+                                        color: MeadowColors.sage,
+                                      ),
                                       const SizedBox(height: 10),
                                       Text(
                                         'Start a conversation with ${targetCase.specialistName}',
@@ -2226,8 +2908,11 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
-                                        'Ask questions about recommendations, milestone observations, or activity progress.',
-                                        style: MeadowTypography.caption.copyWith(color: MeadowColors.textSecondary),
+                                        'Feel free to ask questions about your child\'s activities, achievements, or guide suggestions.',
+                                        style: MeadowTypography.caption
+                                            .copyWith(
+                                              color: MeadowColors.textSecondary,
+                                            ),
                                         textAlign: TextAlign.center,
                                       ),
                                     ],
@@ -2239,7 +2924,9 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                             WidgetsBinding.instance.addPostFrameCallback((_) {
                               if (_chatScrollController.hasClients) {
                                 _chatScrollController.animateTo(
-                                  _chatScrollController.position.maxScrollExtent,
+                                  _chatScrollController
+                                      .position
+                                      .maxScrollExtent,
                                   duration: const Duration(milliseconds: 200),
                                   curve: Curves.easeOut,
                                 );
@@ -2255,29 +2942,50 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                                 final isMe = msg.senderId == user.uid;
 
                                 return Align(
-                                  alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                                  alignment: isMe
+                                      ? Alignment.centerRight
+                                      : Alignment.centerLeft,
                                   child: Container(
                                     margin: const EdgeInsets.only(bottom: 8),
-                                    constraints: BoxConstraints(maxWidth: panelWidth * 0.75),
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    constraints: BoxConstraints(
+                                      maxWidth: panelWidth * 0.75,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
+                                    ),
                                     decoration: BoxDecoration(
-                                      color: isMe ? MeadowColors.primary : MeadowColors.surfaceAlt,
+                                      color: isMe
+                                          ? MeadowColors.primary
+                                          : MeadowColors.surfaceAlt,
                                       borderRadius: BorderRadius.only(
                                         topLeft: const Radius.circular(12),
                                         topRight: const Radius.circular(12),
-                                        bottomLeft: Radius.circular(isMe ? 12 : 2),
-                                        bottomRight: Radius.circular(isMe ? 2 : 12),
+                                        bottomLeft: Radius.circular(
+                                          isMe ? 12 : 2,
+                                        ),
+                                        bottomRight: Radius.circular(
+                                          isMe ? 2 : 12,
+                                        ),
                                       ),
-                                      border: isMe ? null : Border.all(color: MeadowColors.borderLight),
+                                      border: isMe
+                                          ? null
+                                          : Border.all(
+                                              color: MeadowColors.borderLight,
+                                            ),
                                     ),
                                     child: Column(
-                                      crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                                      crossAxisAlignment: isMe
+                                          ? CrossAxisAlignment.end
+                                          : CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           msg.content,
                                           style: GoogleFonts.plusJakartaSans(
                                             fontSize: 13,
-                                            color: isMe ? Colors.white : MeadowColors.textPrimary,
+                                            color: isMe
+                                                ? Colors.white
+                                                : MeadowColors.textPrimary,
                                             height: 1.3,
                                           ),
                                         ),
@@ -2286,7 +2994,9 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                                           DateFormat.jm().format(msg.timestamp),
                                           style: GoogleFonts.plusJakartaSans(
                                             fontSize: 9,
-                                            color: isMe ? Colors.white.withOpacity(0.7) : MeadowColors.textTertiary,
+                                            color: isMe
+                                                ? Colors.white.withOpacity(0.7)
+                                                : MeadowColors.textTertiary,
                                           ),
                                         ),
                                       ],
@@ -2302,10 +3012,15 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                 // Chat Input Bar
                 if (targetCase != null)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     decoration: const BoxDecoration(
                       color: MeadowColors.surface,
-                      border: Border(top: BorderSide(color: MeadowColors.borderLight)),
+                      border: Border(
+                        top: BorderSide(color: MeadowColors.borderLight),
+                      ),
                       borderRadius: BorderRadius.only(
                         bottomLeft: Radius.circular(15),
                         bottomRight: Radius.circular(15),
@@ -2318,13 +3033,20 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                             controller: _chatInputController,
                             style: MeadowTypography.body.copyWith(fontSize: 13),
                             decoration: InputDecoration(
-                              hintText: 'Type your message...',
-                              hintStyle: MeadowTypography.body.copyWith(fontSize: 13, color: MeadowColors.textTertiary),
+                              hintText: 'Type a message for your guide...',
+                              hintStyle: MeadowTypography.body.copyWith(
+                                fontSize: 13,
+                                color: MeadowColors.textTertiary,
+                              ),
                               border: InputBorder.none,
                               isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 8,
+                              ),
                             ),
-                            onSubmitted: (_) => _handleSendMessage(targetCase, user),
+                            onSubmitted: (_) =>
+                                _handleSendMessage(targetCase, user),
                           ),
                         ),
                         IconButton(
@@ -2332,10 +3054,19 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                               ? const SizedBox(
                                   width: 16,
                                   height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: MeadowColors.primary),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: MeadowColors.primary,
+                                  ),
                                 )
-                              : const Icon(Icons.send_rounded, color: MeadowColors.primary, size: 20),
-                          onPressed: _isSendingMessage ? null : () => _handleSendMessage(targetCase, user),
+                              : const Icon(
+                                  Icons.send_rounded,
+                                  color: MeadowColors.primary,
+                                  size: 20,
+                                ),
+                          onPressed: _isSendingMessage
+                              ? null
+                              : () => _handleSendMessage(targetCase, user),
                         ),
                       ],
                     ),
@@ -2348,7 +3079,10 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
     );
   }
 
-  Future<void> _handleSendMessage(SpecialistCaseModel targetCase, User user) async {
+  Future<void> _handleSendMessage(
+    SpecialistCaseModel targetCase,
+    User user,
+  ) async {
     final text = _chatInputController.text.trim();
     if (text.isEmpty || _isSendingMessage) return;
 
@@ -2367,7 +3101,10 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send message: $e'), backgroundColor: MeadowColors.error),
+          SnackBar(
+            content: Text('Failed to send message: $e'),
+            backgroundColor: MeadowColors.error,
+          ),
         );
       }
     } finally {
@@ -2383,7 +3120,14 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
       children: [
         _buildDesktopWebHeader(
           user,
-          ChildModel(childId: '', name: 'No Profile', dateOfBirth: DateTime.now(), gender: '', parentId: user.uid, createdAt: DateTime.now()),
+          ChildModel(
+            childId: '',
+            name: 'No Profile',
+            dateOfBirth: DateTime.now(),
+            gender: '',
+            parentId: user.uid,
+            createdAt: DateTime.now(),
+          ),
           [],
           true,
         ),
@@ -2401,17 +3145,26 @@ class _DesktopParentCompanionScreenState extends State<DesktopParentCompanionScr
                       color: MeadowColors.primarySurface,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.child_care_rounded, size: 56, color: MeadowColors.primary),
+                    child: const Icon(
+                      Icons.child_care_rounded,
+                      size: 56,
+                      color: MeadowColors.primary,
+                    ),
                   ),
                   const SizedBox(height: 20),
-                  Text('No Child Profiles Connected', style: MeadowTypography.h2),
+                  Text(
+                    'No Child Profile Added Yet',
+                    style: MeadowTypography.h2,
+                  ),
                   const SizedBox(height: 8),
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 460),
                     child: Text(
-                      'Please open the LittleLumin mobile app on your phone to add your child and complete the baseline developmental milestone assessment.',
+                      'Please open the LittleLumin app on your phone to add your child and get started with their first activities.',
                       textAlign: TextAlign.center,
-                      style: MeadowTypography.body.copyWith(color: MeadowColors.textSecondary),
+                      style: MeadowTypography.body.copyWith(
+                        color: MeadowColors.textSecondary,
+                      ),
                     ),
                   ),
                 ],
