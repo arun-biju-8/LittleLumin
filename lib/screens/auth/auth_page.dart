@@ -12,6 +12,7 @@ import '../admin/admin_dashboard.dart';
 import '../llg/llg_dashboard.dart';
 import '../parent/parent_dashboard.dart';
 import 'forgot_password_page.dart';
+import '../../widgets/mobile_only_gate.dart';
 
 enum AuthMode { login, signup }
 
@@ -267,23 +268,31 @@ class _AuthPageState extends State<AuthPage>
   }
 
   void _navigateBasedOnUserType(UserModel user) {
-    Widget destination;
     switch (user.userType) {
       case 'llg':
       case 'llg_pending':
-        destination = const LLGDashboard();
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const LLGDashboard()),
+        );
         break;
       case 'admin':
-        destination = const AdminDashboard();
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const AdminDashboard()),
+        );
         break;
       default:
-        destination = const ParentDashboard();
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const MobileOnlyGate(
+              userType: 'parent',
+              child: ParentDashboard(),
+            ),
+          ),
+        );
     }
-
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => destination),
-    );
   }
 
   void _openForgotPassword() {
@@ -373,9 +382,7 @@ class _AuthPageState extends State<AuthPage>
         children: [
           isDesktop ? _buildDesktopLayout() : _buildMobileLayout(),
           if (_isLoading)
-            const AuthLoadingOverlay(
-              message: 'Authenticating your account...',
-            ),
+            const AuthLoadingOverlay(message: 'Authenticating your account...'),
         ],
       ),
     );
@@ -390,13 +397,14 @@ class _AuthPageState extends State<AuthPage>
 
         return Stack(
           children: [
-            // Brand panel — slides left -> right on toggle
+            // Brand panel â€” slides left -> right on toggle
             AnimatedBuilder(
               animation: _slideAnimation,
               builder: (context, child) {
                 final position = _slideAnimation.value * halfWidth;
-                final transitionDepth =
-                    math.sin(_slideAnimation.value * math.pi);
+                final transitionDepth = math.sin(
+                  _slideAnimation.value * math.pi,
+                );
 
                 return Positioned(
                   left: position,
@@ -421,14 +429,15 @@ class _AuthPageState extends State<AuthPage>
               },
             ),
 
-            // Form panel — slides right -> left on toggle
+            // Form panel â€” slides right -> left on toggle
             AnimatedBuilder(
               animation: _slideAnimation,
               builder: (context, child) {
                 final position =
                     halfWidth - (_slideAnimation.value * halfWidth);
-                final transitionDepth =
-                    math.sin(_slideAnimation.value * math.pi);
+                final transitionDepth = math.sin(
+                  _slideAnimation.value * math.pi,
+                );
 
                 return Positioned(
                   left: position,
@@ -479,9 +488,7 @@ class _AuthPageState extends State<AuthPage>
                       colors: [brandPurpleDark, brandPurple, brandPurpleLight],
                     ),
                   ),
-                  child: CustomPaint(
-                    painter: _BrandDecorativePainter(),
-                  ),
+                  child: CustomPaint(painter: _BrandDecorativePainter()),
                 ),
               );
             },
@@ -502,9 +509,11 @@ class _AuthPageState extends State<AuthPage>
                   },
                   child: _currentMode == AuthMode.login
                       ? _buildBrandLoginContent(
-                          key: const ValueKey('brand_login'))
+                          key: const ValueKey('brand_login'),
+                        )
                       : _buildBrandSignupContent(
-                          key: const ValueKey('brand_signup')),
+                          key: const ValueKey('brand_signup'),
+                        ),
                 ),
               ),
             ),
@@ -581,15 +590,15 @@ class _AuthPageState extends State<AuthPage>
         const SizedBox(height: 40),
         _buildFeaturePoint(
           icon: Icons.auto_awesome,
-          text: '✨ AI-Generated Activities',
+          text: 'âœ¨ AI-Generated Activities',
         ),
         _buildFeaturePoint(
           icon: Icons.book_outlined,
-          text: '📖 Personalized Stories',
+          text: 'ðŸ“– Personalized Stories',
         ),
         _buildFeaturePoint(
           icon: Icons.trending_up,
-          text: '📈 Skill Progress Tracking',
+          text: 'ðŸ“ˆ Skill Progress Tracking',
         ),
       ],
     );
@@ -662,19 +671,19 @@ class _AuthPageState extends State<AuthPage>
         const SizedBox(height: 36),
         _buildFeaturePoint(
           icon: Icons.child_care,
-          text: '✨ Personalized for each child',
+          text: 'âœ¨ Personalized for each child',
         ),
         _buildFeaturePoint(
           icon: Icons.all_inclusive,
-          text: '📖 Unlimited activity access',
+          text: 'ðŸ“– Unlimited activity access',
         ),
         _buildFeaturePoint(
           icon: Icons.track_changes,
-          text: '🎯 Track progress over time',
+          text: 'ðŸŽ¯ Track progress over time',
         ),
         _buildFeaturePoint(
           icon: Icons.medical_services_outlined,
-          text: '👨‍⚕️ Optional specialist support',
+          text: 'ðŸ‘¨â€âš•ï¸ Optional specialist support',
         ),
       ],
     );
@@ -775,7 +784,8 @@ class _AuthPageState extends State<AuthPage>
                     child: _currentMode == AuthMode.login
                         ? _buildLoginForm(key: const ValueKey('mobile_login'))
                         : _buildSignupForm(
-                            key: const ValueKey('mobile_signup')),
+                            key: const ValueKey('mobile_signup'),
+                          ),
                   ),
                 ),
               ),
@@ -882,10 +892,7 @@ class _AuthPageState extends State<AuthPage>
           const SizedBox(height: 6),
           Text(
             'Sign in to continue your journey',
-            style: TextStyle(
-              color: Colors.grey.shade600,
-              fontSize: 14,
-            ),
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
           ),
           const SizedBox(height: 28),
 
@@ -958,7 +965,8 @@ class _AuthPageState extends State<AuthPage>
                     key: const ValueKey('remember_me_checkbox'),
                     value: _rememberMe,
                     activeColor: brandPurple,
-                    onChanged: (val) => setState(() => _rememberMe = val ?? false),
+                    onChanged: (val) =>
+                        setState(() => _rememberMe = val ?? false),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(4),
                     ),
@@ -966,10 +974,7 @@ class _AuthPageState extends State<AuthPage>
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                   const SizedBox(width: 4),
-                  const Text(
-                    'Remember me',
-                    style: TextStyle(fontSize: 14),
-                  ),
+                  const Text('Remember me', style: TextStyle(fontSize: 14)),
                 ],
               ),
               TextButton(
@@ -977,16 +982,16 @@ class _AuthPageState extends State<AuthPage>
                 onPressed: _openForgotPassword,
                 style: TextButton.styleFrom(
                   foregroundColor: brandPurple,
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 4,
+                  ),
                   minimumSize: Size.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
                 child: const Text(
                   'Forgot Password?',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                 ),
               ),
             ],
@@ -1071,10 +1076,7 @@ class _AuthPageState extends State<AuthPage>
                 ),
                 child: const Text(
                   'Sign Up',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                 ),
               ),
             ],
@@ -1106,10 +1108,7 @@ class _AuthPageState extends State<AuthPage>
           const SizedBox(height: 6),
           Text(
             'Start your parenting journey today',
-            style: TextStyle(
-              color: Colors.grey.shade600,
-              fontSize: 14,
-            ),
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
           ),
           const SizedBox(height: 24),
 
@@ -1271,10 +1270,7 @@ class _AuthPageState extends State<AuthPage>
               Expanded(
                 child: Text(
                   'I agree to the Terms of Service and Privacy Policy',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.grey.shade700,
-                  ),
+                  style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
                 ),
               ),
             ],
@@ -1359,10 +1355,7 @@ class _AuthPageState extends State<AuthPage>
                 ),
                 child: const Text(
                   'Sign In',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                 ),
               ),
             ],
@@ -1372,11 +1365,8 @@ class _AuthPageState extends State<AuthPage>
           // LLG / Specialist notice
           Center(
             child: Text(
-              '📚 Are you an LLG or Specialist? Contact us to get started',
-              style: TextStyle(
-                color: Colors.grey.shade600,
-                fontSize: 12,
-              ),
+              'ðŸ“š Are you an LLG or Specialist? Contact us to get started',
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
               textAlign: TextAlign.center,
             ),
           ),
@@ -1506,8 +1496,16 @@ class _BrandDecorativePainter extends CustomPainter {
     final fillPaint = Paint()
       ..color = Colors.white.withOpacity(0.04)
       ..style = PaintingStyle.fill;
-    canvas.drawCircle(Offset(size.width * 0.9, size.height * 0.25), 80, fillPaint);
-    canvas.drawCircle(Offset(size.width * 0.1, size.height * 0.75), 100, fillPaint);
+    canvas.drawCircle(
+      Offset(size.width * 0.9, size.height * 0.25),
+      80,
+      fillPaint,
+    );
+    canvas.drawCircle(
+      Offset(size.width * 0.1, size.height * 0.75),
+      100,
+      fillPaint,
+    );
   }
 
   @override
