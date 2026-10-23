@@ -37,9 +37,7 @@ pubspec.lock
 *.tmp
 
 # Ignore everything inside build/ EXCEPT build/web/
-build/*
-!build/web/
-build/web/assets/.env
+/build/
 
 # ============================================
 # Android
