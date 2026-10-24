@@ -23,6 +23,7 @@ import '../chat/chat_screen.dart';
 import 'add_observation_page.dart';
 import 'llg_profile_page.dart';
 import 'send_recommendation_page.dart';
+import 'child_profile_page.dart';
 
 class LLGDashboard extends StatefulWidget {
   const LLGDashboard({super.key});
@@ -43,6 +44,29 @@ class _LLGDashboardState extends State<LLGDashboard> {
   ChildModel? _selectedChild;
   SpecialistCaseModel? _selectedCase;
   bool _isDrawerOpen = false;
+  bool _isCasesGridView = false;
+  String _casesStatusFilter = 'all';
+
+  void _openChildProfile(SpecialistCaseModel c) {
+    final child = ChildModel(
+      childId: c.childId,
+      parentId: c.parentId,
+      name: c.childName,
+      dateOfBirth: DateTime.now().subtract(Duration(days: c.childAgeYears * 365)),
+      gender: 'Child',
+      createdAt: c.createdAt,
+    );
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChildProfilePage(
+          caseModel: c,
+          initialChild: child,
+          onCaseUpdated: () => setState(() {}),
+        ),
+      ),
+    );
+  }
 
   // Colors
   static const Color colorNavy = Color(0xFF0F172A);
@@ -869,29 +893,14 @@ class _LLGDashboardState extends State<LLGDashboard> {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: ElevatedButton(
-                  onPressed: isRevoked
-                      ? null
-                      : () {
-                          setState(() {
-                            _selectedCase = c;
-                            _selectedChild = ChildModel(
-                              childId: c.childId,
-                              parentId: c.parentId,
-                              name: c.childName,
-                              dateOfBirth: DateTime.now().subtract(Duration(days: c.childAgeYears * 365)),
-                              gender: 'Child',
-                              createdAt: c.createdAt,
-                            );
-                            _isDrawerOpen = true;
-                          });
-                        },
+                  onPressed: () => _openChildProfile(c),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: colorTeal,
+                    backgroundColor: isRevoked ? colorBorder : colorTeal,
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                   ),
                   child: Text(
-                    isRevoked ? 'Locked' : 'Open Case',
+                    isRevoked ? 'View Case' : 'Open Profile',
                     style: GoogleFonts.inter(fontSize: 11, color: Colors.white),
                   ),
                 ),
@@ -1002,13 +1011,28 @@ class _LLGDashboardState extends State<LLGDashboard> {
         var cases = snapshot.data ?? [];
         if (_searchQuery.isNotEmpty) {
           cases = cases.where((c) {
-            return c.childName.toLowerCase().contains(_searchQuery) ||
-                c.parentName.toLowerCase().contains(_searchQuery) ||
-                c.purpose.toLowerCase().contains(_searchQuery);
+            return c.childName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                c.parentName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                c.purpose.toLowerCase().contains(_searchQuery.toLowerCase());
           }).toList();
         }
 
-        if (cases.isEmpty) {
+        if (_casesStatusFilter != 'all') {
+          cases = cases.where((c) {
+            if (_casesStatusFilter == 'active') {
+              return c.status == CaseStatus.active || c.status == CaseStatus.accepted;
+            } else if (_casesStatusFilter == 'pending') {
+              return c.status == CaseStatus.pending;
+            } else if (_casesStatusFilter == 'revoked') {
+              return c.status == CaseStatus.revoked;
+            } else if (_casesStatusFilter == 'completed') {
+              return c.status == CaseStatus.completed;
+            }
+            return true;
+          }).toList();
+        }
+
+        if (cases.isEmpty && _searchQuery.isEmpty && _casesStatusFilter == 'all') {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -1042,6 +1066,7 @@ class _LLGDashboardState extends State<LLGDashboard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Header & Controls
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -1062,14 +1087,276 @@ class _LLGDashboardState extends State<LLGDashboard> {
                   ],
                 ),
                 const SizedBox(height: 16),
+
+                // Search, Filter & Grid/List Toggle Toolbar
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: colorNavy,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: colorBorder),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.search, size: 18, color: colorTextMuted),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          style: const TextStyle(color: Colors.white, fontSize: 13),
+                          decoration: InputDecoration(
+                            hintText: 'Search by child, parent, or consultation purpose...',
+                            hintStyle: GoogleFonts.inter(color: colorTextMuted, fontSize: 13),
+                            border: InputBorder.none,
+                            isDense: true,
+                          ),
+                          onChanged: (val) => setState(() => _searchQuery = val.trim()),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Container(width: 1, height: 24, color: colorBorder),
+                      const SizedBox(width: 12),
+                      DropdownButton<String>(
+                        value: _casesStatusFilter,
+                        dropdownColor: colorSlate,
+                        underline: const SizedBox.shrink(),
+                        icon: const Icon(Icons.arrow_drop_down, color: colorTextMuted),
+                        style: GoogleFonts.inter(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                        items: const [
+                          DropdownMenuItem(value: 'all', child: Text('All Statuses')),
+                          DropdownMenuItem(value: 'active', child: Text('Active Only')),
+                          DropdownMenuItem(value: 'pending', child: Text('Pending Only')),
+                          DropdownMenuItem(value: 'revoked', child: Text('Revoked Only')),
+                          DropdownMenuItem(value: 'completed', child: Text('Completed Only')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) setState(() => _casesStatusFilter = val);
+                        },
+                      ),
+                      const SizedBox(width: 12),
+                      Container(width: 1, height: 24, color: colorBorder),
+                      const SizedBox(width: 12),
+                      // Working Grid View / List View Toggle
+                      Container(
+                        decoration: BoxDecoration(
+                          color: colorSlate,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: colorBorder),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: Icon(
+                                Icons.view_list_rounded,
+                                size: 18,
+                                color: !_isCasesGridView ? colorTeal : colorTextMuted,
+                              ),
+                              tooltip: 'List View',
+                              padding: const EdgeInsets.all(6),
+                              constraints: const BoxConstraints(),
+                              onPressed: () => setState(() => _isCasesGridView = false),
+                            ),
+                            Container(width: 1, height: 16, color: colorBorder),
+                            IconButton(
+                              icon: Icon(
+                                Icons.grid_view_rounded,
+                                size: 18,
+                                color: _isCasesGridView ? colorTeal : colorTextMuted,
+                              ),
+                              tooltip: 'Grid View',
+                              padding: const EdgeInsets.all(6),
+                              constraints: const BoxConstraints(),
+                              onPressed: () => setState(() => _isCasesGridView = true),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // View Content (Grid View or List View)
                 Expanded(
                   child: SingleChildScrollView(
-                    child: _buildMyCasesTable(cases),
+                    child: _isCasesGridView ? _buildMyCasesGrid(cases) : _buildMyCasesTable(cases),
                   ),
                 ),
               ],
             ),
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMyCasesGrid(List<SpecialistCaseModel> cases) {
+    if (cases.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        alignment: Alignment.center,
+        child: Text(
+          'No matching cases found for the selected filter.',
+          style: GoogleFonts.inter(color: colorTextMuted, fontSize: 13),
+        ),
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth > 1050;
+        final isMedium = constraints.maxWidth > 680;
+        final int crossAxisCount = isWide ? 3 : (isMedium ? 2 : 1);
+        final double cardWidth = (constraints.maxWidth - (crossAxisCount - 1) * 16) / crossAxisCount;
+
+        return Wrap(
+          spacing: 16,
+          runSpacing: 16,
+          children: cases.map((c) {
+            final isAccepted = c.status == CaseStatus.accepted || c.status == CaseStatus.active;
+            final isRevoked = c.status == CaseStatus.revoked;
+
+            Color statusColor;
+            String statusText;
+            if (isRevoked) {
+              statusColor = Colors.redAccent;
+              statusText = 'REVOKED';
+            } else if (isAccepted) {
+              statusColor = const Color(0xFF10B981);
+              statusText = 'ACTIVE';
+            } else if (c.status == CaseStatus.pending) {
+              statusColor = colorAmber;
+              statusText = 'PENDING';
+            } else {
+              statusColor = colorTextMuted;
+              statusText = c.status.name.toUpperCase();
+            }
+
+            return SizedBox(
+              width: cardWidth,
+              child: Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: colorNavy,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: colorBorder),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 20,
+                          backgroundColor: colorTeal.withOpacity(0.2),
+                          child: Text(
+                            c.childName.isNotEmpty ? c.childName[0].toUpperCase() : 'C',
+                            style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.bold, color: colorTeal),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                c.childName,
+                                style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                '${c.childAgeYears} yrs • Child',
+                                style: GoogleFonts.inter(fontSize: 11, color: colorTextMuted),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: statusColor.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: statusColor.withOpacity(0.4)),
+                          ),
+                          child: Text(
+                            statusText,
+                            style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: statusColor),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Divider(color: colorBorder, height: 24),
+                    Row(
+                      children: [
+                        const Icon(Icons.person_outline, size: 14, color: colorTextMuted),
+                        const SizedBox(width: 6),
+                        Text('Parent: ', style: GoogleFonts.inter(fontSize: 11, color: colorTextMuted)),
+                        Expanded(
+                          child: Text(
+                            c.parentName,
+                            style: GoogleFonts.inter(fontSize: 11, color: Colors.white70, fontWeight: FontWeight.w600),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.psychology_outlined, size: 14, color: colorTextMuted),
+                        const SizedBox(width: 6),
+                        Text('Focus: ', style: GoogleFonts.inter(fontSize: 11, color: colorTextMuted)),
+                        Expanded(
+                          child: Text(
+                            c.purpose,
+                            style: GoogleFonts.inter(fontSize: 11, color: Colors.white70),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: colorSlate,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.shield_outlined, size: 12, color: isAccepted ? const Color(0xFF10B981) : colorAmber),
+                          const SizedBox(width: 4),
+                          Text(
+                            'DPDP v${c.consentNoticeVersion} • ${isAccepted ? 'Consent Verified' : 'Consent Pending'}',
+                            style: GoogleFonts.inter(fontSize: 10, color: colorTextMuted),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () => _openChildProfile(c),
+                        icon: const Icon(Icons.badge_outlined, size: 14),
+                        label: Text(isRevoked ? 'View Case Details' : 'Open Child Profile'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isRevoked ? colorBorder : colorTeal,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 9),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          textStyle: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
         );
       },
     );

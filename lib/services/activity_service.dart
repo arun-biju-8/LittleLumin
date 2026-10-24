@@ -3,8 +3,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/activity_model.dart';
 
 class ActivityService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore? _customFirestore;
   final String _collection = 'activities';
+
+  ActivityService({FirebaseFirestore? firestore}) : _customFirestore = firestore;
+
+  FirebaseFirestore get _firestore => _customFirestore ?? FirebaseFirestore.instance;
 
   // 1. Get all activities (Stream)
   Stream<List<ActivityModel>> getAllActivities() {
