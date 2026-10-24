@@ -3,9 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../models/child_model.dart';
+import '../../../models/activity_model.dart';
 import '../../../models/recommendation_model.dart';
 import '../../../services/recommendation_service.dart';
 import '../../../theme/meadow_theme.dart';
+import '../../../widgets/activity_origin_badge.dart';
+import '../../../widgets/specialist_contextual_action.dart';
 
 class PersonalizedRecommendationsSection extends StatefulWidget {
   final ChildModel activeChild;
@@ -195,6 +198,8 @@ class _PersonalizedRecommendationsSectionState
                             ),
                           ),
                         ),
+                        const SizedBox(width: 8),
+                        const ActivityOriginBadge(originOverride: ActivityOrigin.llgRecommended, compact: true),
                       ],
                     ),
                     const SizedBox(height: 6),
@@ -436,6 +441,14 @@ class _PersonalizedRecommendationsSectionState
             ),
           ],
 
+          const SizedBox(height: 12),
+
+          // Contextual Specialist Action
+          SpecialistContextualAction(
+            childId: widget.activeChild.childId,
+            isLlgRecommendedOverride: true,
+            caseService: null,
+          ),
           const SizedBox(height: 12),
 
           // Action Buttons for Parent

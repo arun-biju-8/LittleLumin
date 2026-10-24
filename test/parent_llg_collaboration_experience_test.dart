@@ -142,10 +142,8 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      expect(find.text('ASSIGNED SPECIALIST'), findsOneWidget);
       expect(find.text('Dr. Priya Sharma'), findsOneWidget);
-      expect(find.text('Pediatric Development Guide'), findsOneWidget);
-      expect(find.text('ACTIVE'), findsOneWidget);
+      expect(find.textContaining('ACTIVE GUIDE'), findsOneWidget);
       expect(find.textContaining('Speech articulation and fine motor'), findsOneWidget);
       expect(find.text('Message Guide'), findsOneWidget);
       expect(find.text('Recommendations'), findsOneWidget);
@@ -173,8 +171,7 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      expect(find.text('CONSULTATION IN REVIEW'), findsOneWidget);
-      expect(find.text('PENDING REVIEW'), findsOneWidget);
+      expect(find.text('Consultation Request Pending'), findsOneWidget);
       expect(find.textContaining('Anita Desai'), findsOneWidget);
       expect(find.text('View Status'), findsOneWidget);
     });
@@ -201,9 +198,9 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      expect(find.text('SPECIALIST GUIDANCE AVAILABLE'), findsOneWidget);
-      expect(find.textContaining('Connect with certified LittleLumin Guides'), findsOneWidget);
-      expect(find.text('Connect with a Guide'), findsOneWidget);
+      expect(find.text('Specialist & Support'), findsOneWidget);
+      expect(find.textContaining('Connect with a certified LittleLumin Guide'), findsOneWidget);
+      expect(find.text('Connect'), findsOneWidget);
     });
 
     testWidgets('Renders SizedBox.shrink() when activeChild is null', (tester) async {
@@ -218,8 +215,8 @@ void main() {
       );
 
       await tester.pump();
-      expect(find.text('ASSIGNED SPECIALIST'), findsNothing);
-      expect(find.text('SPECIALIST GUIDANCE AVAILABLE'), findsNothing);
+      expect(find.text('Dr. Priya Sharma'), findsNothing);
+      expect(find.text('Connect'), findsNothing);
     });
   });
 
@@ -328,8 +325,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('No messages yet'), findsOneWidget);
-      expect(find.textContaining('Send a note to start the conversation'), findsOneWidget);
-      expect(find.text('Type a message...'), findsOneWidget);
+      expect(find.textContaining('milestones, activities, and recommendations'), findsOneWidget);
+      expect(find.text('Type your message...'), findsOneWidget);
     });
 
     testWidgets('Renders messages list with correct sender bubble alignment', (tester) async {

@@ -1,6 +1,13 @@
 // lib/models/activity_model.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+enum ActivityOrigin {
+  aiGenerated,
+  preset,
+  llgRecommended,
+  unknown,
+}
+
 class ActivityModel {
   final String? id;
   final String title;
@@ -22,6 +29,7 @@ class ActivityModel {
   final String createdByName;
   final List<String> tags;
   final String category;
+  final String? origin; // 'ai_generated' | 'preset' | 'llg_recommended'
   final String? imageUrl;
   final String? videoUrl;
   final String? videoThumbnail;
@@ -53,6 +61,7 @@ class ActivityModel {
     this.createdByName = 'System Admin',
     this.tags = const [],
     this.category = 'General',
+    this.origin,
     this.imageUrl,
     this.videoUrl,
     this.videoThumbnail,
@@ -85,6 +94,7 @@ class ActivityModel {
     String? createdByName,
     List<String>? tags,
     String? category,
+    String? origin,
     String? imageUrl,
     String? videoUrl,
     String? videoThumbnail,
@@ -116,6 +126,7 @@ class ActivityModel {
       createdByName: createdByName ?? this.createdByName,
       tags: tags ?? this.tags,
       category: category ?? this.category,
+      origin: origin ?? this.origin,
       imageUrl: imageUrl ?? this.imageUrl,
       videoUrl: videoUrl ?? this.videoUrl,
       videoThumbnail: videoThumbnail ?? this.videoThumbnail,
@@ -129,6 +140,65 @@ class ActivityModel {
   }
 
   // Helper Getters
+  ActivityOrigin get activityOrigin {
+    if (origin != null && origin!.trim().isNotEmpty) {
+      final o = origin!.toLowerCase().replaceAll('-', '_').trim();
+      if (o == 'ai_generated' || o == 'ai' || o == 'aigenerated') {
+        return ActivityOrigin.aiGenerated;
+      }
+      if (o == 'llg_recommended' || o == 'llg' || o == 'llgrecommended' || o == 'specialist') {
+        return ActivityOrigin.llgRecommended;
+      }
+      if (o == 'preset' || o == 'preset_activity' || o == 'library') {
+        return ActivityOrigin.preset;
+      }
+    }
+
+    // Inspect metadata strictly without inferring from title or description
+    final actId = id ?? '';
+    final creator = createdBy.trim().toLowerCase();
+    final creatorName = createdByName.trim().toLowerCase();
+    final cat = category.trim().toLowerCase();
+
+    // 1. AI Generated checks
+    if (actId.startsWith('ai_') ||
+        creator == 'ai' ||
+        tags.any((t) => t.toLowerCase() == 'ai_generated' || t.toLowerCase() == 'ai') ||
+        cat == 'ai generated' ||
+        cat == 'ai_generated') {
+      return ActivityOrigin.aiGenerated;
+    }
+
+    // 2. LLG Recommended checks
+    if (creator.startsWith('llg_') ||
+        creator.startsWith('specialist_') ||
+        tags.any((t) => t.toLowerCase() == 'llg_recommended' || t.toLowerCase() == 'llg') ||
+        cat == 'llg recommended' ||
+        cat == 'llg_recommended' ||
+        cat == 'guide recommended' ||
+        creatorName.contains('guide') ||
+        creatorName.contains('specialist') ||
+        creatorName.contains('llg')) {
+      return ActivityOrigin.llgRecommended;
+    }
+
+    // 3. Preset Activity checks
+    if (actId.startsWith('preset_') ||
+        actId.startsWith('act_') ||
+        creator == 'system' ||
+        creator == 'admin' ||
+        tags.any((t) => t.toLowerCase() == 'preset') ||
+        cat == 'preset') {
+      return ActivityOrigin.preset;
+    }
+
+    return ActivityOrigin.unknown;
+  }
+
+  bool get isAIGenerated => activityOrigin == ActivityOrigin.aiGenerated;
+  bool get isLLGRecommended => activityOrigin == ActivityOrigin.llgRecommended;
+  bool get isPresetActivity => activityOrigin == ActivityOrigin.preset;
+
   String get difficultyIcon {
     switch (difficulty.toLowerCase()) {
       case 'easy':
@@ -185,6 +255,7 @@ class ActivityModel {
       'createdByName': createdByName,
       'tags': tags,
       'category': category,
+      'origin': origin ?? (activityOrigin != ActivityOrigin.unknown ? activityOrigin.name : null),
       'imageUrl': imageUrl,
       'videoUrl': videoUrl,
       'videoThumbnail': videoThumbnail,
@@ -243,6 +314,7 @@ class ActivityModel {
       createdByName: map['createdByName'] ?? 'Admin',
       tags: parseStringList(map['tags']),
       category: map['category'] ?? 'General',
+      origin: map['origin'] as String?,
       imageUrl: map['imageUrl'] as String?,
       videoUrl: map['videoUrl'] as String?,
       videoThumbnail: map['videoThumbnail'] as String?,

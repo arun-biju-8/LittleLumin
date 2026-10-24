@@ -10,6 +10,8 @@ import 'journey_activity_detail_page.dart';
 import 'activities/activity_library_screen.dart';
 import '../../services/growth_messaging_service.dart';
 import 'widgets/growth_encouragement_card.dart';
+import '../../widgets/activity_origin_badge.dart';
+import '../../widgets/specialist_contextual_action.dart';
 
 class LevelDetailScreen extends StatefulWidget {
   final ChildModel activeChild;
@@ -437,6 +439,13 @@ class _LevelDetailScreenState extends State<LevelDetailScreen> with SingleTicker
             _buildLevelOverviewCard(journey),
             const SizedBox(height: MeadowSpacing.lg),
 
+            if (journey.completedActivities.length >= 6 &&
+                (!journey.isLevelUnlocked(widget.level + 1) ||
+                 !(journey.levelProgress[widget.level]?.isCompleted ?? false))) ...[
+              _buildAllActivitiesCompletedMasteryPendingBanner(journey),
+              const SizedBox(height: MeadowSpacing.lg),
+            ],
+
             // AI-Powered Personalized Encouragement Guidance Card
             GrowthEncouragementCard(
               child: widget.activeChild,
@@ -670,6 +679,167 @@ class _LevelDetailScreenState extends State<LevelDetailScreen> with SingleTicker
     );
   }
 
+  Widget _buildAllActivitiesCompletedMasteryPendingBanner(JourneyProgress journey) {
+    final curLevel = widget.level;
+    final nextLevel = curLevel + 1;
+    final lvlProg = journey.levelProgress[widget.level] ?? LevelProgress(completed: []);
+    final masteredCount = lvlProg.masteredDomainCount;
+    final totalDomains = _domainMeta.length;
+    final pendingKeys = journey.pendingDomainKeys;
+    final completedCount = journey.completedActivities.length;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(MeadowSpacing.lg),
+      decoration: BoxDecoration(
+        color: MeadowColors.creamDark,
+        borderRadius: BorderRadius.circular(MeadowRadius.xl),
+        border: Border.all(color: MeadowColors.gold, width: 1.5),
+        boxShadow: MeadowShadows.card,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: const BoxDecoration(
+                  color: MeadowColors.goldSurface,
+                  shape: BoxShape.circle,
+                ),
+                child: const Text('🌱', style: TextStyle(fontSize: 24)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'All Activities Completed!',
+                      style: MeadowTypography.h3.copyWith(color: MeadowColors.textPrimary),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '🌱 Great job completing all your activities! You\'re making progress. To unlock Level $nextLevel, let\'s practise a few activities again and build your skills. You\'re getting closer!',
+                      style: MeadowTypography.body.copyWith(
+                        color: MeadowColors.textPrimary,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: MeadowSpacing.md),
+          const Divider(height: 1, color: MeadowColors.border),
+          const SizedBox(height: MeadowSpacing.sm),
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: MeadowColors.borderLight),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.check_circle_rounded, size: 14, color: MeadowColors.success),
+                          const SizedBox(width: 4),
+                          Text('COMPLETED', style: MeadowTypography.caption.copyWith(fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '$completedCount Activities Done',
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: MeadowColors.textPrimary),
+                      ),
+                      Text('Finished all exercises', style: MeadowTypography.caption.copyWith(fontSize: 10)),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: MeadowColors.borderLight),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.stars_rounded, size: 14, color: MeadowColors.gold),
+                          const SizedBox(width: 4),
+                          Text('MASTERED', style: MeadowTypography.caption.copyWith(fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '$masteredCount of $totalDomains Domains',
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: MeadowColors.textPrimary),
+                      ),
+                      Text('Requires 70%+ score', style: MeadowTypography.caption.copyWith(fontSize: 10)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (pendingKeys.isNotEmpty) ...[
+            const SizedBox(height: MeadowSpacing.sm),
+            Text(
+              'Focus on these domains for additional practice to reach 70%:',
+              style: MeadowTypography.caption.copyWith(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: pendingKeys.map((k) {
+                final dp = lvlProg.domains[k];
+                final score = dp?.score.round() ?? 0;
+                return Chip(
+                  label: Text('${MeadowDomain.labelFor(k)} ($score% / 70%)', style: const TextStyle(fontSize: 11)),
+                  backgroundColor: Colors.white,
+                  visualDensity: VisualDensity.compact,
+                );
+              }).toList(),
+            ),
+          ],
+          const SizedBox(height: MeadowSpacing.md),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                _tabController.animateTo(1);
+              },
+              icon: const Icon(Icons.replay_rounded, size: 18),
+              label: const Text('Practise Activities Needing Improvement'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: MeadowColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // --- 2. Next Learning Action ---
   Widget _buildNextLearningActionCard(JourneyProgress journey) {
     final rec = _recommendation;
@@ -750,7 +920,13 @@ class _LevelDetailScreenState extends State<LevelDetailScreen> with SingleTicker
               const SizedBox(height: MeadowSpacing.md),
 
               if (activity != null) ...[
-                Text(activity.title, style: MeadowTypography.h2),
+                Row(
+                  children: [
+                    Expanded(child: Text(activity.title, style: MeadowTypography.h2)),
+                    const SizedBox(width: 8),
+                    ActivityOriginBadge(activity: activity, compact: true),
+                  ],
+                ),
                 const SizedBox(height: 4),
                 Text(
                   activity.shortDescription ?? 'Guided developmental practice for $domainLabel.',
@@ -808,6 +984,13 @@ class _LevelDetailScreenState extends State<LevelDetailScreen> with SingleTicker
                   ],
                 ),
               ),
+              if (activity != null) ...[
+                const SizedBox(height: MeadowSpacing.md),
+                SpecialistContextualAction(
+                  childId: widget.activeChild.childId,
+                  activity: activity,
+                ),
+              ],
               const SizedBox(height: MeadowSpacing.lg),
 
               // Action Buttons
@@ -1201,6 +1384,10 @@ class _LevelDetailScreenState extends State<LevelDetailScreen> with SingleTicker
                     final isCompleted = journey.isActivityCompleted(activity.id ?? '');
                     final isActive = journey.activeActivity?.activityId == activity.id &&
                         journey.activeActivity?.isInProgress == true;
+                    final domainKey = activity.skillType.toLowerCase();
+                    final dp = lvlProg.domains[domainKey];
+                    final isDomainMastered = (dp?.isMastered ?? false) || (dp != null && dp.score >= 70.0);
+                    final domainScore = dp?.score.round() ?? 0;
 
                     return Material(
                       color: MeadowColors.surface,
@@ -1211,7 +1398,7 @@ class _LevelDetailScreenState extends State<LevelDetailScreen> with SingleTicker
                           color: isActive
                               ? Colors.orange.shade300
                               : isCompleted
-                                  ? MeadowColors.success.withOpacity(0.3)
+                                  ? (isDomainMastered ? MeadowColors.success.withOpacity(0.3) : Colors.amber.shade300)
                                   : MeadowColors.borderLight,
                         ),
                       ),
@@ -1222,7 +1409,9 @@ class _LevelDetailScreenState extends State<LevelDetailScreen> with SingleTicker
                           height: 40,
                           decoration: BoxDecoration(
                             color: isCompleted
-                                ? MeadowColors.success.withOpacity(0.15)
+                                ? (isDomainMastered
+                                    ? MeadowColors.success.withOpacity(0.15)
+                                    : Colors.amber.withOpacity(0.2))
                                 : isActive
                                     ? Colors.orange.withOpacity(0.15)
                                     : MeadowColors.primarySurface,
@@ -1231,7 +1420,7 @@ class _LevelDetailScreenState extends State<LevelDetailScreen> with SingleTicker
                           child: Center(
                             child: Text(
                               isCompleted
-                                  ? '✅'
+                                  ? (isDomainMastered ? '✅' : '🔄')
                                   : isActive
                                       ? '⏳'
                                       : '🎯',
@@ -1257,6 +1446,8 @@ class _LevelDetailScreenState extends State<LevelDetailScreen> with SingleTicker
                                 ),
                               ),
                             ),
+                            const SizedBox(width: 6),
+                            ActivityOriginBadge(activity: activity, compact: true),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
@@ -1284,7 +1475,9 @@ class _LevelDetailScreenState extends State<LevelDetailScreen> with SingleTicker
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                                 decoration: BoxDecoration(
                                   color: isCompleted
-                                      ? MeadowColors.success.withOpacity(0.15)
+                                      ? (isDomainMastered
+                                          ? MeadowColors.success.withOpacity(0.15)
+                                          : Colors.amber.withOpacity(0.2))
                                       : isActive
                                           ? Colors.orange.withOpacity(0.15)
                                           : MeadowColors.creamDark,
@@ -1292,7 +1485,9 @@ class _LevelDetailScreenState extends State<LevelDetailScreen> with SingleTicker
                                 ),
                                 child: Text(
                                   isCompleted
-                                      ? 'Completed · Tap to replay'
+                                      ? (isDomainMastered
+                                          ? 'Completed · Mastered 🏆 ($domainScore%)'
+                                          : 'Completed · Practice Recommended ($domainScore% / 70% goal)')
                                       : isActive
                                           ? 'In Progress · Tap to resume'
                                           : 'Ready to start',
@@ -1300,7 +1495,7 @@ class _LevelDetailScreenState extends State<LevelDetailScreen> with SingleTicker
                                     fontSize: 10,
                                     fontWeight: FontWeight.bold,
                                     color: isCompleted
-                                        ? MeadowColors.success
+                                        ? (isDomainMastered ? MeadowColors.success : const Color(0xFFB37400))
                                         : isActive
                                             ? Colors.orange.shade800
                                             : MeadowColors.textSecondary,

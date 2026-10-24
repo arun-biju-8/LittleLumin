@@ -340,9 +340,9 @@ class GrowthMessagingService {
       message = 'Incredible effort! $childSubject has achieved mastery across all 6 developmental domains. Level ${currentLevel + 1} is now unlocked and ready for new discoveries.';
       action = 'Explore Level ${currentLevel + 1}';
     } else if (learningState == 'initial_activities_completed_mastery_pending') {
-      // State A: Initial Level 1 activities completed, mastery still in progress
+      // State A: Initial Level activities completed, mastery still in progress
       headline = 'Level $currentLevel · Learning in progress';
-      message = 'The first set of activities is complete — a lovely milestone! $childSubject can continue building these skills through more practice. Let\'s explore the next activity in $childPossessive learning journey.';
+      message = '🌱 Great job completing all your activities! The first set of activities is complete — you\'re making progress. To unlock Level ${currentLevel + 1}, let\'s practise a few activities again and build your skills. $childSubject has mastered $masteredDomainsCount of $totalDomainsCount domains so far — you\'re getting closer!';
       action = 'Continue Learning';
     } else if (learningState == 'domain_practice_needed') {
       // State B: A particular domain needs more practice

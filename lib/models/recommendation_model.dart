@@ -1,6 +1,7 @@
 // lib/models/recommendation_model.dart
 // ignore_for_file: constant_identifier_names
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'activity_model.dart';
 
 enum RecommendationStatus {
   recommended,
@@ -266,6 +267,29 @@ class RecommendationModel {
       baseActivityId: baseActivityId ?? this.baseActivityId,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  /// Converts this LLG recommendation into an ActivityModel with explicit LLG origin metadata
+  ActivityModel toActivityModel() {
+    return ActivityModel(
+      id: id,
+      title: title,
+      shortDescription: rationale,
+      skillType: skillDomain,
+      difficulty: 'Medium',
+      ageGroup: const [3, 4, 5, 6],
+      duration: durationMinutes,
+      instructions: instructions,
+      learningGoals: [rationale],
+      materials: materials,
+      isPreset: false,
+      createdBy: llgId,
+      createdByName: llgName,
+      category: 'LLG Recommended',
+      origin: 'llg_recommended',
+      tags: ['llg_recommended', skillDomain.toLowerCase()],
+      createdAt: recommendedAt,
     );
   }
 }

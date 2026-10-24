@@ -4,6 +4,8 @@ import '../../models/activity_model.dart';
 import '../../services/journey_service.dart';
 import '../../services/activity_state_service.dart';
 import '../../widgets/global_header.dart';
+import '../../widgets/activity_origin_badge.dart';
+import '../../widgets/specialist_contextual_action.dart';
 import 'activities/activity_library_screen.dart';
 import 'feedback_form.dart';
 
@@ -263,13 +265,26 @@ class _JourneyActivityDetailPageState extends State<JourneyActivityDetailPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Skill badge
-                  Chip(
-                    label: Text(
-                      _activity!.skillType.toUpperCase(),
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.purple),
-                    ),
-                    backgroundColor: Colors.purple.shade100,
+                  // Skill badge & Origin badge
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      Chip(
+                        label: Text(
+                          _activity!.skillType.toUpperCase(),
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.purple),
+                        ),
+                        backgroundColor: Colors.purple.shade100,
+                      ),
+                      ActivityOriginBadge(activity: _activity!),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    _activity!.title,
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, height: 1.25),
                   ),
                   const SizedBox(height: 8),
                   if (_activity!.shortDescription != null && _activity!.shortDescription!.isNotEmpty) ...[
@@ -333,7 +348,12 @@ class _JourneyActivityDetailPageState extends State<JourneyActivityDetailPage> {
               ),
             ),
           ),
-          const SizedBox(height: 24),
+          // Contextual Specialist Support for LLG-recommended activities
+          SpecialistContextualAction(
+            childId: widget.childId,
+            activity: _activity,
+          ),
+          const SizedBox(height: 16),
           // Complete Button
           SizedBox(
             width: double.infinity,

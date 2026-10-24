@@ -13,6 +13,8 @@ import 'activities/activity_library_screen.dart';
 import 'level_detail_screen.dart';
 import '../../services/growth_messaging_service.dart';
 import 'widgets/growth_encouragement_card.dart';
+import '../../widgets/activity_origin_badge.dart';
+import '../../widgets/specialist_contextual_action.dart';
 
 class JourneyViewScreen extends StatefulWidget {
   final ChildModel activeChild;
@@ -435,6 +437,13 @@ class _JourneyViewScreenState extends State<JourneyViewScreen> {
                         _buildLevelProgressCard(journey),
                         const SizedBox(height: AppSpacing.lg),
 
+                        // Empathetic Banner when all activities completed but mastery pending
+                        if (journey.completedActivities.length >= 6 &&
+                            (!journey.isLevelUnlocked(2) || !(journey.currentLevelProgress?.isCompleted ?? false))) ...[
+                          _buildAllActivitiesCompletedMasteryPendingBanner(journey),
+                          const SizedBox(height: AppSpacing.md),
+                        ],
+
                         // AI-Powered Personalized Encouragement Guidance Card
                         GrowthEncouragementCard(
                           child: widget.activeChild,
@@ -660,6 +669,177 @@ class _JourneyViewScreenState extends State<JourneyViewScreen> {
                   ),
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAllActivitiesCompletedMasteryPendingBanner(JourneyProgress journey) {
+    final curLevel = journey.currentLevel;
+    final nextLevel = curLevel + 1;
+    final lvlProg = journey.currentLevelProgress ?? LevelProgress(completed: []);
+    final masteredCount = lvlProg.masteredDomainCount;
+    final totalDomains = lvlProg.totalDomains;
+    final pendingDomains = journey.pendingDomainKeys;
+    final completedCount = journey.completedActivities.length;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: MeadowColors.creamDark,
+        borderRadius: BorderRadius.circular(AppBorderRadius.large),
+        border: Border.all(color: MeadowColors.gold, width: 1.5),
+        boxShadow: const [
+          BoxShadow(
+            color: MeadowColors.shadowSoft,
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: const BoxDecoration(
+                  color: MeadowColors.goldSurface,
+                  shape: BoxShape.circle,
+                ),
+                child: const Text('🌱', style: TextStyle(fontSize: 24)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'All Activities Completed!',
+                      style: MeadowTypography.h3.copyWith(color: MeadowColors.textPrimary),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '🌱 Great job completing all your activities! You\'re making progress. To unlock Level $nextLevel, let\'s practise a few activities again and build your skills. You\'re getting closer!',
+                      style: MeadowTypography.body.copyWith(
+                        color: MeadowColors.textPrimary,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          const Divider(height: 1, color: MeadowColors.border),
+          const SizedBox(height: AppSpacing.sm),
+          // Distinction between Completed and Mastered
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: MeadowColors.borderLight),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.check_circle_rounded, size: 14, color: MeadowColors.success),
+                          const SizedBox(width: 4),
+                          Text('COMPLETED', style: MeadowTypography.caption.copyWith(fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '$completedCount Activities Done',
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: MeadowColors.textPrimary),
+                      ),
+                      Text('Completed learning exercises', style: MeadowTypography.caption.copyWith(fontSize: 10)),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: MeadowColors.borderLight),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.stars_rounded, size: 14, color: MeadowColors.gold),
+                          const SizedBox(width: 4),
+                          Text('MASTERED', style: MeadowTypography.caption.copyWith(fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '$masteredCount of $totalDomains Domains',
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: MeadowColors.textPrimary),
+                      ),
+                      Text('Requires 70%+ domain score', style: MeadowTypography.caption.copyWith(fontSize: 10)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (pendingDomains.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Focus on these domains for additional practice to reach 70%:',
+              style: MeadowTypography.caption.copyWith(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: pendingDomains.map((d) {
+                final cfg = _domainConfigs.firstWhere(
+                  (c) => c['key'] == d,
+                  orElse: () => {'label': d, 'icon': '🎯'},
+                );
+                final dp = lvlProg.domains[d];
+                final score = dp?.score.round() ?? 0;
+                return Chip(
+                  avatar: Text(cfg['icon'] ?? '🎯', style: const TextStyle(fontSize: 12)),
+                  label: Text('${cfg['label'] ?? d} ($score% / 70%)', style: const TextStyle(fontSize: 11)),
+                  backgroundColor: Colors.white,
+                  visualDensity: VisualDensity.compact,
+                );
+              }).toList(),
+            ),
+          ],
+          const SizedBox(height: AppSpacing.md),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => _scrollToRecommendations(),
+              icon: const Icon(Icons.replay_rounded, size: 18),
+              label: const Text('Practise Activities Needing Improvement'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: MeadowColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
             ),
           ),
         ],
@@ -1103,11 +1283,19 @@ class _JourneyViewScreenState extends State<JourneyViewScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          activity.title,
-                          style: MeadowTypography.bodyLarge.copyWith(fontWeight: FontWeight.bold),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                activity.title,
+                                style: MeadowTypography.bodyLarge.copyWith(fontWeight: FontWeight.bold),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            ActivityOriginBadge(activity: activity, compact: true),
+                          ],
                         ),
                         Text(
                           '${activity.duration} min • ${activity.difficulty} • ${domainConfig['label']}',
@@ -1118,6 +1306,11 @@ class _JourneyViewScreenState extends State<JourneyViewScreen> {
                   ),
                 ],
               ),
+            ),
+            // Specialist support for LLG-recommended practice
+            SpecialistContextualAction(
+              childId: widget.activeChild.childId,
+              activity: activity,
             ),
             const SizedBox(height: AppSpacing.md),
           ],
@@ -1288,9 +1481,12 @@ class _JourneyViewScreenState extends State<JourneyViewScreen> {
                       children: [
                         Row(
                           children: [
-                            Text(
-                              lvlConfig.title,
-                              style: MeadowTypography.bodyLarge.copyWith(fontWeight: FontWeight.bold),
+                            Flexible(
+                              child: Text(
+                                lvlConfig.title,
+                                style: MeadowTypography.bodyLarge.copyWith(fontWeight: FontWeight.bold),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                             if (isCurrentLevel) ...[
                               const SizedBox(width: 8),
@@ -1316,12 +1512,26 @@ class _JourneyViewScreenState extends State<JourneyViewScreen> {
                       ],
                     ),
                   ),
-                  Text(
-                    '${lvlProg.masteredDomainCount}/6 Mastered',
-                    style: MeadowTypography.caption.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: lvlProg.isCompleted ? MeadowColors.success : MeadowColors.primary,
-                    ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '${lvlProg.masteredDomainCount}/6 Mastered',
+                        style: MeadowTypography.caption.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: lvlProg.isCompleted ? MeadowColors.success : MeadowColors.primary,
+                        ),
+                      ),
+                      if (level == 1 && journey.completedActivities.length >= 6 && !lvlProg.isCompleted)
+                        Text(
+                          '6/6 Completed · Practice needed',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.amber.shade900,
+                          ),
+                        ),
+                    ],
                   ),
                   const SizedBox(width: 6),
                   const Icon(Icons.arrow_forward_ios, size: 14, color: MeadowColors.textTertiary),
@@ -1368,6 +1578,10 @@ class _JourneyViewScreenState extends State<JourneyViewScreen> {
                   final isCompleted = journey.isActivityCompleted(activity.id ?? '');
                   final isActive = journey.activeActivity?.activityId == activity.id &&
                       journey.activeActivity?.isInProgress == true;
+                  final domainKey = activity.skillType.toLowerCase();
+                  final dp = lvlProg.domains[domainKey];
+                  final isDomainMastered = (dp?.isMastered ?? false) || (dp != null && dp.score >= 70.0);
+                  final domainScore = dp?.score.round() ?? 0;
 
                   return Material(
                     color: Colors.transparent,
@@ -1378,7 +1592,9 @@ class _JourneyViewScreenState extends State<JourneyViewScreen> {
                       height: 36,
                       decoration: BoxDecoration(
                         color: isCompleted
-                            ? MeadowColors.success.withOpacity(0.15)
+                            ? (isDomainMastered
+                                ? MeadowColors.success.withOpacity(0.15)
+                                : Colors.amber.withOpacity(0.2))
                             : isActive
                                 ? Colors.orange.withOpacity(0.15)
                                 : MeadowColors.primarySurface,
@@ -1387,7 +1603,7 @@ class _JourneyViewScreenState extends State<JourneyViewScreen> {
                       child: Center(
                         child: Text(
                           isCompleted
-                              ? '✅'
+                              ? (isDomainMastered ? '✅' : '🔄')
                               : isActive
                                   ? '⏳'
                                   : '🔓',
@@ -1412,6 +1628,8 @@ class _JourneyViewScreenState extends State<JourneyViewScreen> {
                             ),
                           ),
                         ),
+                        const SizedBox(width: 6),
+                        ActivityOriginBadge(activity: activity, compact: true),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -1429,18 +1647,20 @@ class _JourneyViewScreenState extends State<JourneyViewScreen> {
                     ),
                     subtitle: Text(
                       isCompleted
-                          ? 'Completed · Tap to replay or practice'
+                          ? (isDomainMastered
+                              ? 'Completed · Mastered 🏆 ($domainScore%) · Tap to replay'
+                              : 'Completed · Practice Recommended ($domainScore% / 70% goal) · Tap to practise')
                           : isActive
                               ? 'In progress · Tap to resume'
                               : '${activity.duration} min • ${activity.difficulty}',
                       style: TextStyle(
                         fontSize: 12,
                         color: isCompleted
-                            ? MeadowColors.success
+                            ? (isDomainMastered ? MeadowColors.success : const Color(0xFFB37400))
                             : isActive
                                 ? Colors.orange.shade800
                                 : MeadowColors.textSecondary,
-                        fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                        fontWeight: (isActive || (isCompleted && !isDomainMastered)) ? FontWeight.bold : FontWeight.normal,
                       ),
                     ),
                     trailing: const Icon(
@@ -1572,8 +1792,13 @@ class _JourneyViewScreenState extends State<JourneyViewScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Your child is making progress! Reach 70% mastery in each core domain to unlock Level ${lvlConfig.level}.',
-                  style: MeadowTypography.caption,
+                  journey.completedActivities.length >= 6
+                      ? '🌱 Great job completing all your activities! You\'re making progress. To unlock Level ${lvlConfig.level}, let\'s practise a few activities again and build your skills. You\'re getting closer!'
+                      : 'Your child is making progress! Reach 70% mastery in each core domain to unlock Level ${lvlConfig.level}.',
+                  style: MeadowTypography.caption.copyWith(
+                    color: journey.completedActivities.length >= 6 ? MeadowColors.textPrimary : MeadowColors.textSecondary,
+                    height: 1.35,
+                  ),
                 ),
                 if (pendingKeys.isNotEmpty) ...[
                   const SizedBox(height: 8),
@@ -1581,9 +1806,11 @@ class _JourneyViewScreenState extends State<JourneyViewScreen> {
                     spacing: 6,
                     runSpacing: 4,
                     children: pendingKeys.map((k) {
+                      final dp = journey.currentLevelDomains[k];
+                      final score = dp?.score.round() ?? 0;
                       return Chip(
                         label: Text(
-                          k[0].toUpperCase() + k.substring(1),
+                          '${k[0].toUpperCase()}${k.substring(1)} ($score% / 70%)',
                           style: const TextStyle(fontSize: 10),
                         ),
                         backgroundColor: Colors.white,
@@ -1601,19 +1828,32 @@ class _JourneyViewScreenState extends State<JourneyViewScreen> {
             width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => LevelDetailScreen(
-                      activeChild: widget.activeChild,
-                      level: journey.currentLevel,
-                      initialJourneyProgress: journey,
+                if (journey.completedActivities.length >= 6) {
+                  _scrollToRecommendations();
+                } else {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => LevelDetailScreen(
+                        activeChild: widget.activeChild,
+                        level: journey.currentLevel,
+                        initialJourneyProgress: journey,
+                      ),
                     ),
-                  ),
-                ).then((_) => _initJourney());
+                  ).then((_) => _initJourney());
+                }
               },
-              icon: const Icon(Icons.school_outlined, size: 18),
-              label: Text('Continue Learning in Level ${journey.currentLevel}'),
+              icon: Icon(
+                journey.completedActivities.length >= 6
+                    ? Icons.play_circle_outline_rounded
+                    : Icons.school_outlined,
+                size: 18,
+              ),
+              label: Text(
+                journey.completedActivities.length >= 6
+                    ? 'Practise Activities to Unlock Level ${lvlConfig.level}'
+                    : 'Continue Learning in Level ${journey.currentLevel}',
+              ),
               style: OutlinedButton.styleFrom(
                 foregroundColor: MeadowColors.primary,
                 side: const BorderSide(color: MeadowColors.primary),

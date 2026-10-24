@@ -12,6 +12,8 @@ import 'feedback_form.dart';
 import '../../services/journey_service.dart';
 import '../../services/activity_state_service.dart';
 import '../../widgets/global_header.dart';
+import '../../widgets/activity_origin_badge.dart';
+import '../../widgets/specialist_contextual_action.dart';
 
 class ActivityView extends StatefulWidget {
   final ActivityModel? activity;
@@ -482,13 +484,21 @@ class _ActivityViewState extends State<ActivityView> {
           ),
           const SizedBox(height: AppSpacing.md),
 
-          // Title
-          Text(
-            activity.title,
-            style: AppTextStyles.heading1.copyWith(
-              fontSize: isDesktop ? 28 : 22,
-              height: 1.2,
-            ),
+          // Title + Origin Badge
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              Text(
+                activity.title,
+                style: AppTextStyles.heading1.copyWith(
+                  fontSize: isDesktop ? 28 : 22,
+                  height: 1.2,
+                ),
+              ),
+              ActivityOriginBadge(activity: activity),
+            ],
           ),
           if (activity.isEditedFromPreset && activity.originalTitle != null) ...[
             const SizedBox(height: AppSpacing.xs),
@@ -701,6 +711,15 @@ class _ActivityViewState extends State<ActivityView> {
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
+          ],
+
+          // Contextual Specialist Action (only shows for LLG-recommended activities)
+          if (!_isAdminOrLlg && _resolvedChildId != null) ...[
+            SpecialistContextualAction(
+              childId: _resolvedChildId!,
+              activity: activity,
+            ),
+            const SizedBox(height: AppSpacing.md),
           ],
 
           // Action Buttons Section
