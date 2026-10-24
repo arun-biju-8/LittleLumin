@@ -24,6 +24,8 @@ import 'add_observation_page.dart';
 import 'llg_profile_page.dart';
 import 'send_recommendation_page.dart';
 import 'child_profile_page.dart';
+import 'report_center_page.dart';
+import '../../widgets/specialist_messaging_panel.dart';
 
 class LLGDashboard extends StatefulWidget {
   const LLGDashboard({super.key});
@@ -46,6 +48,25 @@ class _LLGDashboardState extends State<LLGDashboard> {
   bool _isDrawerOpen = false;
   bool _isCasesGridView = false;
   String _casesStatusFilter = 'all';
+
+  // Professional slide-in messaging panel state
+  bool _isMessagingPanelOpen = false;
+  SpecialistCaseModel? _messagingCase;
+  String? _messagingContextActivity;
+  String? _messagingContextRecommendation;
+
+  void _openMessagingPanel({
+    SpecialistCaseModel? caseModel,
+    String? activityTitle,
+    String? recTitle,
+  }) {
+    setState(() {
+      _messagingCase = caseModel;
+      _messagingContextActivity = activityTitle;
+      _messagingContextRecommendation = recTitle;
+      _isMessagingPanelOpen = true;
+    });
+  }
 
   void _openChildProfile(SpecialistCaseModel c) {
     final child = ChildModel(
@@ -157,6 +178,21 @@ class _LLGDashboardState extends State<LLGDashboard> {
                       _buildSelectedView(),
                       if (_isDrawerOpen && _selectedChild != null)
                         _buildChildDetailPanel(_selectedChild!),
+                      SpecialistMessagingPanel(
+                        isOpen: _isMessagingPanelOpen,
+                        onClose: () => setState(() => _isMessagingPanelOpen = false),
+                        initialCase: _messagingCase,
+                        contextualActivityTitle: _messagingContextActivity,
+                        contextualRecommendationTitle: _messagingContextRecommendation,
+                        onOpenChildProfile: (c) {
+                          setState(() => _isMessagingPanelOpen = false);
+                          _openChildProfile(c);
+                        },
+                        onRecordConsultation: (c) {
+                          setState(() => _isMessagingPanelOpen = false);
+                          _openChildProfile(c);
+                        },
+                      ),
                     ],
                   ),
                 ),
@@ -286,6 +322,11 @@ class _LLGDashboardState extends State<LLGDashboard> {
                   ),
                   _buildSidebarNavItem(
                     index: 8,
+                    icon: Icons.analytics_outlined,
+                    label: 'Report Center',
+                  ),
+                  _buildSidebarNavItem(
+                    index: 9,
                     icon: Icons.person_outline,
                     label: 'Profile & Credentials',
                   ),
@@ -440,7 +481,23 @@ class _LLGDashboardState extends State<LLGDashboard> {
             ),
           ),
 
-          const SizedBox(width: 20),
+          // Direct Messages shortcut
+          IconButton(
+            tooltip: 'Direct Messages',
+            icon: const Icon(Icons.chat_bubble_outline, color: colorTeal, size: 20),
+            onPressed: () => _openMessagingPanel(),
+          ),
+
+          const SizedBox(width: 4),
+
+          // Report Center shortcut
+          IconButton(
+            tooltip: 'Clinical Report Center',
+            icon: const Icon(Icons.analytics_outlined, color: Colors.white70, size: 20),
+            onPressed: () => setState(() => _selectedSidebarIndex = 8),
+          ),
+
+          const SizedBox(width: 4),
 
           // Notifications bell
           IconButton(
@@ -507,6 +564,8 @@ class _LLGDashboardState extends State<LLGDashboard> {
       case 7:
         return _buildObservationHistoryPage();
       case 8:
+        return const ReportCenterPage();
+      case 9:
         return const LLGProfilePage();
       default:
         return _buildOverviewPage();
@@ -2351,23 +2410,9 @@ class _LLGDashboardState extends State<LLGDashboard> {
             },
           ),
           ElevatedButton.icon(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ChatScreen(
-                    specialistCase: c,
-                    currentUserId: currentUserId,
-                    currentUserName: _currentLLGName,
-                    currentUserRole: 'llg',
-                    otherParticipantName: c.parentName.isNotEmpty ? c.parentName : 'Parent',
-                    otherParticipantRole: 'parent',
-                  ),
-                ),
-              );
-            },
-            icon: const Icon(Icons.chat, size: 14),
-            label: const Text('Open Chat'),
+            onPressed: () => _openMessagingPanel(caseModel: c),
+            icon: const Icon(Icons.chat_bubble_outline, size: 14),
+            label: const Text('Open Messages'),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF0284C7),
               foregroundColor: Colors.white,

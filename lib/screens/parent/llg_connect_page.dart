@@ -24,11 +24,13 @@ import '../chat/chat_screen.dart';
 class LLGConnectPage extends StatefulWidget {
   final String? initialChildId;
   final String initialSection; // 'overview', 'recommendations', 'consents', 'directory', 'summaries'
+  final String? currentUserId;
 
   const LLGConnectPage({
     super.key,
     this.initialChildId,
     this.initialSection = 'overview',
+    this.currentUserId,
   });
 
   @override
@@ -36,8 +38,8 @@ class LLGConnectPage extends StatefulWidget {
 }
 
 class _LLGConnectPageState extends State<LLGConnectPage> {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  FirebaseFirestore get _firestore => FirebaseFirestore.instance;
+  FirebaseAuth get _auth => FirebaseAuth.instance;
   final SpecialistCaseService _caseService = SpecialistCaseService();
   final ContactConsentService _consentService = ContactConsentService();
   final RecommendationService _recommendationService = RecommendationService();
@@ -46,6 +48,17 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
   String? _selectedChildId;
   late String _activeSection;
   bool _isLoading = false;
+
+  String? get _effectiveUserId {
+    if (widget.currentUserId != null && widget.currentUserId!.isNotEmpty) {
+      return widget.currentUserId;
+    }
+    try {
+      return _auth.currentUser?.uid;
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   void initState() {
@@ -56,7 +69,7 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
 
   @override
   Widget build(BuildContext context) {
-    final user = _auth.currentUser;
+    final uid = _effectiveUserId;
 
     return Scaffold(
       backgroundColor: MeadowColors.cream,
@@ -84,58 +97,68 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
             const SizedBox(height: 16),
 
             // 3. Section Selector Bar
-            if (user != null) _buildSectionSelector(user.uid),
+            _buildSectionSelector(uid ?? ''),
             const SizedBox(height: 20),
 
             // 4. Section Content
-            if (user != null && _selectedChildId != null)
-              StreamBuilder<List<SpecialistCaseModel>>(
-                stream: _caseService.getParentCasesStream(user.uid, childId: _selectedChildId),
-                builder: (context, caseSnapshot) {
-                  final cases = caseSnapshot.data ?? [];
-                  final activeOrPendingIds = cases
-                      .where((c) =>
-                          c.status == CaseStatus.accepted ||
-                          c.status == CaseStatus.active ||
-                          c.status == CaseStatus.pending)
-                      .map((c) => c.specialistId)
-                      .toSet();
-
-                  final hasActiveRelationship = cases.any((c) =>
-                      c.status == CaseStatus.accepted || c.status == CaseStatus.active);
-
-                  switch (_activeSection) {
-                    case 'recommendations':
-                      return _buildRecommendationsSection(_selectedChildId!);
-                    case 'consents':
-                      return _buildContactConsentsSection(user.uid, cases);
-                    case 'directory':
-                      return _buildSpecialistsDirectorySection(activeOrPendingIds, hasActiveRelationship);
-                    case 'summaries':
-                      return _buildConsultationSummariesSection(_selectedChildId!);
-                    case 'overview':
-                    default:
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildCasesSection(cases),
-                          const SizedBox(height: 24),
-                          _buildRecommendationsPreviewSection(_selectedChildId!),
-                          const SizedBox(height: 24),
-                          _buildContactConsentsPreviewSection(user.uid),
-                          const SizedBox(height: 24),
-                          _buildConsultationSummariesSection(_selectedChildId!),
-                        ],
-                      );
-                  }
-                },
-              )
-            else
-              const Center(child: CircularProgressIndicator(color: MeadowColors.primary)),
+            _buildActiveSectionContent(uid ?? ''),
             const SizedBox(height: 40),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildActiveSectionContent(String uid) {
+    Stream<List<SpecialistCaseModel>> casesStream;
+    try {
+      casesStream = _caseService.getParentCasesStream(uid, childId: _selectedChildId);
+    } catch (_) {
+      casesStream = Stream.value([]);
+    }
+
+    return StreamBuilder<List<SpecialistCaseModel>>(
+      stream: casesStream,
+      builder: (context, caseSnapshot) {
+        final cases = caseSnapshot.data ?? [];
+        final activeOrPendingIds = cases
+            .where((c) =>
+                c.status == CaseStatus.accepted ||
+                c.status == CaseStatus.active ||
+                c.status == CaseStatus.pending)
+            .map((c) => c.specialistId)
+            .toSet();
+
+        final hasActiveRelationship = cases.any((c) =>
+            c.status == CaseStatus.accepted || c.status == CaseStatus.active);
+
+        final childId = _selectedChildId ?? widget.initialChildId ?? '';
+
+        switch (_activeSection) {
+          case 'recommendations':
+            return _buildRecommendationsSection(childId);
+          case 'consents':
+            return _buildContactConsentsSection(uid, cases);
+          case 'directory':
+            return _buildSpecialistsDirectorySection(activeOrPendingIds, hasActiveRelationship);
+          case 'summaries':
+            return _buildConsultationSummariesSection(childId);
+          case 'overview':
+          default:
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildCasesSection(cases),
+                const SizedBox(height: 24),
+                _buildRecommendationsPreviewSection(childId),
+                const SizedBox(height: 24),
+                _buildContactConsentsPreviewSection(uid),
+                const SizedBox(height: 24),
+                _buildConsultationSummariesSection(childId),
+              ],
+            );
+        }
+      },
     );
   }
 
@@ -191,8 +214,14 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
   // CHILD SELECTOR
   // =========================================================================
   Widget _buildChildSelector() {
+    Stream<List<ChildModel>> stream;
+    try {
+      stream = ChildService().getChildren();
+    } catch (_) {
+      return const SizedBox.shrink();
+    }
     return StreamBuilder<List<ChildModel>>(
-      stream: ChildService().getChildren(),
+      stream: stream,
       builder: (context, snapshot) {
         final children = snapshot.data ?? [];
         if (children.isEmpty) return const SizedBox.shrink();
@@ -247,8 +276,14 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
   // SECTION SELECTOR NAVIGATION PILLS
   // =========================================================================
   Widget _buildSectionSelector(String userId) {
+    Stream<List<ContactConsentModel>> stream;
+    try {
+      stream = _consentService.getIncomingRequestsStream(userId);
+    } catch (_) {
+      stream = Stream.value([]);
+    }
     return StreamBuilder<List<ContactConsentModel>>(
-      stream: _consentService.getIncomingRequestsStream(userId),
+      stream: stream,
       builder: (context, consentSnap) {
         final pendingConsents = consentSnap.data ?? [];
         final pendingCount = pendingConsents.length;
@@ -715,7 +750,9 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
           children: [
             const Icon(Icons.lightbulb_outline_rounded, color: MeadowColors.gold, size: 22),
             const SizedBox(width: 8),
-            Text('LLG Recommendations & Activity Guidance', style: MeadowTypography.h2),
+            Expanded(
+              child: Text('LLG Recommendations & Activity Guidance', style: MeadowTypography.h2),
+            ),
           ],
         ),
         const SizedBox(height: 4),
@@ -730,8 +767,14 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
   }
 
   Widget _buildRecommendationsStream(String childId, {int? limit}) {
+    Stream<List<RecommendationModel>> stream;
+    try {
+      stream = _recommendationService.getChildRecommendationsStream(childId);
+    } catch (_) {
+      stream = Stream.value([]);
+    }
     return StreamBuilder<List<RecommendationModel>>(
-      stream: _recommendationService.getChildRecommendationsStream(childId),
+      stream: stream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()));
@@ -1015,7 +1058,9 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
           children: [
             const Icon(Icons.security_rounded, color: MeadowColors.motor, size: 22),
             const SizedBox(width: 8),
-            Text('Contact Sharing & Explicit Consent', style: MeadowTypography.h2),
+            Expanded(
+              child: Text('Contact Sharing & Explicit Consent', style: MeadowTypography.h2),
+            ),
           ],
         ),
         const SizedBox(height: 4),
@@ -1043,8 +1088,14 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
   }
 
   Widget _buildIncomingConsentsStream(String userId) {
+    Stream<List<ContactConsentModel>> stream;
+    try {
+      stream = _consentService.getIncomingRequestsStream(userId);
+    } catch (_) {
+      stream = Stream.value([]);
+    }
     return StreamBuilder<List<ContactConsentModel>>(
-      stream: _consentService.getIncomingRequestsStream(userId),
+      stream: stream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()));
@@ -1312,11 +1363,17 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
   }
 
   Widget _buildSpecialistsList(Set<String> activeOrPendingIds, bool hasActiveRelationship) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: _firestore
+    Stream<QuerySnapshot> stream;
+    try {
+      stream = _firestore
           .collection('llgProfiles')
           .where('isVerified', isEqualTo: true)
-          .snapshots(),
+          .snapshots();
+    } catch (_) {
+      stream = const Stream.empty();
+    }
+    return StreamBuilder<QuerySnapshot>(
+      stream: stream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()));
@@ -1496,8 +1553,14 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
   // CONSULTATION SUMMARIES SECTION
   // =========================================================================
   Widget _buildConsultationSummariesSection(String childId) {
+    Stream<List<ConsultationSummaryModel>> stream;
+    try {
+      stream = _summaryService.getChildSummariesStream(childId);
+    } catch (_) {
+      stream = Stream.value([]);
+    }
     return StreamBuilder<List<ConsultationSummaryModel>>(
-      stream: _summaryService.getChildSummariesStream(childId),
+      stream: stream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()));
@@ -1511,7 +1574,9 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
               children: [
                 const Icon(Icons.assignment_outlined, color: MeadowColors.primary, size: 20),
                 const SizedBox(width: 8),
-                Text('Documented Consultation Summaries', style: MeadowTypography.h2),
+                Expanded(
+                  child: Text('Documented Consultation Summaries', style: MeadowTypography.h2),
+                ),
               ],
             ),
             const SizedBox(height: 4),

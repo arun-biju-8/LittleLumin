@@ -21,9 +21,13 @@ import '../../services/specialist_report_service.dart';
 import '../../services/activity_service.dart';
 
 import '../../widgets/activity_origin_badge.dart';
-import '../chat/chat_screen.dart';
+import '../../widgets/specialist_messaging_panel.dart';
+import '../../services/messaging_service.dart';
+import '../../services/report_pdf_service.dart';
 import 'send_recommendation_page.dart';
 import 'add_observation_page.dart';
+import 'report_center_page.dart';
+import 'report_preview_dialog.dart';
 
 class ChildProfilePage extends StatefulWidget {
   final SpecialistCaseModel caseModel;
@@ -75,6 +79,9 @@ class _ChildProfilePageState extends State<ChildProfilePage> with SingleTickerPr
   late SpecialistCaseModel _currentCase;
   late ChildModel _currentChild;
   bool _isGeneratingReport = false;
+  bool _isMessagingPanelOpen = false;
+  String? _contextualActivityTitle;
+  String? _contextualRecommendationTitle;
 
   // Colors matching the portal identity
   static const Color colorNavy = Color(0xFF0F172A);
@@ -159,11 +166,34 @@ class _ChildProfilePageState extends State<ChildProfilePage> with SingleTickerPr
       ],
     );
 
+    final Widget mainBody = Stack(
+      children: [
+        content,
+        SpecialistMessagingPanel(
+          isOpen: _isMessagingPanelOpen,
+          onClose: () => setState(() => _isMessagingPanelOpen = false),
+          initialCase: _currentCase,
+          contextualActivityTitle: _contextualActivityTitle,
+          contextualRecommendationTitle: _contextualRecommendationTitle,
+          messagingService: MessagingService(firestore: _firestore, auth: _auth),
+          caseService: _caseService,
+          auth: _auth,
+          onRecordConsultation: (c) {
+            setState(() {
+              _isMessagingPanelOpen = false;
+              _tabController.animateTo(6);
+            });
+            _showRecordConsultationModal();
+          },
+        ),
+      ],
+    );
+
     if (_firestore == null) {
       return Scaffold(
         backgroundColor: colorNavy,
         appBar: _buildAppBar(),
-        body: content,
+        body: mainBody,
       );
     }
 
@@ -184,7 +214,7 @@ class _ChildProfilePageState extends State<ChildProfilePage> with SingleTickerPr
                 _currentChild = ChildModel.fromMap({...childSnap.data!.data()!, 'childId': childSnap.data!.id});
               }
 
-              return content;
+              return mainBody;
             },
           );
         },
@@ -986,6 +1016,21 @@ class _ChildProfilePageState extends State<ChildProfilePage> with SingleTickerPr
                               'Score: ${scoreAfter.toStringAsFixed(1)}%',
                               style: GoogleFonts.inter(fontSize: 11, color: colorTextMuted),
                             ),
+                            const SizedBox(height: 6),
+                            InkWell(
+                              onTap: () => _openChat(activityTitle: title),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.chat_bubble_outline, size: 12, color: colorTeal),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Discuss',
+                                    style: GoogleFonts.inter(fontSize: 11, color: colorTeal, fontWeight: FontWeight.w600),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ],
                         ),
                       ],
@@ -1283,17 +1328,44 @@ class _ChildProfilePageState extends State<ChildProfilePage> with SingleTickerPr
                 ),
               ),
               const SizedBox(width: 16),
-              ElevatedButton.icon(
-                onPressed: _isGeneratingReport ? null : _generateAIReport,
-                icon: _isGeneratingReport
-                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Icon(Icons.auto_awesome_rounded, size: 16),
-                label: Text(_isGeneratingReport ? 'Synthesizing...' : 'Generate New AI Report'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6366F1),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ReportCenterPage(
+                            initialChildId: _currentChild.childId,
+                            reportService: _reportService,
+                            firestore: _firestore,
+                            auth: _auth,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.analytics_outlined, size: 16, color: colorTeal),
+                    label: const Text('Open Report Center', style: TextStyle(color: colorTeal, fontSize: 13)),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: colorTeal),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  ElevatedButton.icon(
+                    onPressed: _isGeneratingReport ? null : _generateAIReport,
+                    icon: _isGeneratingReport
+                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.auto_awesome_rounded, size: 16),
+                    label: Text(_isGeneratingReport ? 'Synthesizing...' : 'Generate New AI Report'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6366F1),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -1309,7 +1381,7 @@ class _ChildProfilePageState extends State<ChildProfilePage> with SingleTickerPr
               final reports = snapshot.data ?? [];
               if (reports.isEmpty) {
                 return _buildEmptyState(
-                  'No reports generated yet for this child. Click "Generate New AI Report" above to synthesize assessment data.',
+                  'No reports generated yet for this child. Click "Generate New AI Report" above or "Open Report Center" to synthesize assessment data.',
                   Icons.assignment_outlined,
                 );
               }
@@ -1357,7 +1429,7 @@ class _ChildProfilePageState extends State<ChildProfilePage> with SingleTickerPr
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'Generated ${DateFormat.yMMMd().add_jm().format(report.generatedAt)} • Specialist: ${report.specialistName}',
+                                    '${report.reportType.displayName} • Generated ${DateFormat.yMMMd().add_jm().format(report.generatedAt)} • Specialist: ${report.specialistName}',
                                     style: GoogleFonts.inter(fontSize: 11, color: colorTextMuted),
                                   ),
                                 ],
@@ -1391,8 +1463,15 @@ class _ChildProfilePageState extends State<ChildProfilePage> with SingleTickerPr
                             OutlinedButton.icon(
                               onPressed: () => _showDetailedReportDialog(report),
                               icon: const Icon(Icons.visibility_outlined, size: 14, color: colorTeal),
-                              label: const Text('View Full Report', style: TextStyle(color: colorTeal, fontSize: 12)),
+                              label: const Text('Preview & Edit', style: TextStyle(color: colorTeal, fontSize: 12)),
                               style: OutlinedButton.styleFrom(side: const BorderSide(color: colorTeal)),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton.icon(
+                              onPressed: () => ReportPdfService.exportReportPdf(report, context),
+                              icon: const Icon(Icons.picture_as_pdf_outlined, size: 14),
+                              label: const Text('Export Print PDF', style: TextStyle(fontSize: 12)),
+                              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6366F1), foregroundColor: Colors.white),
                             ),
                             if (!report.isShared) ...[
                               const SizedBox(width: 8),
@@ -1451,128 +1530,11 @@ class _ChildProfilePageState extends State<ChildProfilePage> with SingleTickerPr
   void _showDetailedReportDialog(SpecialistReportModel report) {
     showDialog(
       context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: colorSlate,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          title: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(report.title, style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-              ),
-              IconButton(icon: const Icon(Icons.close, color: colorTextMuted), onPressed: () => Navigator.pop(ctx)),
-            ],
-          ),
-          content: SizedBox(
-            width: 650,
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Status & meta
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: colorTeal.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text('Status: ${report.status.name.toUpperCase()}',
-                            style: GoogleFonts.inter(fontSize: 11, color: colorTeal, fontWeight: FontWeight.bold)),
-                      ),
-                      const SizedBox(width: 12),
-                      Text('Generated: ${DateFormat.yMMMd().format(report.generatedAt)}',
-                          style: GoogleFonts.inter(fontSize: 11, color: colorTextMuted)),
-                    ],
-                  ),
-                  const Divider(color: colorBorder, height: 24),
-
-                  // Summary
-                  Text('Executive Summary', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white)),
-                  const SizedBox(height: 6),
-                  Text(report.summary, style: GoogleFonts.inter(fontSize: 12, color: Colors.white70, height: 1.4)),
-
-                  const SizedBox(height: 16),
-                  Text('Domain Scores Matrix', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white)),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: report.domainScores.entries.map((entry) {
-                      return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(color: colorNavy, borderRadius: BorderRadius.circular(6)),
-                        child: Text('${entry.key[0].toUpperCase()}${entry.key.substring(1)}: ${entry.value.toStringAsFixed(1)}%',
-                            style: GoogleFonts.inter(fontSize: 11, color: entry.value >= 70 ? colorEmerald : Colors.white)),
-                      );
-                    }).toList(),
-                  ),
-
-                  const SizedBox(height: 16),
-                  Text('Identified Strengths', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: colorEmerald)),
-                  const SizedBox(height: 6),
-                  ...report.strengths.map((s) => Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('• ', style: TextStyle(color: colorEmerald, fontWeight: FontWeight.bold)),
-                            Expanded(child: Text(s, style: GoogleFonts.inter(fontSize: 12, color: Colors.white70))),
-                          ],
-                        ),
-                      )),
-
-                  const SizedBox(height: 16),
-                  Text('Areas for Guided Growth', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: colorAmber)),
-                  const SizedBox(height: 6),
-                  ...report.growthAreas.map((g) => Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('• ', style: TextStyle(color: colorAmber, fontWeight: FontWeight.bold)),
-                            Expanded(child: Text(g, style: GoogleFonts.inter(fontSize: 12, color: Colors.white70))),
-                          ],
-                        ),
-                      )),
-
-                  const SizedBox(height: 16),
-                  Text('AI Action Recommendations', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: colorTeal)),
-                  const SizedBox(height: 6),
-                  ...report.recommendations.map((r) => Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('• ', style: TextStyle(color: colorTeal, fontWeight: FontWeight.bold)),
-                            Expanded(child: Text(r, style: GoogleFonts.inter(fontSize: 12, color: Colors.white70))),
-                          ],
-                        ),
-                      )),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text('Close', style: GoogleFonts.inter(color: colorTextMuted)),
-            ),
-            if (!report.isShared)
-              ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  _shareReport(report);
-                },
-                icon: const Icon(Icons.send_rounded, size: 14),
-                label: const Text('Share with Parent'),
-                style: ElevatedButton.styleFrom(backgroundColor: colorEmerald, foregroundColor: Colors.white),
-              ),
-          ],
-        );
-      },
+      builder: (ctx) => ReportPreviewDialog(
+        report: report,
+        reportService: _reportService,
+        onReportFinalized: () => setState(() {}),
+      ),
     );
   }
 
@@ -1918,6 +1880,21 @@ class _ChildProfilePageState extends State<ChildProfilePage> with SingleTickerPr
                             ),
                           ),
                         ],
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: () => _openChat(recTitle: rec.title),
+                              icon: const Icon(Icons.chat_bubble_outline, size: 14, color: colorTeal),
+                              label: const Text('Discuss with Parent', style: TextStyle(color: colorTeal, fontSize: 12)),
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: colorTeal),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   );
@@ -1945,16 +1922,31 @@ class _ChildProfilePageState extends State<ChildProfilePage> with SingleTickerPr
           ),
           const SizedBox(height: 4),
           Text(
-            'Execute verified interventions, record external sessions, request consent, or update case lifecycle.',
+            'Categorized professional operations across direct communication, developmental interventions, documentation, and case governance.',
             style: GoogleFonts.inter(fontSize: 12, color: colorTextMuted),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
 
+          // Category 1: Communication
+          _buildActionCategoryHeader('1. Communication & Parent Engagement', Icons.chat_bubble_outline, const Color(0xFF0284C7)),
+          const SizedBox(height: 12),
+          _buildActionTile(
+            icon: Icons.chat_bubble_outline,
+            title: 'Direct Secure Messaging',
+            subtitle: 'Open the slide-in workspace to review chat history, select templates, and send scoped messages',
+            buttonLabel: 'Open Messages Panel',
+            color: const Color(0xFF0284C7),
+            onTap: _openChat,
+          ),
+          const SizedBox(height: 24),
+
+          // Category 2: Interventions
+          _buildActionCategoryHeader('2. Developmental Interventions', Icons.psychology_outlined, colorTeal),
+          const SizedBox(height: 12),
           LayoutBuilder(
             builder: (context, constraints) {
               final isWide = constraints.maxWidth > 700;
               final cardWidth = isWide ? (constraints.maxWidth - 16) / 2 : constraints.maxWidth;
-
               return Wrap(
                 spacing: 16,
                 runSpacing: 16,
@@ -1962,20 +1954,9 @@ class _ChildProfilePageState extends State<ChildProfilePage> with SingleTickerPr
                   SizedBox(
                     width: cardWidth,
                     child: _buildActionTile(
-                      icon: Icons.chat_bubble_outline,
-                      title: 'Direct Secure Messaging',
-                      subtitle: 'Send end-to-end scoped messages to parent regarding consultation',
-                      buttonLabel: 'Open Chat',
-                      color: const Color(0xFF0284C7),
-                      onTap: _openChat,
-                    ),
-                  ),
-                  SizedBox(
-                    width: cardWidth,
-                    child: _buildActionTile(
                       icon: Icons.add_task_outlined,
                       title: 'Assign Activity to Child',
-                      subtitle: 'Add curated or AI activities to the child’s learning queue',
+                      subtitle: 'Add targeted domain activities or custom exercises to ${_currentChild.name}’s active queue',
                       buttonLabel: 'Assign Activity',
                       color: colorTeal,
                       onTap: _showAssignActivityModal,
@@ -1986,7 +1967,7 @@ class _ChildProfilePageState extends State<ChildProfilePage> with SingleTickerPr
                     child: _buildActionTile(
                       icon: Icons.psychology_outlined,
                       title: 'Create Recommendation',
-                      subtitle: 'Prescribe targeted home intervention routines with custom frequency',
+                      subtitle: 'Prescribe home routines with customized frequency, instructions, and parent guidance',
                       buttonLabel: 'Send Recommendation',
                       color: const Color(0xFF6366F1),
                       onTap: () {
@@ -1999,12 +1980,29 @@ class _ChildProfilePageState extends State<ChildProfilePage> with SingleTickerPr
                       },
                     ),
                   ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 24),
+
+          // Category 3: Documentation
+          _buildActionCategoryHeader('3. Clinical & Observation Documentation', Icons.note_add_outlined, colorAmber),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth > 700;
+              final cardWidth = isWide ? (constraints.maxWidth - 16) / 2 : constraints.maxWidth;
+              return Wrap(
+                spacing: 16,
+                runSpacing: 16,
+                children: [
                   SizedBox(
                     width: cardWidth,
                     child: _buildActionTile(
                       icon: Icons.assignment_turned_in_outlined,
                       title: 'Record Consultation Summary',
-                      subtitle: 'Log WhatsApp, audio, video, or in-person session summaries and follow-ups',
+                      subtitle: 'Log WhatsApp, audio, video, or in-person session summaries, guidance, and follow-ups',
                       buttonLabel: 'Record Consultation',
                       color: colorAmber,
                       onTap: _showRecordConsultationModal,
@@ -2015,8 +2013,8 @@ class _ChildProfilePageState extends State<ChildProfilePage> with SingleTickerPr
                     child: _buildActionTile(
                       icon: Icons.note_add_outlined,
                       title: 'Add Clinical / Observation Note',
-                      subtitle: 'Document structured observation with developmental severity grade',
-                      buttonLabel: 'Add Note',
+                      subtitle: 'Document structured developmental observations with severity grades and clinical tags',
+                      buttonLabel: 'Add Observation Note',
                       color: colorTeal,
                       onTap: () {
                         Navigator.push(
@@ -2031,43 +2029,83 @@ class _ChildProfilePageState extends State<ChildProfilePage> with SingleTickerPr
                   SizedBox(
                     width: cardWidth,
                     child: _buildActionTile(
-                      icon: Icons.contact_phone_outlined,
-                      title: 'Request Phone / Email Consent',
-                      subtitle: 'Submit DPDP explicit consent request to parent for external channels',
-                      buttonLabel: 'Request Consent',
-                      color: const Color(0xFF8B5CF6),
-                      onTap: _showRequestContactConsentModal,
+                      icon: Icons.analytics_outlined,
+                      title: 'Comprehensive Report Center',
+                      subtitle: 'Generate, preview, and export print-ready PDFs across 5 clinical report types',
+                      buttonLabel: 'Open Report Center',
+                      color: const Color(0xFFEC4899),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ReportCenterPage(
+                              initialChildId: _currentChild.childId,
+                              reportService: _reportService,
+                              firestore: _firestore,
+                              auth: _auth,
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
                   SizedBox(
                     width: cardWidth,
                     child: _buildActionTile(
                       icon: Icons.auto_awesome_rounded,
-                      title: 'Generate AI Progress Report',
-                      subtitle: 'Run complete analysis across scores and create exportable report',
-                      buttonLabel: 'Generate Report',
-                      color: const Color(0xFFEC4899),
+                      title: 'Quick AI Progress Report',
+                      subtitle: 'Synthesize ledger scores and milestones into a instant developmental assessment',
+                      buttonLabel: 'Generate AI Report',
+                      color: const Color(0xFF8B5CF6),
                       onTap: _generateAIReport,
-                    ),
-                  ),
-                  SizedBox(
-                    width: cardWidth,
-                    child: _buildActionTile(
-                      icon: Icons.check_circle_outline,
-                      title: 'Close & Resolve Case',
-                      subtitle: 'Complete case milestones and archive active consultation',
-                      buttonLabel: 'Close Case',
-                      color: colorEmerald,
-                      isDestructive: false,
-                      onTap: _showCloseCaseModal,
                     ),
                   ),
                 ],
               );
             },
           ),
+          const SizedBox(height: 24),
+
+          // Category 4: DPDP Consent Management
+          _buildActionCategoryHeader('4. DPDP Parental Consent Governance', Icons.shield_outlined, const Color(0xFF8B5CF6)),
+          const SizedBox(height: 12),
+          _buildActionTile(
+            icon: Icons.contact_phone_outlined,
+            title: 'Request Phone / Email External Consent',
+            subtitle: 'Submit an explicit DPDP consent request to parent to unmask contact info for external channels',
+            buttonLabel: 'Request Consent',
+            color: const Color(0xFF8B5CF6),
+            onTap: _showRequestContactConsentModal,
+          ),
+          const SizedBox(height: 24),
+
+          // Category 5: Case Lifecycle Management
+          _buildActionCategoryHeader('5. Case Lifecycle Management', Icons.folder_shared_outlined, colorEmerald),
+          const SizedBox(height: 12),
+          _buildActionTile(
+            icon: Icons.check_circle_outline,
+            title: 'Close & Resolve Consultation Case',
+            subtitle: 'Finalize developmental outcomes, archive active guidance, and close the specialist consultation record',
+            buttonLabel: 'Close Case',
+            color: colorEmerald,
+            isDestructive: false,
+            onTap: _showCloseCaseModal,
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _buildActionCategoryHeader(String title, IconData icon, Color color) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+        ),
+      ],
     );
   }
 
@@ -2679,21 +2717,12 @@ class _ChildProfilePageState extends State<ChildProfilePage> with SingleTickerPr
     return result;
   }
 
-  void _openChat() {
-    final user = _auth?.currentUser;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ChatScreen(
-          specialistCase: _currentCase,
-          currentUserId: user?.uid ?? '',
-          currentUserName: _currentCase.specialistName,
-          currentUserRole: 'llg',
-          otherParticipantName: _currentCase.parentName.isNotEmpty ? _currentCase.parentName : 'Parent',
-          otherParticipantRole: 'parent',
-        ),
-      ),
-    );
+  void _openChat({String? activityTitle, String? recTitle}) {
+    setState(() {
+      _contextualActivityTitle = activityTitle;
+      _contextualRecommendationTitle = recTitle;
+      _isMessagingPanelOpen = true;
+    });
   }
 }
 

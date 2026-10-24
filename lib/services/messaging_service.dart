@@ -12,6 +12,15 @@ class MessagingService {
   FirebaseFirestore get _firestore => _customFirestore ?? FirebaseFirestore.instance;
   FirebaseAuth get _auth => _customAuth ?? FirebaseAuth.instance;
 
+  FirebaseFirestore? get _safeFirestore {
+    if (_customFirestore != null) return _customFirestore;
+    try {
+      return FirebaseFirestore.instance;
+    } catch (_) {
+      return null;
+    }
+  }
+
   MessagingService({
     FirebaseFirestore? firestore,
     FirebaseAuth? auth,
@@ -20,22 +29,30 @@ class MessagingService {
 
   static const String rootCollection = 'conversations';
 
-  CollectionReference<Map<String, dynamic>> _messagesRef(String caseId) {
-    return _firestore.collection(rootCollection).doc(caseId).collection('messages');
+  CollectionReference<Map<String, dynamic>>? _messagesRef(String caseId) {
+    final fs = _safeFirestore;
+    if (fs == null) return null;
+    return fs.collection(rootCollection).doc(caseId).collection('messages');
   }
 
   /// Stream messages for an authorized consultation case
   Stream<List<MessageModel>> getMessagesStream(String caseId) {
     if (caseId.isEmpty) return Stream.value([]);
-    return _messagesRef(caseId)
-        .orderBy('timestamp', descending: false)
-        .limit(200)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        return MessageModel.fromMap(doc.data(), doc.id);
-      }).toList();
-    });
+    try {
+      final ref = _messagesRef(caseId);
+      if (ref == null) return Stream.value([]);
+      return ref
+          .orderBy('timestamp', descending: false)
+          .limit(200)
+          .snapshots()
+          .map((snapshot) {
+        return snapshot.docs.map((doc) {
+          return MessageModel.fromMap(doc.data(), doc.id);
+        }).toList();
+      });
+    } catch (_) {
+      return Stream.value([]);
+    }
   }
 
   /// Send a message within an authorized case
@@ -64,7 +81,11 @@ class MessagingService {
     }
 
     final now = DateTime.now();
-    final docRef = _messagesRef(caseId).doc();
+    final docRef = _firestore
+        .collection(rootCollection)
+        .doc(caseId)
+        .collection('messages')
+        .doc();
 
     final message = MessageModel(
       id: docRef.id,
@@ -128,7 +149,9 @@ class MessagingService {
   /// Mark all unread messages for the recipient as read
   Future<void> markMessagesAsRead(String caseId, String recipientId) async {
     try {
-      final unreadSnap = await _messagesRef(caseId)
+      final ref = _messagesRef(caseId);
+      if (ref == null) return;
+      final unreadSnap = await ref
           .where('recipientId', isEqualTo: recipientId)
           .where('status', isNotEqualTo: MessageStatus.read.name)
           .limit(50)
@@ -152,10 +175,16 @@ class MessagingService {
   /// Stream unread message count for a user in a specific case
   Stream<int> getUnreadCountStream(String caseId, String userId) {
     if (caseId.isEmpty) return Stream.value(0);
-    return _messagesRef(caseId)
-        .where('recipientId', isEqualTo: userId)
-        .where('status', isNotEqualTo: MessageStatus.read.name)
-        .snapshots()
-        .map((snap) => snap.docs.length);
+    try {
+      final ref = _messagesRef(caseId);
+      if (ref == null) return Stream.value(0);
+      return ref
+          .where('recipientId', isEqualTo: userId)
+          .where('status', isNotEqualTo: MessageStatus.read.name)
+          .snapshots()
+          .map((snap) => snap.docs.length);
+    } catch (_) {
+      return Stream.value(0);
+    }
   }
 }

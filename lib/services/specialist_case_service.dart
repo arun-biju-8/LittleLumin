@@ -12,6 +12,16 @@ class SpecialistCaseService {
   FirebaseFirestore get _firestore => _customFirestore ?? FirebaseFirestore.instance;
   FirebaseAuth get _auth => _customAuth ?? FirebaseAuth.instance;
 
+  FirebaseFirestore? get _safeFirestore {
+    if (_customFirestore != null) return _customFirestore;
+    try {
+      return FirebaseFirestore.instance;
+    } catch (_) {
+      return null;
+    }
+  }
+
+
   SpecialistCaseService({
     FirebaseFirestore? firestore,
     FirebaseAuth? auth,
@@ -113,15 +123,21 @@ class SpecialistCaseService {
 
   /// Stream cases exclusively assigned to the signed-in specialist
   Stream<List<SpecialistCaseModel>> getSpecialistCasesStream({required String specialistId, CaseStatus? statusFilter}) {
-    Query query = _firestore.collection(collection).where('specialistId', isEqualTo: specialistId);
-    if (statusFilter != null) {
-      query = query.where('status', isEqualTo: statusFilter.name);
+    final fs = _safeFirestore;
+    if (fs == null) return Stream.value(<SpecialistCaseModel>[]);
+    try {
+      Query query = fs.collection(collection).where('specialistId', isEqualTo: specialistId);
+      if (statusFilter != null) {
+        query = query.where('status', isEqualTo: statusFilter.name);
+      }
+      return query.snapshots().map((snapshot) {
+        return snapshot.docs.map((doc) {
+          return SpecialistCaseModel.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+        }).toList();
+      });
+    } catch (_) {
+      return Stream.value(<SpecialistCaseModel>[]);
     }
-    return query.snapshots().map((snapshot) {
-      return snapshot.docs.map((doc) {
-        return SpecialistCaseModel.fromMap(doc.data() as Map<String, dynamic>, doc.id);
-      }).toList();
-    });
   }
 
   /// Get list of cases for a specialist, optionally filtered by childId
@@ -138,15 +154,21 @@ class SpecialistCaseService {
 
   /// Stream consultation requests submitted by the signed-in parent
   Stream<List<SpecialistCaseModel>> getParentCasesStream(String parentId, {String? childId}) {
-    Query query = _firestore.collection(collection).where('parentId', isEqualTo: parentId);
-    if (childId != null && childId.isNotEmpty) {
-      query = query.where('childId', isEqualTo: childId);
+    final fs = _safeFirestore;
+    if (fs == null) return Stream.value(<SpecialistCaseModel>[]);
+    try {
+      Query query = fs.collection(collection).where('parentId', isEqualTo: parentId);
+      if (childId != null && childId.isNotEmpty) {
+        query = query.where('childId', isEqualTo: childId);
+      }
+      return query.snapshots().map((snapshot) {
+        return snapshot.docs.map((doc) {
+          return SpecialistCaseModel.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+        }).toList();
+      });
+    } catch (_) {
+      return Stream.value(<SpecialistCaseModel>[]);
     }
-    return query.snapshots().map((snapshot) {
-      return snapshot.docs.map((doc) {
-        return SpecialistCaseModel.fromMap(doc.data() as Map<String, dynamic>, doc.id);
-      }).toList();
-    });
   }
 
   /// Specialist accepts a pending case
