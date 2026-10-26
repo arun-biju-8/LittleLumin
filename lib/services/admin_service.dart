@@ -475,6 +475,18 @@ class AdminService {
       throw Exception('Cannot assign unverified specialist. Specialist must pass credential verification first.');
     }
 
+    // 2. Validate target parent account role and eligibility
+    final parentDoc = await _firestore.collection('users').doc(parentId).get();
+    if (!parentDoc.exists) throw Exception('Parent account record not found.');
+    final parentData = parentDoc.data()!;
+    final parentUser = UserModel.fromMap(parentId, parentData);
+    if (!isEligibleParent(parentUser)) {
+      if (!parentUser.isParent) {
+        throw Exception('Selected account is not a parent account (role: ${parentUser.userType}).');
+      }
+      throw Exception('Selected parent account is ineligible for assignment (status: ${parentUser.status}).');
+    }
+
     final admin = _auth.currentUser;
     final adminId = admin?.uid ?? 'admin';
     final assignmentDoc = _firestore.collection('llgAssignments').doc();
@@ -778,7 +790,7 @@ class AdminService {
   // 3. STREAMS & QUERIES
   // =========================================================================
 
-  /// Stream users directory with optional role and status filters
+  /// Stream users directory with optional role and status filters (deduplicated by stable uid)
   Stream<List<UserModel>> getUsersStream({String? roleFilter, String? statusFilter}) {
     final fs = _safeFirestore;
     if (fs == null) return Stream.value([]);
@@ -792,9 +804,36 @@ class AdminService {
       }
 
       return query.snapshots().map((snapshot) {
-        return snapshot.docs.map((doc) {
-          return UserModel.fromMap(doc.id, doc.data() as Map<String, dynamic>);
-        }).toList();
+        final Map<String, UserModel> uniqueUsers = {};
+        for (final doc in snapshot.docs) {
+          final u = UserModel.fromMap(doc.id, doc.data() as Map<String, dynamic>);
+          uniqueUsers.putIfAbsent(u.uid, () => u);
+        }
+        return uniqueUsers.values.toList();
+      });
+    } catch (_) {
+      return Stream.value([]);
+    }
+  }
+
+  /// Check whether a user is an eligible parent account in good standing.
+  static bool isEligibleParent(UserModel user) => user.isEligibleParent;
+
+  /// Stream only eligible parent accounts for assignment, with strict role & eligibility filtering and uid deduplication.
+  Stream<List<UserModel>> getEligibleParentsStream() {
+    final fs = _safeFirestore;
+    if (fs == null) return Stream.value([]);
+    try {
+      return fs.collection('users').snapshots().map((snapshot) {
+        final Map<String, UserModel> uniqueParents = {};
+        for (final doc in snapshot.docs) {
+          final data = doc.data();
+          final user = UserModel.fromMap(doc.id, data);
+          if (isEligibleParent(user)) {
+            uniqueParents.putIfAbsent(user.uid, () => user);
+          }
+        }
+        return uniqueParents.values.toList();
       });
     } catch (_) {
       return Stream.value([]);

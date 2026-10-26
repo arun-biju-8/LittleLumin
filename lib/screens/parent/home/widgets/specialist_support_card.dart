@@ -162,31 +162,30 @@ class SpecialistSupportCard extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 14),
-          Row(
+          Wrap(
+            spacing: 10,
+            runSpacing: 8,
             children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ChatScreen(
-                          specialistCase: activeCase,
-                          currentUserId: currentUserId,
-                          currentUserName: currentUserName,
-                          currentUserRole: 'parent',
-                          otherParticipantName: activeCase.specialistName,
-                          otherParticipantRole: activeCase.specialistRole,
-                        ),
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ChatScreen(
+                        specialistCase: activeCase,
+                        currentUserId: currentUserId,
+                        currentUserName: currentUserName,
+                        currentUserRole: 'parent',
+                        otherParticipantName: activeCase.specialistName,
+                        otherParticipantRole: activeCase.specialistRole,
                       ),
-                    );
-                  },
-                  icon: const Icon(Icons.chat_bubble_outline, size: 16),
-                  label: const Text('Message Guide'),
-                  style: MeadowButtons.small(),
-                ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.chat_bubble_outline, size: 16),
+                label: const Text('Message Guide'),
+                style: MeadowButtons.small(),
               ),
-              const SizedBox(width: 10),
               OutlinedButton.icon(
                 onPressed: () {
                   Navigator.push(

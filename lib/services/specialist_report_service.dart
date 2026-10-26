@@ -309,13 +309,27 @@ class SpecialistReportService {
         break;
     }
 
+    // Ensure parentId is thoroughly resolved
+    String resolvedParentId = caseModel.parentId.trim();
+    if (resolvedParentId.isEmpty) {
+      resolvedParentId = child.parentId.trim();
+    }
+    if (resolvedParentId.isEmpty && fs != null && child.childId.isNotEmpty) {
+      try {
+        final cDoc = await fs.collection('children').doc(child.childId).get();
+        if (cDoc.exists && cDoc.data() != null) {
+          resolvedParentId = (cDoc.data()!['parentId'] ?? '').toString().trim();
+        }
+      } catch (_) {}
+    }
+
     final now = DateTime.now();
     final reportData = SpecialistReportModel(
       id: '',
       caseId: caseModel.caseId,
       childId: child.childId,
       childName: child.name,
-      parentId: caseModel.parentId,
+      parentId: resolvedParentId,
       specialistId: specialistId,
       specialistName: specialistName,
       reportType: reportType,
@@ -354,6 +368,7 @@ class SpecialistReportService {
     String reportId,
     SpecialistReportStatus status, {
     String? notes,
+    String? parentId,
   }) async {
     final fs = _firestore;
     if (fs == null) return;
@@ -364,10 +379,37 @@ class SpecialistReportService {
     if (notes != null) {
       updateData['specialistNotes'] = notes;
     }
+    if (parentId != null && parentId.trim().isNotEmpty) {
+      updateData['parentId'] = parentId.trim();
+    }
     if (status == SpecialistReportStatus.finalized) {
       updateData['finalizedAt'] = FieldValue.serverTimestamp();
+      updateData['isSharedWithParent'] = true;
     } else if (status == SpecialistReportStatus.shared) {
       updateData['sharedAt'] = FieldValue.serverTimestamp();
+      updateData['isSharedWithParent'] = true;
+    }
+
+    // If parentId was not explicitly provided but status is finalized/shared,
+    // verify the document has a parentId, otherwise resolve it from the child or case
+    if ((status == SpecialistReportStatus.finalized || status == SpecialistReportStatus.shared) &&
+        (parentId == null || parentId.trim().isEmpty)) {
+      try {
+        final doc = await fs.collection(collectionName).doc(reportId).get();
+        if (doc.exists && doc.data() != null) {
+          final currentParentId = (doc.data()!['parentId'] ?? '').toString().trim();
+          final childId = (doc.data()!['childId'] ?? '').toString().trim();
+          if (currentParentId.isEmpty && childId.isNotEmpty) {
+            final cDoc = await fs.collection('children').doc(childId).get();
+            if (cDoc.exists && cDoc.data() != null) {
+              final resolvedPid = (cDoc.data()!['parentId'] ?? '').toString().trim();
+              if (resolvedPid.isNotEmpty) {
+                updateData['parentId'] = resolvedPid;
+              }
+            }
+          }
+        }
+      } catch (_) {}
     }
 
     await fs.collection(collectionName).doc(reportId).update(updateData);
@@ -384,18 +426,36 @@ class SpecialistReportService {
     });
   }
 
-  /// Stream all reports shared with a specific parent
-  Stream<List<SpecialistReportModel>> getParentReportsStream(String parentId) {
+  /// Stream all reports shared or finalized for a parent (and optionally for a specific child)
+  Stream<List<SpecialistReportModel>> getParentReportsStream(String parentId, {String? childId}) {
     final fs = _firestore;
-    if (fs == null || parentId.isEmpty) return Stream.value([]);
-    return fs
-        .collection(collectionName)
-        .where('parentId', isEqualTo: parentId)
-        .snapshots()
-        .map((snapshot) {
+    final cleanParentId = parentId.trim();
+    final cleanChildId = childId?.trim();
+    if (fs == null || (cleanParentId.isEmpty && (cleanChildId == null || cleanChildId.isEmpty))) {
+      return Stream.value([]);
+    }
+
+    Query query = fs.collection(collectionName);
+    if (cleanChildId != null && cleanChildId.isNotEmpty) {
+      // Querying by childId retrieves all reports associated with this child (including legacy ones)
+      query = query.where('childId', isEqualTo: cleanChildId);
+    } else if (cleanParentId.isNotEmpty) {
+      query = query.where('parentId', isEqualTo: cleanParentId);
+    }
+
+    return query.snapshots().map((snapshot) {
       final list = snapshot.docs
-          .map((doc) => SpecialistReportModel.fromMap(doc.id, doc.data()))
+          .map((doc) => SpecialistReportModel.fromMap(doc.id, doc.data() as Map<String, dynamic>))
           .where((r) => r.status == SpecialistReportStatus.shared || r.status == SpecialistReportStatus.finalized)
+          .where((r) {
+            if (cleanParentId.isNotEmpty && r.parentId.isNotEmpty) {
+              return r.parentId == cleanParentId;
+            }
+            if (cleanChildId != null && cleanChildId.isNotEmpty) {
+              return r.childId == cleanChildId;
+            }
+            return true;
+          })
           .toList();
       list.sort((a, b) => b.generatedAt.compareTo(a.generatedAt));
       return list;
@@ -422,26 +482,44 @@ class SpecialistReportService {
     required String childName,
     required String specialistName,
   }) async {
-    await updateReportStatus(reportId, SpecialistReportStatus.shared);
-
+    String targetParentId = parentId.trim();
     final fs = _firestore;
+
+    if (targetParentId.isEmpty && fs != null) {
+      try {
+        final doc = await fs.collection(collectionName).doc(reportId).get();
+        if (doc.exists && doc.data() != null) {
+          targetParentId = (doc.data()!['parentId'] ?? '').toString().trim();
+          if (targetParentId.isEmpty) {
+            final childId = (doc.data()!['childId'] ?? '').toString().trim();
+            if (childId.isNotEmpty) {
+              final cDoc = await fs.collection('children').doc(childId).get();
+              if (cDoc.exists && cDoc.data() != null) {
+                targetParentId = (cDoc.data()!['parentId'] ?? '').toString().trim();
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    await updateReportStatus(reportId, SpecialistReportStatus.shared, parentId: targetParentId);
+
     if (fs == null) return;
 
-    if (parentId.isNotEmpty) {
-      await fs.collection(collectionName).doc(reportId).update({
-        'parentId': parentId,
-      });
-
-      await fs.collection('notifications').add({
-        'userId': parentId,
-        'type': 'specialist_report_shared',
-        'reportId': reportId,
-        'title': 'New Developmental Report for $childName',
-        'body': '$specialistName has shared a new developmental report with you.',
-        'actionRoute': '/llg-connect',
-        'readAt': null,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+    if (targetParentId.isNotEmpty) {
+      try {
+        await fs.collection('notifications').add({
+          'userId': targetParentId,
+          'type': 'specialist_report_shared',
+          'reportId': reportId,
+          'title': 'New Developmental Report for $childName',
+          'body': '$specialistName has shared a new developmental report with you.',
+          'actionRoute': '/llg-connect',
+          'readAt': null,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      } catch (_) {}
     }
   }
 }

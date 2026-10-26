@@ -181,7 +181,7 @@ class UserModel {
       uid: uid,
       name: data['name'] ?? '',
       email: data['email'] ?? '',
-      userType: data['userType'] ?? 'parent',
+      userType: data['userType'] ?? data['role'] ?? data['userRole'] ?? 'parent',
       status: data['status'] ?? 'active',
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       phone: data['phone'] ?? '',
@@ -235,12 +235,36 @@ class UserModel {
   bool get canSubmitEducationalObservations => (isSpecialist || isAdmin) && isVerified;
   bool get isLLGPending => userType == 'llg_pending';
   bool get isRejected => userType == 'rejected';
-  bool get isAdmin => userType == 'admin';
-  bool get isParent => userType == 'parent';
+  bool get isAdmin => userType.toLowerCase() == 'admin';
+  bool get isParent =>
+      (userType.toLowerCase() == 'parent') &&
+      !isSpecialist &&
+      !isAdmin &&
+      !isLLGPending &&
+      !isRejected;
   bool get isActive => status == 'active';
   bool get isSuspended => status == 'suspended';
   bool get isWarned => status == 'warning_issued' || status == 'warned';
   bool get isDeactivated => status == 'deactivated' || status == 'inactive';
   bool get isRecoveryPending => status == 'recovery_pending';
   bool get isDeletionPending => status == 'deletion_pending';
+
+  /// True only if the user is a parent account in good standing
+  /// (explicitly not a specialist or admin, and not suspended, deactivated, deletion-pending, or rejected).
+  bool get isEligibleParent {
+    if (!isParent) return false;
+    if (isSpecialist || isAdmin || isLLGPending || isRejected) return false;
+    if (isSuspended || isDeactivated || isDeletionPending || isRecoveryPending) return false;
+    final s = status.trim().toLowerCase();
+    if (s == 'suspended' ||
+        s == 'deactivated' ||
+        s == 'inactive' ||
+        s == 'deleted' ||
+        s == 'deletion_pending' ||
+        s == 'recovery_pending' ||
+        s == 'rejected') {
+      return false;
+    }
+    return true;
+  }
 }

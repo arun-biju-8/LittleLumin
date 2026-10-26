@@ -26,6 +26,7 @@ import '../../theme/meadow_theme.dart';
 import '../../utils/validators.dart';
 import '../../widgets/global_header.dart';
 import '../chat/chat_screen.dart';
+import 'recommendation_detail_screen.dart';
 
 class LLGConnectPage extends StatefulWidget {
   final String? initialChildId;
@@ -156,7 +157,7 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
 
         switch (_activeSection) {
           case 'reports':
-            return _buildReportsSection(uid);
+            return _buildReportsSection(uid, childId: childId);
           case 'complaints':
             return _buildComplaintsSection(uid);
           case 'recommendations':
@@ -174,7 +175,7 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
               children: [
                 _buildCasesSection(cases),
                 const SizedBox(height: 24),
-                _buildReportsSection(uid),
+                _buildReportsSection(uid, childId: childId),
                 const SizedBox(height: 24),
                 _buildRecommendationsPreviewSection(childId),
                 const SizedBox(height: 24),
@@ -267,28 +268,35 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
           child: Row(
             children: [
               const Icon(Icons.child_care_rounded, color: MeadowColors.primary, size: 22),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Text(
                 'Reviewing For:',
                 style: MeadowTypography.label.copyWith(fontSize: 13),
               ),
-              const Spacer(),
-              DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: _selectedChildId,
-                  icon: const Icon(Icons.keyboard_arrow_down, size: 18, color: MeadowColors.textSecondary),
-                  items: children.map((c) {
-                    return DropdownMenuItem<String>(
-                      value: c.childId,
-                      child: Text(
-                        '${c.name} (${c.ageYears} yrs)',
-                        style: MeadowTypography.body.copyWith(fontSize: 13, fontWeight: FontWeight.bold),
-                      ),
-                    );
-                  }).toList(),
-                  onChanged: (val) {
-                    if (val != null) setState(() => _selectedChildId = val);
-                  },
+              const SizedBox(width: 8),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      isDense: true,
+                      value: _selectedChildId,
+                      icon: const Icon(Icons.keyboard_arrow_down, size: 18, color: MeadowColors.textSecondary),
+                      items: children.map((c) {
+                        return DropdownMenuItem<String>(
+                          value: c.childId,
+                          child: Text(
+                            '${c.name} (${c.ageYears} yrs)',
+                            style: MeadowTypography.body.copyWith(fontSize: 13, fontWeight: FontWeight.bold),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) setState(() => _selectedChildId = val);
+                      },
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -621,8 +629,12 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
 
           const SizedBox(height: 16),
 
-          // Action Buttons: Chat, Direct Contact, Withdraw Consent
-          Row(
+          // Action Buttons: Chat, Direct Contact, Withdraw Consent (Responsive Wrap)
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               if (isAuthorized) ...[
                 ElevatedButton.icon(
@@ -631,7 +643,6 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
                   label: const Text('Message Guide'),
                   style: MeadowButtons.small(),
                 ),
-                const SizedBox(width: 8),
                 OutlinedButton.icon(
                   onPressed: () => _openContactSharingDialog(c),
                   icon: const Icon(Icons.contact_phone_outlined, size: 16),
@@ -644,7 +655,6 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
                   ),
                 ),
               ],
-              const Spacer(),
               if (c.status == CaseStatus.pending)
                 TextButton.icon(
                   onPressed: () => _cancelPendingRequest(c),
@@ -660,11 +670,14 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
             ],
           ),
 
-          // Additional parent actions: Rate Specialist & Report Concern
+          // Additional parent actions: Rate Specialist & Report Concern (Responsive Wrap)
           const SizedBox(height: 12),
           const Divider(color: MeadowColors.borderLight, height: 1),
           const SizedBox(height: 8),
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               if (c.status == CaseStatus.active || c.status == CaseStatus.accepted || c.status == CaseStatus.completed) ...[
                 TextButton.icon(
@@ -679,7 +692,7 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
                   icon: const Icon(Icons.star_outline_rounded, size: 16, color: MeadowColors.warning),
                   label: const Text('Rate Specialist', style: TextStyle(color: MeadowColors.warning, fontSize: 12, fontWeight: FontWeight.bold)),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 4),
               ],
               TextButton.icon(
                 onPressed: () => ComplaintSubmissionDialog.show(
@@ -891,14 +904,17 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
     final domainColor = MeadowDomain.colorFor(rec.skillDomain);
     final domainSurface = MeadowDomain.surfaceFor(rec.skillDomain);
 
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: MeadowColors.surface,
-        borderRadius: BorderRadius.circular(MeadowRadius.xl),
-        border: Border.all(color: MeadowColors.borderLight),
-        boxShadow: MeadowShadows.card,
-      ),
+    return InkWell(
+      onTap: () => _openRecommendationDetail(rec),
+      borderRadius: BorderRadius.circular(MeadowRadius.xl),
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: MeadowColors.surface,
+          borderRadius: BorderRadius.circular(MeadowRadius.xl),
+          border: Border.all(color: MeadowColors.borderLight),
+          boxShadow: MeadowShadows.card,
+        ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -981,113 +997,52 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
               ),
             ),
           ],
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => _openRecommendationFeedbackDialog(rec),
-              icon: const Icon(Icons.rate_review_outlined, size: 16),
-              label: Text(rec.hasParentResponded ? 'Update Feedback' : 'Record Activity Feedback'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: MeadowColors.primary,
-                side: const BorderSide(color: MeadowColors.primary),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ElevatedButton.icon(
+                onPressed: () => _openRecommendationDetail(rec),
+                icon: const Icon(Icons.visibility_outlined, size: 16),
+                label: const Text('View Activity & Steps'),
+                style: MeadowButtons.small(),
               ),
-            ),
+              OutlinedButton.icon(
+                onPressed: () => _openRecommendationDetail(rec),
+                icon: const Icon(Icons.rate_review_outlined, size: 16),
+                label: Text(rec.hasParentResponded ? 'Update Response' : 'Submit Response'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: MeadowColors.primary,
+                  side: const BorderSide(color: MeadowColors.primary),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+              ),
+            ],
           ),
         ],
       ),
+    ),
     );
   }
 
-  void _openRecommendationFeedbackDialog(RecommendationModel rec) {
-    ParentActivityResponse selected = rec.parentResponse != ParentActivityResponse.none
-        ? rec.parentResponse
-        : ParentActivityResponse.completed;
-    final feedbackController = TextEditingController(text: rec.parentFeedback ?? '');
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text('Activity Feedback: ${rec.title}', style: MeadowTypography.h3),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'How did your child participate in this activity?',
-                  style: MeadowTypography.body.copyWith(fontSize: 13, color: MeadowColors.textSecondary),
-                ),
-                const SizedBox(height: 14),
-                ...ParentActivityResponse.values.where((r) => r != ParentActivityResponse.none).map((resp) {
-                  return RadioListTile<ParentActivityResponse>(
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                    title: Text(
-                      resp.name.replaceAll('_', ' ').toUpperCase(),
-                      style: MeadowTypography.label.copyWith(fontSize: 12),
-                    ),
-                    value: resp,
-                    groupValue: selected,
-                    activeColor: MeadowColors.primary,
-                    onChanged: (val) {
-                      if (val != null) setDialogState(() => selected = val);
-                    },
-                  );
-                }),
-                const SizedBox(height: 12),
-                Text('Parent Observations / Notes:', style: MeadowTypography.label.copyWith(fontSize: 12)),
-                const SizedBox(height: 6),
-                TextField(
-                  controller: feedbackController,
-                  maxLines: 2,
-                  decoration: InputDecoration(
-                    hintText: 'e.g. Enjoyed the sensory game, needed assistance with grip...',
-                    hintStyle: MeadowTypography.caption.copyWith(color: MeadowColors.textTertiary),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-            ElevatedButton(
-              onPressed: () async {
-                Navigator.pop(ctx);
-                setState(() => _isLoading = true);
-                try {
-                  await _recommendationService.submitParentResponse(
-                    recommendationId: rec.id,
-                    response: selected,
-                    feedback: feedbackController.text.trim(),
-                  );
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('✅ Feedback submitted to guide!'), backgroundColor: MeadowColors.primary),
-                    );
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error: $e'), backgroundColor: MeadowColors.error),
-                    );
-                  }
-                } finally {
-                  if (mounted) setState(() => _isLoading = false);
-                }
-              },
-              style: MeadowButtons.small(),
-              child: const Text('Submit Feedback'),
-            ),
-          ],
+  void _openRecommendationDetail(RecommendationModel rec) {
+    final childId = _selectedChildId ?? widget.initialChildId ?? rec.childId;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RecommendationDetailScreen(
+          recommendation: rec,
+          childId: childId,
+          childName: rec.childName,
+          onResponseSubmitted: () => setState(() {}),
         ),
       ),
     );
   }
+
+
 
   // =========================================================================
   // CONTACT CONSENTS & PRIVACY SECTION
@@ -2362,9 +2317,14 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
     );
   }
 
-  Widget _buildReportsSection(String parentId) {
+  Widget _buildReportsSection(String parentId, {String? childId}) {
+    final effectiveParentId = parentId.isNotEmpty
+        ? parentId
+        : (_effectiveUserId ?? '');
+    final selectedChild = childId ?? _selectedChildId;
+
     return StreamBuilder<List<SpecialistReportModel>>(
-      stream: _reportService.getParentReportsStream(parentId),
+      stream: _reportService.getParentReportsStream(effectiveParentId, childId: selectedChild),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()));

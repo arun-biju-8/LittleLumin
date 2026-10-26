@@ -875,4 +875,233 @@ void main() {
       // Ensures the messaging thread path conversations/child_1_spec_1 is completely preserved
     });
   });
+
+  group('11. Parent Selection & Specialist Assignment Eligibility Tests', () {
+    final now = DateTime(2026, 10, 26);
+
+    test('isEligibleParent allows active and warned parents', () {
+      final activeParent = UserModel(
+        uid: 'parent_1',
+        name: 'Aarav Sharma',
+        email: 'aarav@example.com',
+        userType: 'parent',
+        status: 'active',
+        createdAt: now,
+      );
+      expect(activeParent.isParent, true);
+      expect(activeParent.isEligibleParent, true);
+      expect(AdminService.isEligibleParent(activeParent), true);
+
+      final warnedParent = UserModel(
+        uid: 'parent_2',
+        name: 'Priya Patel',
+        email: 'priya@example.com',
+        userType: 'parent',
+        status: 'warning_issued',
+        createdAt: now,
+      );
+      expect(warnedParent.isParent, true);
+      expect(warnedParent.isEligibleParent, true);
+      expect(AdminService.isEligibleParent(warnedParent), true);
+    });
+
+    test('isEligibleParent explicitly rejects non-parent roles (LLG specialists, admins, pending, rejected)', () {
+      final llgUser = UserModel(
+        uid: 'spec_1',
+        name: 'Dr. Sarah Connor',
+        email: 'sarah@example.com',
+        userType: 'llg',
+        status: 'active',
+        createdAt: now,
+      );
+      expect(llgUser.isSpecialist, true);
+      expect(llgUser.isParent, false);
+      expect(llgUser.isEligibleParent, false);
+
+      final clinicalSpec = UserModel(
+        uid: 'spec_2',
+        name: 'Dr. John Doe',
+        email: 'john@example.com',
+        userType: 'clinical_specialist',
+        status: 'active',
+        createdAt: now,
+      );
+      expect(clinicalSpec.isSpecialist, true);
+      expect(clinicalSpec.isParent, false);
+      expect(clinicalSpec.isEligibleParent, false);
+
+      final educationalSpec = UserModel(
+        uid: 'spec_3',
+        name: 'Emily Guide',
+        email: 'emily@example.com',
+        userType: 'specialist',
+        status: 'active',
+        createdAt: now,
+      );
+      expect(educationalSpec.isSpecialist, true);
+      expect(educationalSpec.isParent, false);
+      expect(educationalSpec.isEligibleParent, false);
+
+      final adminUser = UserModel(
+        uid: 'admin_1',
+        name: 'Admin Chief',
+        email: 'admin@example.com',
+        userType: 'admin',
+        status: 'active',
+        createdAt: now,
+      );
+      expect(adminUser.isAdmin, true);
+      expect(adminUser.isParent, false);
+      expect(adminUser.isEligibleParent, false);
+
+      final pendingLLG = UserModel(
+        uid: 'pending_1',
+        name: 'Pending LLG',
+        email: 'pending@example.com',
+        userType: 'llg_pending',
+        status: 'pending',
+        createdAt: now,
+      );
+      expect(pendingLLG.isParent, false);
+      expect(pendingLLG.isEligibleParent, false);
+
+      final rejectedUser = UserModel(
+        uid: 'rejected_1',
+        name: 'Rejected Applicant',
+        email: 'rejected@example.com',
+        userType: 'rejected',
+        status: 'rejected',
+        createdAt: now,
+      );
+      expect(rejectedUser.isParent, false);
+      expect(rejectedUser.isEligibleParent, false);
+    });
+
+    test('isEligibleParent rejects ineligible account statuses (suspended, deactivated, deleted, deletion_pending, recovery_pending)', () {
+      final suspendedParent = UserModel(
+        uid: 'p_susp',
+        name: 'Suspended Parent',
+        email: 'susp@example.com',
+        userType: 'parent',
+        status: 'suspended',
+        createdAt: now,
+      );
+      expect(suspendedParent.isEligibleParent, false);
+
+      final deactivatedParent = UserModel(
+        uid: 'p_deact',
+        name: 'Deactivated Parent',
+        email: 'deact@example.com',
+        userType: 'parent',
+        status: 'deactivated',
+        createdAt: now,
+      );
+      expect(deactivatedParent.isEligibleParent, false);
+
+      final inactiveParent = UserModel(
+        uid: 'p_inact',
+        name: 'Inactive Parent',
+        email: 'inact@example.com',
+        userType: 'parent',
+        status: 'inactive',
+        createdAt: now,
+      );
+      expect(inactiveParent.isEligibleParent, false);
+
+      final deletionPendingParent = UserModel(
+        uid: 'p_del',
+        name: 'Deletion Pending Parent',
+        email: 'del@example.com',
+        userType: 'parent',
+        status: 'deletion_pending',
+        createdAt: now,
+      );
+      expect(deletionPendingParent.isEligibleParent, false);
+
+      final recoveryPendingParent = UserModel(
+        uid: 'p_rec',
+        name: 'Recovery Pending Parent',
+        email: 'rec@example.com',
+        userType: 'parent',
+        status: 'recovery_pending',
+        createdAt: now,
+      );
+      expect(recoveryPendingParent.isEligibleParent, false);
+    });
+
+    test('UserModel.fromMap accurately extracts role/userRole fallback', () {
+      final fromRole = UserModel.fromMap('u_role', {
+        'name': 'Role Specialist',
+        'email': 'spec@example.com',
+        'role': 'llg',
+        'status': 'active',
+      });
+      expect(fromRole.userType, 'llg');
+      expect(fromRole.isSpecialist, true);
+      expect(fromRole.isEligibleParent, false);
+
+      final fromAdminRole = UserModel.fromMap('u_admin_role', {
+        'name': 'Role Admin',
+        'email': 'adm@example.com',
+        'role': 'admin',
+        'status': 'active',
+      });
+      expect(fromAdminRole.userType, 'admin');
+      expect(fromAdminRole.isAdmin, true);
+      expect(fromAdminRole.isEligibleParent, false);
+    });
+
+    test('Parent deduplication correctly collapses duplicate stable user IDs without removing same-name distinct users', () {
+      final parentA = UserModel(
+        uid: 'uid_100',
+        name: 'Ananya Rao',
+        email: 'ananya.primary@example.com',
+        userType: 'parent',
+        status: 'active',
+        createdAt: now,
+      );
+      // Duplicate entry for the same user ID (e.g. from multiple collection queries or documents)
+      final parentADuplicate = UserModel(
+        uid: 'uid_100',
+        name: 'Ananya Rao',
+        email: 'ananya.alias@example.com',
+        userType: 'parent',
+        status: 'active',
+        createdAt: now,
+      );
+      // A different parent who happens to share the same display name
+      final parentBDifferentUidSameName = UserModel(
+        uid: 'uid_200',
+        name: 'Ananya Rao',
+        email: 'ananya.different@example.com',
+        userType: 'parent',
+        status: 'active',
+        createdAt: now,
+      );
+      // Ineligible specialist in raw list
+      final specialist = UserModel(
+        uid: 'uid_300',
+        name: 'Dr. Specialist',
+        email: 'spec@example.com',
+        userType: 'llg',
+        status: 'active',
+        createdAt: now,
+      );
+
+      final rawList = [parentA, parentADuplicate, parentBDifferentUidSameName, specialist];
+
+      final Map<String, UserModel> uniqueParents = {};
+      for (final p in rawList) {
+        if (AdminService.isEligibleParent(p)) {
+          uniqueParents.putIfAbsent(p.uid, () => p);
+        }
+      }
+
+      final filtered = uniqueParents.values.toList();
+      // Should have exactly 2 eligible parents (uid_100 and uid_200), specialist excluded, duplicate uid_100 removed
+      expect(filtered.length, 2);
+      expect(filtered.map((u) => u.uid).toSet(), equals({'uid_100', 'uid_200'}));
+      expect(filtered.any((u) => u.uid == 'uid_300'), false);
+    });
+  });
 }

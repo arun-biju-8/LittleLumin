@@ -31,7 +31,9 @@ class ReportPreviewDialog extends StatefulWidget {
     required SpecialistReportModel report,
     ChildModel? child,
     SpecialistCaseModel? caseModel,
+    SpecialistReportService? reportService,
     VoidCallback? onReportUpdated,
+    VoidCallback? onReportFinalized,
   }) {
     return showDialog(
       context: context,
@@ -40,7 +42,9 @@ class ReportPreviewDialog extends StatefulWidget {
         report: report,
         child: child,
         caseModel: caseModel,
+        reportService: reportService,
         onReportUpdated: onReportUpdated,
+        onReportFinalized: onReportFinalized,
       ),
     );
   }
@@ -54,6 +58,8 @@ class _ReportPreviewDialogState extends State<ReportPreviewDialog> {
   bool _isExporting = false;
   bool _isSharing = false;
   bool _isFinalizing = false;
+
+  SpecialistReportService get _service => widget.reportService ?? SpecialistReportService();
 
   static const Color colorNavy = Color(0xFF0F172A);
   static const Color colorSlate = Color(0xFF1E293B);
@@ -89,7 +95,7 @@ class _ReportPreviewDialogState extends State<ReportPreviewDialog> {
 
       if (success) {
         if (_currentReport.id.isNotEmpty) {
-          await SpecialistReportService().recordPdfExport(_currentReport.id);
+          await _service.recordPdfExport(_currentReport.id);
         }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -111,7 +117,11 @@ class _ReportPreviewDialogState extends State<ReportPreviewDialog> {
   }
 
   Future<void> _shareWithParent() async {
-    if (widget.caseModel == null && _currentReport.caseId.isEmpty) return;
+    final resolvedParentId = (widget.caseModel?.parentId.isNotEmpty == true)
+        ? widget.caseModel!.parentId
+        : ((widget.child?.parentId.isNotEmpty == true)
+            ? widget.child!.parentId
+            : _currentReport.parentId);
 
     final confirm = await showDialog<bool>(
       context: context,
@@ -138,15 +148,18 @@ class _ReportPreviewDialogState extends State<ReportPreviewDialog> {
 
     setState(() => _isSharing = true);
     try {
-      await SpecialistReportService().shareReportWithParent(
+      await _service.shareReportWithParent(
         reportId: _currentReport.id,
-        parentId: widget.caseModel?.parentId ?? '',
+        parentId: resolvedParentId,
         childName: _currentReport.childName,
         specialistName: _currentReport.specialistName,
       );
 
       setState(() {
-        _currentReport = _currentReport.copyWith(status: SpecialistReportStatus.shared);
+        _currentReport = _currentReport.copyWith(
+          status: SpecialistReportStatus.shared,
+          parentId: resolvedParentId.isNotEmpty ? resolvedParentId : _currentReport.parentId,
+        );
       });
       widget.onReportUpdated?.call();
 
@@ -167,17 +180,28 @@ class _ReportPreviewDialogState extends State<ReportPreviewDialog> {
   }
 
   Future<void> _finalizeReport() async {
+    final resolvedParentId = (widget.caseModel?.parentId.isNotEmpty == true)
+        ? widget.caseModel!.parentId
+        : ((widget.child?.parentId.isNotEmpty == true)
+            ? widget.child!.parentId
+            : _currentReport.parentId);
+
     setState(() => _isFinalizing = true);
     try {
-      await SpecialistReportService().updateReportStatus(
+      await _service.updateReportStatus(
         _currentReport.id,
         SpecialistReportStatus.finalized,
+        parentId: resolvedParentId,
       );
 
       setState(() {
-        _currentReport = _currentReport.copyWith(status: SpecialistReportStatus.finalized);
+        _currentReport = _currentReport.copyWith(
+          status: SpecialistReportStatus.finalized,
+          parentId: resolvedParentId.isNotEmpty ? resolvedParentId : _currentReport.parentId,
+        );
       });
       widget.onReportUpdated?.call();
+      widget.onReportFinalized?.call();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

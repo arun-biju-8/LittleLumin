@@ -131,7 +131,8 @@ class SpecialistReportModel {
 
   bool get isDraft => status == SpecialistReportStatus.draft;
   bool get isFinalized => status == SpecialistReportStatus.finalized;
-  bool get isShared => status == SpecialistReportStatus.shared;
+  bool get isShared => status == SpecialistReportStatus.shared || status == SpecialistReportStatus.finalized;
+  bool get isSharedWithParent => isShared;
   bool get isReadByParent => readByParentAt != null;
 
   Map<String, dynamic> toMap() {
@@ -151,7 +152,8 @@ class SpecialistReportModel {
       'growthAreas': growthAreas,
       'recommendations': recommendations,
       'status': status.name,
-      'isSharedWithParent': isShared,
+      'isSharedWithParent': isSharedWithParent,
+      'isShared': isShared,
       'generatedAt': Timestamp.fromDate(generatedAt),
       'finalizedAt': finalizedAt != null ? Timestamp.fromDate(finalizedAt!) : null,
       'sharedAt': sharedAt != null ? Timestamp.fromDate(sharedAt!) : null,

@@ -764,6 +764,7 @@ class _ReportCenterPageState extends State<ReportCenterPage> {
                         context,
                         report: report,
                         caseModel: matchingCase,
+                        reportService: _reportService,
                         onReportUpdated: () => setState(() {}),
                       );
                     },

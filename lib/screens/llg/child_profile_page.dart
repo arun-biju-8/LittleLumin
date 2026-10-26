@@ -939,101 +939,129 @@ class _ChildProfilePageState extends State<ChildProfilePage> with SingleTickerPr
                     origin = ActivityOrigin.preset;
                   }
 
-                  return Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: colorCard,
+                  return Material(
+                    color: Colors.transparent,
+                    child: InkWell(
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: colorBorder),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        CircleAvatar(
-                          backgroundColor: colorTeal.withOpacity(0.15),
-                          child: Icon(
-                            isMastered ? Icons.workspace_premium : Icons.play_lesson_outlined,
-                            color: isMastered ? colorEmerald : colorTeal,
-                            size: 20,
-                          ),
+                      onTap: () => _showActivityDetailDialog(e, allEvents: events),
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: colorCard,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: colorBorder),
                         ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Wrap(
-                                spacing: 8,
-                                crossAxisAlignment: WrapCrossAlignment.center,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            CircleAvatar(
+                              backgroundColor: colorTeal.withOpacity(0.15),
+                              child: Icon(
+                                isMastered ? Icons.workspace_premium : Icons.play_lesson_outlined,
+                                color: isMastered ? colorEmerald : colorTeal,
+                                size: 20,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    title,
-                                    style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                                  Wrap(
+                                    spacing: 8,
+                                    crossAxisAlignment: WrapCrossAlignment.center,
+                                    children: [
+                                      Text(
+                                        title,
+                                        style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                                      ),
+                                      ActivityOriginBadge(originOverride: origin, compact: true),
+                                    ],
                                   ),
-                                  ActivityOriginBadge(originOverride: origin, compact: true),
+                                  const SizedBox(height: 6),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 4,
+                                    crossAxisAlignment: WrapCrossAlignment.center,
+                                    children: [
+                                      Text(
+                                        'Domain: ${domain[0].toUpperCase()}${domain.substring(1)} • Level ${e['levelAtTime'] ?? 1}',
+                                        style: GoogleFonts.inter(fontSize: 12, color: colorTextMuted),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: (isMastered ? colorEmerald : colorAmber).withOpacity(0.15),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          isMastered ? 'Mastered (≥70%) 🏆' : 'Completed (Practice needed)',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: isMastered ? colorEmerald : colorAmber,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ],
                               ),
-                              const SizedBox(height: 6),
-                              Row(
-                                children: [
-                                  Text(
-                                    'Domain: ${domain[0].toUpperCase()}${domain.substring(1)} • Level ${e['levelAtTime'] ?? 1}',
-                                    style: GoogleFonts.inter(fontSize: 12, color: colorTextMuted),
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  '${delta >= 0 ? '+' : ''}${delta.toStringAsFixed(1)} pts',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: delta >= 0 ? colorEmerald : Colors.redAccent,
                                   ),
-                                  const SizedBox(width: 12),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: (isMastered ? colorEmerald : colorAmber).withOpacity(0.15),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      isMastered ? 'Mastered (≥70%) 🏆' : 'Completed (Practice needed)',
-                                      style: GoogleFonts.inter(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                        color: isMastered ? colorEmerald : colorAmber,
+                                ),
+                                Text(
+                                  'Score: ${scoreAfter.toStringAsFixed(1)}%',
+                                  style: GoogleFonts.inter(fontSize: 11, color: colorTextMuted),
+                                ),
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 8,
+                                  children: [
+                                    OutlinedButton.icon(
+                                      onPressed: () => _showActivityDetailDialog(e, allEvents: events),
+                                      icon: const Icon(Icons.analytics_outlined, size: 12, color: colorTeal),
+                                      label: const Text('View Record', style: TextStyle(color: colorTeal, fontSize: 11)),
+                                      style: OutlinedButton.styleFrom(
+                                        side: const BorderSide(color: colorTeal),
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        minimumSize: Size.zero,
+                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              '${delta >= 0 ? '+' : ''}${delta.toStringAsFixed(1)} pts',
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                color: delta >= 0 ? colorEmerald : Colors.redAccent,
-                              ),
-                            ),
-                            Text(
-                              'Score: ${scoreAfter.toStringAsFixed(1)}%',
-                              style: GoogleFonts.inter(fontSize: 11, color: colorTextMuted),
-                            ),
-                            const SizedBox(height: 6),
-                            InkWell(
-                              onTap: () => _openChat(activityTitle: title),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.chat_bubble_outline, size: 12, color: colorTeal),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'Discuss',
-                                    style: GoogleFonts.inter(fontSize: 11, color: colorTeal, fontWeight: FontWeight.w600),
-                                  ),
-                                ],
-                              ),
+                                    InkWell(
+                                      onTap: () => _openChat(activityTitle: title),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(vertical: 4),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(Icons.chat_bubble_outline, size: 12, color: colorTeal),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'Discuss',
+                                              style: GoogleFonts.inter(fontSize: 11, color: colorTeal, fontWeight: FontWeight.w600),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
                           ],
                         ),
-                      ],
+                      ),
                     ),
                   );
                 },
@@ -1208,71 +1236,98 @@ class _ChildProfilePageState extends State<ChildProfilePage> with SingleTickerPr
                   final confidence = fb['confidence'] ?? 'Good';
                   final notes = fb['notes'] ?? '';
 
-                  return Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: colorCard,
+                  return Material(
+                    color: Colors.transparent,
+                    child: InkWell(
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: colorBorder),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              title,
-                              style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: colorTeal.withOpacity(0.15),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                childResponse,
-                                style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: colorTeal),
-                              ),
-                            ),
-                          ],
+                      onTap: () => _showActivityDetailDialog(e, allEvents: feedbackItems),
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: colorCard,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: colorBorder),
                         ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 12,
-                          runSpacing: 6,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _buildFeedbackChip('Domain', domain),
-                            _buildFeedbackChip('Engagement', engagement),
-                            _buildFeedbackChip('Perceived Difficulty', difficulty),
-                            _buildFeedbackChip('Parent Confidence', confidence),
-                          ],
-                        ),
-                        if (notes.isNotEmpty) ...[
-                          const SizedBox(height: 12),
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: colorNavy,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Icon(Icons.format_quote_rounded, color: colorTextMuted, size: 16),
-                                const SizedBox(width: 6),
                                 Expanded(
                                   child: Text(
-                                    notes,
-                                    style: GoogleFonts.inter(fontSize: 12, color: Colors.white70, height: 1.4),
+                                    title,
+                                    style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: colorTeal.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    childResponse,
+                                    style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: colorTeal),
                                   ),
                                 ),
                               ],
                             ),
-                          ),
-                        ],
-                      ],
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 12,
+                              runSpacing: 6,
+                              children: [
+                                _buildFeedbackChip('Domain', domain),
+                                _buildFeedbackChip('Engagement', engagement),
+                                _buildFeedbackChip('Perceived Difficulty', difficulty),
+                                _buildFeedbackChip('Parent Confidence', confidence),
+                              ],
+                            ),
+                            if (notes.isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: colorNavy,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Icon(Icons.format_quote_rounded, color: colorTextMuted, size: 16),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        notes,
+                                        style: GoogleFonts.inter(fontSize: 12, color: Colors.white70, height: 1.4),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                OutlinedButton.icon(
+                                  onPressed: () => _showActivityDetailDialog(e, allEvents: feedbackItems),
+                                  icon: const Icon(Icons.analytics_outlined, size: 12, color: colorTeal),
+                                  label: const Text('Inspect Response Record', style: TextStyle(color: colorTeal, fontSize: 11)),
+                                  style: OutlinedButton.styleFrom(
+                                    side: const BorderSide(color: colorTeal),
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   );
                 },
@@ -1532,8 +1587,11 @@ class _ChildProfilePageState extends State<ChildProfilePage> with SingleTickerPr
       context: context,
       builder: (ctx) => ReportPreviewDialog(
         report: report,
+        child: _currentChild,
+        caseModel: _currentCase,
         reportService: _reportService,
         onReportFinalized: () => setState(() {}),
+        onReportUpdated: () => setState(() {}),
       ),
     );
   }
@@ -1805,97 +1863,119 @@ class _ChildProfilePageState extends State<ChildProfilePage> with SingleTickerPr
                   final rec = recs[index];
                   final isCompleted = rec.status == RecommendationStatus.completed;
 
-                  return Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: colorCard,
+                  return Material(
+                    color: Colors.transparent,
+                    child: InkWell(
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: colorBorder),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      onTap: () => _showRecommendationDetailDialog(rec),
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: colorCard,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: colorBorder),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              child: Text(
-                                rec.title,
-                                style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: (isCompleted ? colorEmerald : colorAmber).withOpacity(0.15),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                rec.status.name.toUpperCase(),
-                                style: GoogleFonts.inter(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: isCompleted ? colorEmerald : colorAmber,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Domain: ${rec.skillDomain[0].toUpperCase()}${rec.skillDomain.substring(1)} • Recommended on ${DateFormat.yMMMd().format(rec.recommendedAt)}',
-                          style: GoogleFonts.inter(fontSize: 11, color: colorTextMuted),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          rec.rationale,
-                          style: GoogleFonts.inter(fontSize: 12, color: Colors.white70, height: 1.4),
-                        ),
-                        if (rec.hasParentResponded) ...[
-                          const SizedBox(height: 12),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: colorNavy,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: colorEmerald.withOpacity(0.3)),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Row(
-                                  children: [
-                                    const Icon(Icons.reply_outlined, size: 14, color: colorEmerald),
-                                    const SizedBox(width: 6),
-                                    Text('Parent Response: ${rec.parentResponse.name.toUpperCase()}',
-                                        style: GoogleFonts.inter(fontSize: 11, color: colorEmerald, fontWeight: FontWeight.bold)),
-                                  ],
+                                Expanded(
+                                  child: Text(
+                                    rec.title,
+                                    style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+                                  ),
                                 ),
-                                if (rec.parentFeedback != null && rec.parentFeedback!.isNotEmpty) ...[
-                                  const SizedBox(height: 4),
-                                  Text('"${rec.parentFeedback!}"',
-                                      style: GoogleFonts.inter(fontSize: 12, color: Colors.white70, fontStyle: FontStyle.italic)),
-                                ],
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: (isCompleted ? colorEmerald : colorAmber).withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    rec.status.name.toUpperCase(),
+                                    style: GoogleFonts.inter(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: isCompleted ? colorEmerald : colorAmber,
+                                    ),
+                                  ),
+                                ),
                               ],
                             ),
-                          ),
-                        ],
-                        const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            OutlinedButton.icon(
-                              onPressed: () => _openChat(recTitle: rec.title),
-                              icon: const Icon(Icons.chat_bubble_outline, size: 14, color: colorTeal),
-                              label: const Text('Discuss with Parent', style: TextStyle(color: colorTeal, fontSize: 12)),
-                              style: OutlinedButton.styleFrom(
-                                side: const BorderSide(color: colorTeal),
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Domain: ${rec.skillDomain[0].toUpperCase()}${rec.skillDomain.substring(1)} • Recommended on ${DateFormat.yMMMd().format(rec.recommendedAt)}',
+                              style: GoogleFonts.inter(fontSize: 11, color: colorTextMuted),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              rec.rationale,
+                              style: GoogleFonts.inter(fontSize: 12, color: Colors.white70, height: 1.4),
+                            ),
+                            if (rec.hasParentResponded) ...[
+                              const SizedBox(height: 12),
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: colorNavy,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: colorEmerald.withOpacity(0.3)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.reply_outlined, size: 14, color: colorEmerald),
+                                        const SizedBox(width: 6),
+                                        Text('Parent Response: ${rec.parentResponse.name.toUpperCase()}',
+                                            style: GoogleFonts.inter(fontSize: 11, color: colorEmerald, fontWeight: FontWeight.bold)),
+                                      ],
+                                    ),
+                                    if (rec.parentFeedback != null && rec.parentFeedback!.isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      Text('"${rec.parentFeedback!}"',
+                                          style: GoogleFonts.inter(fontSize: 12, color: Colors.white70, fontStyle: FontStyle.italic)),
+                                    ],
+                                  ],
+                                ),
                               ),
+                            ],
+                            const SizedBox(height: 12),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              alignment: WrapAlignment.end,
+                              children: [
+                                ElevatedButton.icon(
+                                  onPressed: () => _showRecommendationDetailDialog(rec),
+                                  icon: const Icon(Icons.rate_review_outlined, size: 14),
+                                  label: Text(
+                                    rec.hasParentResponded ? 'Review Response & Feedback' : 'View Full Details & Steps',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: rec.hasParentResponded ? colorEmerald : const Color(0xFF6366F1),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  ),
+                                ),
+                                OutlinedButton.icon(
+                                  onPressed: () => _openChat(recTitle: rec.title),
+                                  icon: const Icon(Icons.chat_bubble_outline, size: 14, color: colorTeal),
+                                  label: const Text('Discuss with Parent', style: TextStyle(color: colorTeal, fontSize: 12)),
+                                  style: OutlinedButton.styleFrom(
+                                    side: const BorderSide(color: colorTeal),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
-                      ],
+                      ),
                     ),
                   );
                 },
@@ -2715,6 +2795,972 @@ class _ChildProfilePageState extends State<ChildProfilePage> with SingleTickerPr
     }
 
     return result;
+  }
+
+  Widget _buildMetricCol(String label, String value, Color color) {
+    return Column(
+      children: [
+        Text(label, style: GoogleFonts.inter(fontSize: 11, color: colorTextMuted)),
+        const SizedBox(height: 4),
+        Text(value, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: color)),
+      ],
+    );
+  }
+
+  Widget _buildMetricDivider() {
+    return Container(width: 1, height: 28, color: colorBorder);
+  }
+
+  Widget _buildFeedbackFieldRow({
+    required IconData icon,
+    required String label,
+    required String value,
+    Color? valueColor,
+    bool isBold = false,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: colorTeal),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: GoogleFonts.inter(fontSize: 11, color: colorTextMuted, fontWeight: FontWeight.w500)),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
+                  color: valueColor ?? Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showActivityDetailDialog(
+    Map<String, dynamic> selectedEvent, {
+    List<Map<String, dynamic>>? allEvents,
+  }) {
+    // 1. DPDP Consent & Case Authorization Check
+    if (!_currentCase.canAccessChildData) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⚠️ Access restricted: Active parent consent is required to view clinical activity responses.'),
+          backgroundColor: colorAmber,
+        ),
+      );
+      return;
+    }
+
+    // 2. Child Ownership & Specialist Assignment Verification
+    final user = _auth?.currentUser;
+    if (user != null && _currentCase.specialistId.isNotEmpty && _currentCase.specialistId != user.uid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⚠️ Access restricted: You are not assigned as the specialist for this case.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    final currentTitle = selectedEvent['activityTitle'] ?? 'Activity';
+    final currentActivityId = selectedEvent['activityId'] ?? '';
+
+    // Group all attempts for this activity
+    final matchingAttempts = (allEvents ?? [selectedEvent]).where((it) {
+      final itTitle = it['activityTitle'];
+      final itId = it['activityId'];
+      if (currentActivityId.isNotEmpty && itId == currentActivityId) return true;
+      if (currentTitle.isNotEmpty && itTitle == currentTitle) return true;
+      return false;
+    }).toList();
+
+    if (!matchingAttempts.contains(selectedEvent)) {
+      matchingAttempts.insert(0, selectedEvent);
+    }
+
+    int selectedAttemptIdx = matchingAttempts.indexOf(selectedEvent);
+    if (selectedAttemptIdx < 0) selectedAttemptIdx = 0;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final attempt = matchingAttempts[selectedAttemptIdx];
+            final title = attempt['activityTitle'] ?? 'Activity';
+            final domain = attempt['skillDomain'] ?? 'cognitive';
+            final delta = (attempt['appliedScoreDelta'] is num) ? (attempt['appliedScoreDelta'] as num).toDouble() : 0.0;
+            final scoreBefore = (attempt['scoreBefore'] is num) ? (attempt['scoreBefore'] as num).toDouble() : 0.0;
+            final scoreAfter = (attempt['scoreAfter'] is num) ? (attempt['scoreAfter'] as num).toDouble() : 0.0;
+            final level = attempt['levelAtTime'] ?? 1;
+            final source = attempt['activitySource'] ?? 'preset';
+            final isMastered = scoreAfter >= 70.0;
+
+            final tsRaw = attempt['createdAt'] ?? attempt['timestamp'];
+            DateTime completionDate;
+            if (tsRaw is Timestamp) {
+              completionDate = tsRaw.toDate();
+            } else if (tsRaw is DateTime) {
+              completionDate = tsRaw;
+            } else {
+              completionDate = DateTime.now();
+            }
+
+            final feedbackMap = attempt['feedback'] is Map
+                ? Map<String, dynamic>.from(attempt['feedback'] as Map)
+                : null;
+
+            ActivityOrigin origin;
+            if (source == 'ai_generated' || source == 'ai') {
+              origin = ActivityOrigin.aiGenerated;
+            } else if (source == 'llg_recommended' || source == 'llg_assigned') {
+              origin = ActivityOrigin.llgRecommended;
+            } else {
+              origin = ActivityOrigin.preset;
+            }
+
+            return Dialog(
+              backgroundColor: colorSlate,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              child: Container(
+                width: 650,
+                constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
+                child: Column(
+                  children: [
+                    // Modal Header
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(20, 16, 16, 16),
+                      decoration: const BoxDecoration(
+                        color: colorNavy,
+                        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                        border: Border(bottom: BorderSide(color: colorBorder)),
+                      ),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 18,
+                            backgroundColor: colorTeal.withOpacity(0.15),
+                            child: Icon(
+                              isMastered ? Icons.workspace_premium : Icons.play_lesson_outlined,
+                              color: isMastered ? colorEmerald : colorTeal,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        title,
+                                        style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    ActivityOriginBadge(originOverride: origin, compact: true),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Domain: ${domain[0].toUpperCase()}${domain.substring(1)} • Completed ${DateFormat.yMMMd().add_jm().format(completionDate)}',
+                                  style: GoogleFonts.inter(fontSize: 11, color: colorTextMuted),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            icon: const Icon(Icons.close, color: colorTextMuted, size: 20),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Scrollable Body
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Attempt history switcher if multiple attempts exist
+                            if (matchingAttempts.length > 1) ...[
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                margin: const EdgeInsets.only(bottom: 16),
+                                decoration: BoxDecoration(
+                                  color: colorNavy,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: colorBorder),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          'Attempt History (${matchingAttempts.length} Recorded Sessions)',
+                                          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: colorTeal),
+                                        ),
+                                        Text(
+                                          'Viewing Attempt ${selectedAttemptIdx + 1} of ${matchingAttempts.length}',
+                                          style: GoogleFonts.inter(fontSize: 11, color: colorTextMuted),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 6,
+                                      children: List.generate(matchingAttempts.length, (idx) {
+                                        final isSel = idx == selectedAttemptIdx;
+                                        final attTsRaw = matchingAttempts[idx]['createdAt'] ?? matchingAttempts[idx]['timestamp'];
+                                        final attDate = attTsRaw is Timestamp ? attTsRaw.toDate() : (attTsRaw is DateTime ? attTsRaw : DateTime.now());
+                                        return ChoiceChip(
+                                          label: Text('Attempt ${idx + 1} (${DateFormat.MMMd().format(attDate)})'),
+                                          selected: isSel,
+                                          selectedColor: colorTeal,
+                                          backgroundColor: colorSlate,
+                                          labelStyle: GoogleFonts.inter(
+                                            fontSize: 11,
+                                            fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
+                                            color: isSel ? Colors.white : colorTextMuted,
+                                          ),
+                                          onSelected: (val) {
+                                            if (val) setModalState(() => selectedAttemptIdx = idx);
+                                          },
+                                        );
+                                      }),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+
+                            // Child and Case Identifiers
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              margin: const EdgeInsets.only(bottom: 16),
+                              decoration: BoxDecoration(
+                                color: colorNavy,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: colorBorder),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text('Child: ${_currentChild.name} • Parent: ${_currentCase.parentName}',
+                                            style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'Activity ID: ${currentActivityId.isNotEmpty ? currentActivityId : 'custom'} • Event: ${attempt['eventId'] ?? attempt['id'] ?? 'ledger_entry'}',
+                                          style: GoogleFonts.inter(fontSize: 10, color: colorTextMuted),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: (isMastered ? colorEmerald : colorAmber).withOpacity(0.15),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: (isMastered ? colorEmerald : colorAmber).withOpacity(0.4)),
+                                    ),
+                                    child: Text(
+                                      isMastered ? 'Mastered 🏆' : 'Practice Completed',
+                                      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: isMastered ? colorEmerald : colorAmber),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            // Score & Progression Impact
+                            Text('Automated Score Progression & Level Impact',
+                                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white)),
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: colorNavy,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: colorBorder),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                children: [
+                                  _buildMetricCol('Score Delta', '${delta >= 0 ? '+' : ''}${delta.toStringAsFixed(1)} pts',
+                                      delta >= 0 ? colorEmerald : Colors.redAccent),
+                                  _buildMetricDivider(),
+                                  _buildMetricCol('Score Progression', '${scoreBefore.toStringAsFixed(1)}% → ${scoreAfter.toStringAsFixed(1)}%', Colors.white),
+                                  _buildMetricDivider(),
+                                  _buildMetricCol('Level at Time', 'Level $level', colorTeal),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+
+                            // Parent-Submitted Feedback (Field by Field)
+                            Text('Parent-Submitted Response & Field Feedback',
+                                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white)),
+                            const SizedBox(height: 8),
+                            if (feedbackMap != null && feedbackMap.isNotEmpty) ...[
+                              Container(
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: colorNavy,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: colorEmerald.withOpacity(0.3)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildFeedbackFieldRow(
+                                      icon: Icons.check_circle_outline,
+                                      label: 'Child Response / Outcome',
+                                      value: (feedbackMap['childResponse'] ?? 'Completed').toString(),
+                                      valueColor: colorEmerald,
+                                      isBold: true,
+                                    ),
+                                    const Divider(color: colorBorder, height: 16),
+                                    _buildFeedbackFieldRow(
+                                      icon: Icons.sentiment_satisfied_alt_outlined,
+                                      label: 'Reaction & Engagement',
+                                      value: (feedbackMap['engagement'] ?? 'Moderate').toString(),
+                                    ),
+                                    const Divider(color: colorBorder, height: 16),
+                                    _buildFeedbackFieldRow(
+                                      icon: Icons.trending_up,
+                                      label: 'Perceived Difficulty',
+                                      value: (feedbackMap['difficulty'] ?? 'Appropriate').toString(),
+                                    ),
+                                    const Divider(color: colorBorder, height: 16),
+                                    _buildFeedbackFieldRow(
+                                      icon: Icons.thumb_up_alt_outlined,
+                                      label: 'Parent Confidence',
+                                      value: (feedbackMap['confidence'] ?? 'Good').toString(),
+                                    ),
+                                    if (feedbackMap['timeEstimate'] != null) ...[
+                                      const Divider(color: colorBorder, height: 16),
+                                      _buildFeedbackFieldRow(
+                                        icon: Icons.timer_outlined,
+                                        label: 'Duration / Time Spent',
+                                        value: feedbackMap['timeEstimate'].toString(),
+                                      ),
+                                    ],
+                                    if ((feedbackMap['notes'] ?? '').toString().trim().isNotEmpty) ...[
+                                      const Divider(color: colorBorder, height: 16),
+                                      Text('Parent Observations & Notes:',
+                                          style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: colorTextMuted)),
+                                      const SizedBox(height: 6),
+                                      Container(
+                                        padding: const EdgeInsets.all(10),
+                                        decoration: BoxDecoration(
+                                          color: colorSlate,
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          '"${feedbackMap['notes']}"',
+                                          style: GoogleFonts.inter(fontSize: 12, color: Colors.white, fontStyle: FontStyle.italic, height: 1.4),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ] else ...[
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: colorNavy,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: colorBorder),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.info_outline, size: 18, color: colorTextMuted),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        'No specific parent feedback notes recorded for this attempt session.',
+                                        style: GoogleFonts.inter(fontSize: 12, color: colorTextMuted),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 20),
+
+                            // Original Recommendation / Instructions lookup if available
+                            FutureBuilder<QuerySnapshot>(
+                              future: _firestore?.collection('recommendations')
+                                  .where('childId', isEqualTo: _currentChild.childId)
+                                  .where('title', isEqualTo: title)
+                                  .limit(1)
+                                  .get(),
+                              builder: (context, recSnap) {
+                                if (recSnap.hasData && recSnap.data != null && recSnap.data!.docs.isNotEmpty) {
+                                  final recData = recSnap.data!.docs.first.data() as Map<String, dynamic>;
+                                  final rationale = recData['rationale'] ?? '';
+                                  final instructionsRaw = recData['instructions'];
+
+                                  List<String> instructions = [];
+                                  if (instructionsRaw is List) {
+                                    instructions = instructionsRaw.map((e) => e.toString()).toList();
+                                  } else if (instructionsRaw is String && instructionsRaw.isNotEmpty) {
+                                    instructions = [instructionsRaw];
+                                  }
+
+                                  return Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('Prescribed Guidance & Instructions',
+                                          style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white)),
+                                      const SizedBox(height: 8),
+                                      Container(
+                                        padding: const EdgeInsets.all(14),
+                                        decoration: BoxDecoration(
+                                          color: colorNavy,
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(color: colorBorder),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            if (rationale.isNotEmpty) ...[
+                                              Text('Specialist Rationale:',
+                                                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: colorTeal)),
+                                              const SizedBox(height: 4),
+                                              Text(rationale, style: GoogleFonts.inter(fontSize: 12, color: Colors.white70)),
+                                              const SizedBox(height: 10),
+                                            ],
+                                            if (instructions.isNotEmpty) ...[
+                                              Text('Step-by-Step Instructions:',
+                                                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: colorTeal)),
+                                              const SizedBox(height: 6),
+                                              ...instructions.asMap().entries.map((step) => Padding(
+                                                    padding: const EdgeInsets.only(bottom: 6),
+                                                    child: Row(
+                                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                                      children: [
+                                                        Container(
+                                                          width: 18,
+                                                          height: 18,
+                                                          margin: const EdgeInsets.only(right: 8, top: 1),
+                                                          decoration: BoxDecoration(
+                                                            color: colorTeal.withOpacity(0.2),
+                                                            shape: BoxShape.circle,
+                                                          ),
+                                                          alignment: Alignment.center,
+                                                          child: Text('${step.key + 1}',
+                                                              style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: colorTeal)),
+                                                        ),
+                                                        Expanded(
+                                                          child: Text(step.value,
+                                                              style: GoogleFonts.inter(fontSize: 12, color: Colors.white, height: 1.3)),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  )),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(height: 20),
+                                    ],
+                                  );
+                                }
+                                return const SizedBox.shrink();
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // Modal Footer Actions
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: const BoxDecoration(
+                        color: colorNavy,
+                        borderRadius: BorderRadius.vertical(bottom: Radius.circular(16)),
+                        border: Border(top: BorderSide(color: colorBorder)),
+                      ),
+                      child: Wrap(
+                        spacing: 10,
+                        runSpacing: 8,
+                        alignment: WrapAlignment.end,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              _openChat(activityTitle: title);
+                            },
+                            icon: const Icon(Icons.chat_bubble_outline, size: 14, color: colorTeal),
+                            label: const Text('Discuss with Parent in Chat', style: TextStyle(color: colorTeal, fontSize: 12)),
+                            style: OutlinedButton.styleFrom(side: const BorderSide(color: colorTeal)),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => AddObservationPage(
+                                    child: _currentChild,
+                                    onSuccess: () => setState(() {}),
+                                  ),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.note_add_outlined, size: 14, color: colorAmber),
+                            label: const Text('Record Observation Note', style: TextStyle(color: colorAmber, fontSize: 12)),
+                            style: OutlinedButton.styleFrom(side: const BorderSide(color: colorAmber)),
+                          ),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => SendRecommendationPage(
+                                    child: _currentChild,
+                                    specialistCase: _currentCase,
+                                    initialDomain: domain,
+                                    initialRationale: 'Follow-up intervention based on performance and feedback in "$title".',
+                                  ),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.recommend_outlined, size: 14),
+                            label: const Text('Send Follow-up Recommendation', style: TextStyle(fontSize: 12)),
+                            style: ElevatedButton.styleFrom(backgroundColor: colorEmerald, foregroundColor: Colors.white),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showRecommendationDetailDialog(RecommendationModel rec) {
+    // 1. DPDP Consent & Case Authorization Check
+    if (!_currentCase.canAccessChildData) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⚠️ Access restricted: Active parent consent is required to view recommendation details.'),
+          backgroundColor: colorAmber,
+        ),
+      );
+      return;
+    }
+
+    // 2. Child Ownership & Specialist Assignment Verification
+    final user = _auth?.currentUser;
+    if (user != null && _currentCase.specialistId.isNotEmpty && _currentCase.specialistId != user.uid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⚠️ Access restricted: You are not assigned as the specialist for this case.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    final reviewFeedbackCtrl = TextEditingController(text: rec.llgFeedback ?? '');
+    final nextStepsCtrl = TextEditingController(text: rec.nextSteps ?? '');
+    RecommendationStatus selectedStatus = rec.status;
+    bool isSavingReview = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final isCompleted = rec.status == RecommendationStatus.completed;
+
+            return Dialog(
+              backgroundColor: colorSlate,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              child: Container(
+                width: 650,
+                constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
+                child: Column(
+                  children: [
+                    // Header
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(20, 16, 16, 16),
+                      decoration: const BoxDecoration(
+                        color: colorNavy,
+                        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                        border: Border(bottom: BorderSide(color: colorBorder)),
+                      ),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 18,
+                            backgroundColor: colorTeal.withOpacity(0.15),
+                            child: const Icon(Icons.recommend_outlined, color: colorTeal, size: 20),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  rec.title,
+                                  style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Domain: ${rec.skillDomain[0].toUpperCase()}${rec.skillDomain.substring(1)} • Recommended on ${DateFormat.yMMMd().format(rec.recommendedAt)}',
+                                  style: GoogleFonts.inter(fontSize: 11, color: colorTextMuted),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            icon: const Icon(Icons.close, color: colorTextMuted, size: 20),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Body
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Status & Meta
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: (isCompleted ? colorEmerald : colorAmber).withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: (isCompleted ? colorEmerald : colorAmber).withOpacity(0.4)),
+                                  ),
+                                  child: Text(
+                                    'STATUS: ${rec.status.name.toUpperCase()}',
+                                    style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: isCompleted ? colorEmerald : colorAmber),
+                                  ),
+                                ),
+                                Text(
+                                  '${rec.durationMinutes} min • ${rec.frequency}',
+                                  style: GoogleFonts.inter(fontSize: 12, color: colorTextMuted, fontWeight: FontWeight.w500),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Clinical Rationale
+                            Text('Clinical / Educational Rationale',
+                                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white)),
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              width: double.infinity,
+                              decoration: BoxDecoration(color: colorNavy, borderRadius: BorderRadius.circular(8), border: Border.all(color: colorBorder)),
+                              child: Text(rec.rationale, style: GoogleFonts.inter(fontSize: 12, color: Colors.white70, height: 1.4)),
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Materials
+                            if (rec.materials.isNotEmpty) ...[
+                              Text('Materials Required',
+                                  style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white)),
+                              const SizedBox(height: 6),
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                width: double.infinity,
+                                decoration: BoxDecoration(color: colorNavy, borderRadius: BorderRadius.circular(8), border: Border.all(color: colorBorder)),
+                                child: Text(rec.materials.join(', '), style: GoogleFonts.inter(fontSize: 12, color: Colors.white70)),
+                              ),
+                              const SizedBox(height: 16),
+                            ],
+
+                            // Step-by-Step Instructions
+                            Text('Instructions & Guidance Steps',
+                                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white)),
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(color: colorNavy, borderRadius: BorderRadius.circular(8), border: Border.all(color: colorBorder)),
+                              child: Column(
+                                children: rec.instructions.asMap().entries.map((step) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        width: 20,
+                                        height: 20,
+                                        margin: const EdgeInsets.only(right: 8, top: 1),
+                                        decoration: BoxDecoration(color: colorTeal.withOpacity(0.2), shape: BoxShape.circle),
+                                        alignment: Alignment.center,
+                                        child: Text('${step.key + 1}',
+                                            style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: colorTeal)),
+                                      ),
+                                      Expanded(
+                                        child: Text(step.value, style: GoogleFonts.inter(fontSize: 12, color: Colors.white, height: 1.4)),
+                                      ),
+                                    ],
+                                  ),
+                                )).toList(),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Parent Response Section
+                            Text('Parent-Submitted Response & Feedback',
+                                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white)),
+                            const SizedBox(height: 6),
+                            if (rec.hasParentResponded) ...[
+                              Container(
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: colorNavy,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: colorEmerald.withOpacity(0.3)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildFeedbackFieldRow(
+                                      icon: Icons.reply_outlined,
+                                      label: 'Parent Response',
+                                      value: rec.parentResponse.name.toUpperCase().replaceAll('_', ' '),
+                                      valueColor: colorEmerald,
+                                      isBold: true,
+                                    ),
+                                    if (rec.parentRespondedAt != null) ...[
+                                      const Divider(color: colorBorder, height: 16),
+                                      _buildFeedbackFieldRow(
+                                        icon: Icons.access_time_outlined,
+                                        label: 'Responded At',
+                                        value: DateFormat.yMMMd().add_jm().format(rec.parentRespondedAt!),
+                                      ),
+                                    ],
+                                    if (rec.skippedReason != null && rec.skippedReason!.isNotEmpty) ...[
+                                      const Divider(color: colorBorder, height: 16),
+                                      _buildFeedbackFieldRow(
+                                        icon: Icons.not_interested_outlined,
+                                        label: 'Reason for Skipping',
+                                        value: rec.skippedReason!,
+                                        valueColor: colorAmber,
+                                      ),
+                                    ],
+                                    if (rec.parentFeedback != null && rec.parentFeedback!.isNotEmpty) ...[
+                                      const Divider(color: colorBorder, height: 16),
+                                      Text('Parent Feedback Notes:',
+                                          style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: colorTextMuted)),
+                                      const SizedBox(height: 6),
+                                      Container(
+                                        padding: const EdgeInsets.all(10),
+                                        decoration: BoxDecoration(color: colorSlate, borderRadius: BorderRadius.circular(6)),
+                                        child: Text(
+                                          '"${rec.parentFeedback!}"',
+                                          style: GoogleFonts.inter(fontSize: 12, color: Colors.white, fontStyle: FontStyle.italic, height: 1.4),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ] else ...[
+                              Container(
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(color: colorNavy, borderRadius: BorderRadius.circular(8), border: Border.all(color: colorBorder)),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.hourglass_empty_rounded, size: 18, color: colorAmber),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text('Parent has not yet submitted a response for this recommendation.',
+                                          style: GoogleFonts.inter(fontSize: 12, color: colorTextMuted)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 20),
+
+                            // Specialist Review & Follow-up Section
+                            Text('Specialist Review & Follow-up Guidance',
+                                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white)),
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: colorNavy,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: colorTeal.withOpacity(0.3)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Clinical Review Notes for Case File', style: GoogleFonts.inter(color: colorTextMuted, fontSize: 11)),
+                                  const SizedBox(height: 6),
+                                  TextField(
+                                    controller: reviewFeedbackCtrl,
+                                    maxLines: 2,
+                                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                                    decoration: _inputDecoration('e.g., Child completed motor steps with good bilateral control...'),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text('Recommended Next Steps / Intervention Adjustments', style: GoogleFonts.inter(color: colorTextMuted, fontSize: 11)),
+                                  const SizedBox(height: 6),
+                                  TextField(
+                                    controller: nextStepsCtrl,
+                                    maxLines: 2,
+                                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                                    decoration: _inputDecoration('e.g., Advance to unassisted balance activities; review in 7 days...'),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: DropdownButtonFormField<RecommendationStatus>(
+                                          value: selectedStatus,
+                                          dropdownColor: colorSlate,
+                                          style: const TextStyle(color: Colors.white, fontSize: 12),
+                                          decoration: _inputDecoration('Status'),
+                                          items: RecommendationStatus.values.map((s) => DropdownMenuItem(
+                                            value: s,
+                                            child: Text(s.name.toUpperCase()),
+                                          )).toList(),
+                                          onChanged: (val) {
+                                            if (val != null) setModalState(() => selectedStatus = val);
+                                          },
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      ElevatedButton.icon(
+                                        onPressed: isSavingReview ? null : () async {
+                                          setModalState(() => isSavingReview = true);
+                                          try {
+                                            await _recService.submitLLGReview(
+                                              recommendationId: rec.id,
+                                              llgFeedback: reviewFeedbackCtrl.text.trim(),
+                                              nextSteps: nextStepsCtrl.text.trim(),
+                                              newStatus: selectedStatus,
+                                            );
+                                            if (mounted) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                const SnackBar(content: Text('✅ Specialist review saved successfully!'), backgroundColor: colorEmerald),
+                                              );
+                                              Navigator.pop(ctx);
+                                              setState(() {});
+                                            }
+                                          } catch (e) {
+                                            if (mounted) {
+                                              setModalState(() => isSavingReview = false);
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(content: Text('❌ Error saving review: $e'), backgroundColor: Colors.redAccent),
+                                              );
+                                            }
+                                          }
+                                        },
+                                        icon: isSavingReview
+                                            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                            : const Icon(Icons.save_outlined, size: 14),
+                                        label: const Text('Save Review', style: TextStyle(fontSize: 12)),
+                                        style: ElevatedButton.styleFrom(backgroundColor: colorTeal, foregroundColor: Colors.white),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // Footer
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: const BoxDecoration(
+                        color: colorNavy,
+                        borderRadius: BorderRadius.vertical(bottom: Radius.circular(16)),
+                        border: Border(top: BorderSide(color: colorBorder)),
+                      ),
+                      child: Wrap(
+                        spacing: 10,
+                        runSpacing: 8,
+                        alignment: WrapAlignment.end,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              _openChat(recTitle: rec.title);
+                            },
+                            icon: const Icon(Icons.chat_bubble_outline, size: 14, color: colorTeal),
+                            label: const Text('Discuss with Parent in Chat', style: TextStyle(color: colorTeal, fontSize: 12)),
+                            style: OutlinedButton.styleFrom(side: const BorderSide(color: colorTeal)),
+                          ),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => SendRecommendationPage(
+                                    child: _currentChild,
+                                    specialistCase: _currentCase,
+                                    initialDomain: rec.skillDomain,
+                                    initialRationale: 'Follow-up progression based on "${rec.title}".',
+                                  ),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.recommend_outlined, size: 14),
+                            label: const Text('Send Follow-up Recommendation', style: TextStyle(fontSize: 12)),
+                            style: ElevatedButton.styleFrom(backgroundColor: colorEmerald, foregroundColor: Colors.white),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   void _openChat({String? activityTitle, String? recTitle}) {

@@ -1153,9 +1153,26 @@ class _AdminLLGManagementViewState extends State<AdminLLGManagementView> with Si
                   Text('1. Select Parent Account', style: GoogleFonts.inter(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 6),
                   StreamBuilder<List<UserModel>>(
-                    stream: widget.adminService.getUsersStream(roleFilter: 'parent'),
+                    stream: widget.adminService.getEligibleParentsStream(),
                     builder: (context, snap) {
-                      final parents = snap.data ?? [];
+                      final rawParents = snap.data ?? [];
+                      // Deduplicate strictly by stable user ID (uid) and ensure eligible parent standing
+                      final Map<String, UserModel> uniqueParents = {};
+                      for (final p in rawParents) {
+                        if (AdminService.isEligibleParent(p)) {
+                          uniqueParents.putIfAbsent(p.uid, () => p);
+                        }
+                      }
+                      final parents = uniqueParents.values.toList()
+                        ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+
+                      if (selectedParentId != null && !parents.any((p) => p.uid == selectedParentId)) {
+                        selectedParentId = null;
+                        selectedParentName = null;
+                        selectedChildId = null;
+                        selectedChildName = null;
+                      }
+
                       return Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         decoration: BoxDecoration(color: colorNavy, borderRadius: BorderRadius.circular(8), border: Border.all(color: colorBorder)),
@@ -1174,6 +1191,7 @@ class _AdminLLGManagementViewState extends State<AdminLLGManagementView> with Si
                                   selectedParentId = val;
                                   selectedParentName = p.name;
                                   selectedChildId = null;
+                                  selectedChildName = null;
                                 });
                               }
                             },
