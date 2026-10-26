@@ -25,7 +25,10 @@ import 'llg_profile_page.dart';
 import 'send_recommendation_page.dart';
 import 'child_profile_page.dart';
 import 'report_center_page.dart';
+import 'dart:async';
 import '../../widgets/specialist_messaging_panel.dart';
+import '../../services/notification_router.dart';
+import 'suspended_account_screen.dart';
 
 class LLGDashboard extends StatefulWidget {
   const LLGDashboard({super.key});
@@ -100,11 +103,274 @@ class _LLGDashboardState extends State<LLGDashboard> {
 
   String _currentLLGName = 'LLG Specialist';
   bool _isVerified = true;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userSubscription;
+  Map<String, dynamic>? _activeWarning;
 
   @override
   void initState() {
     super.initState();
     _loadLLGProfile();
+    _listenToUserStatus();
+  }
+
+  @override
+  void dispose() {
+    _userSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _listenToUserStatus() {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    _userSubscription = _firestore.collection('users').doc(user.uid).snapshots().listen((doc) {
+      if (!doc.exists || !mounted) return;
+      final data = doc.data() ?? {};
+      final status = data['status'] as String? ?? '';
+      final isSuspended = data['isSuspended'] as bool? ?? false;
+
+      // 1. Suspension propagation check: immediately redirect to non-dismissible screen
+      if (status == 'suspended' || isSuspended) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const SuspendedAccountScreen()),
+          (route) => false,
+        );
+        return;
+      }
+
+      // 2. Warning notice check
+      final warnings = data['warnings'] as List<dynamic>?;
+      if (warnings != null && warnings.isNotEmpty) {
+        final latestWarn = Map<String, dynamic>.from(warnings.last as Map);
+        final acknowledgedAt = data['lastWarningAcknowledgedAt'];
+        final warnedAt = latestWarn['issuedAt'] ?? data['lastWarningAt'];
+
+        bool isAck = false;
+        if (acknowledgedAt != null && warnedAt != null) {
+          DateTime ackDt = acknowledgedAt is Timestamp
+              ? acknowledgedAt.toDate()
+              : DateTime.tryParse(acknowledgedAt.toString()) ?? DateTime.now();
+          DateTime warnDt = warnedAt is Timestamp
+              ? warnedAt.toDate()
+              : DateTime.tryParse(warnedAt.toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
+          if (ackDt.isAfter(warnDt)) isAck = true;
+        }
+
+        if (!isAck) {
+          setState(() => _activeWarning = latestWarn);
+        } else {
+          setState(() => _activeWarning = null);
+        }
+      } else {
+        setState(() => _activeWarning = null);
+      }
+    });
+  }
+
+  Future<void> _acknowledgeWarning() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+    try {
+      await _firestore.collection('users').doc(user.uid).update({
+        'lastWarningAcknowledgedAt': FieldValue.serverTimestamp(),
+        'status': 'active',
+      });
+      await _firestore.collection('auditLogs').add({
+        'action': 'warning_acknowledged_by_specialist',
+        'userId': user.uid,
+        'warningId': _activeWarning?['warningId'],
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+      if (mounted) {
+        setState(() => _activeWarning = null);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Warning notice acknowledged.'),
+            backgroundColor: Color(0xFF10B981),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error acknowledging warning: $e');
+    }
+  }
+
+  void _showNotificationsSheet(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: colorSlate,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          constraints: const BoxConstraints(maxHeight: 500),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.notifications_active_outlined, color: colorTeal, size: 22),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Specialist Notifications',
+                        style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                  if (docs.isNotEmpty)
+                    TextButton(
+                      onPressed: () async {
+                        for (final doc in docs) {
+                          if (doc.data()['isRead'] != true) {
+                            await doc.reference.update({'isRead': true, 'readAt': FieldValue.serverTimestamp()});
+                          }
+                        }
+                        if (mounted) Navigator.pop(ctx);
+                      },
+                      child: Text('Mark all as read', style: GoogleFonts.inter(fontSize: 12, color: colorTeal)),
+                    ),
+                ],
+              ),
+              const Divider(color: colorBorder),
+              Expanded(
+                child: docs.isEmpty
+                    ? Center(
+                        child: Text('No notifications right now', style: GoogleFonts.inter(color: colorTextMuted)),
+                      )
+                    : ListView.separated(
+                        itemCount: docs.length,
+                        separatorBuilder: (_, index) => const Divider(color: colorBorder, height: 1),
+                        itemBuilder: (context, idx) {
+                          final doc = docs[idx];
+                          final data = doc.data();
+                          final isRead = data['isRead'] == true || data['readAt'] != null;
+                          final title = data['title'] as String? ?? 'Notification';
+                          final body = data['body'] as String? ?? data['message'] as String? ?? '';
+
+                          return ListTile(
+                            contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                            leading: Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: isRead ? colorNavy : colorTeal.withOpacity(0.2),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.notifications_outlined,
+                                color: isRead ? colorTextMuted : colorTeal,
+                                size: 18,
+                              ),
+                            ),
+                            title: Text(
+                              title,
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: isRead ? FontWeight.w500 : FontWeight.bold,
+                                color: isRead ? Colors.white70 : Colors.white,
+                              ),
+                            ),
+                            subtitle: Text(
+                              body,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(fontSize: 12, color: colorTextMuted),
+                            ),
+                            trailing: !isRead
+                                ? Container(width: 8, height: 8, decoration: const BoxDecoration(color: colorTeal, shape: BoxShape.circle))
+                                : null,
+                            onTap: () async {
+                              Navigator.pop(ctx);
+                              await NotificationRouter.handleNotificationTap(
+                                context,
+                                data,
+                                notificationId: doc.id,
+                                currentUserRole: 'specialist',
+                              );
+                            },
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildWarningBanner() {
+    final reason = _activeWarning?['reason'] as String? ?? 'Administrative policy compliance';
+    final category = _activeWarning?['category'] as String? ?? 'Safety Warning';
+    final issuedAt = _activeWarning?['issuedAt'];
+    String dateStr = '';
+    if (issuedAt is Timestamp) {
+      dateStr = DateFormat('MMM d, y').format(issuedAt.toDate());
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF78350F).withOpacity(0.95),
+        border: const Border(
+          bottom: BorderSide(color: Color(0xFFF59E0B), width: 1.5),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const Icon(Icons.warning_amber_rounded, color: Color(0xFFF59E0B), size: 24),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      'Account Notice: $category',
+                      style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                    if (dateStr.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      Text('• $dateStr', style: GoogleFonts.inter(fontSize: 12, color: Colors.white70)),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  reason,
+                  style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFFFEF3C7)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          ElevatedButton(
+            onPressed: _acknowledgeWarning,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFF59E0B),
+              foregroundColor: Colors.black,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+            ),
+            child: Text(
+              'Acknowledge',
+              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _loadLLGProfile() async {
@@ -172,6 +438,7 @@ class _LLGDashboardState extends State<LLGDashboard> {
             child: Column(
               children: [
                 _buildTopBar(isNarrow),
+                if (_activeWarning != null) _buildWarningBanner(),
                 Expanded(
                   child: Stack(
                     children: [
@@ -499,10 +766,49 @@ class _LLGDashboardState extends State<LLGDashboard> {
 
           const SizedBox(width: 4),
 
-          // Notifications bell
-          IconButton(
-            icon: const Icon(Icons.notifications_none_outlined, color: colorTextMuted, size: 22),
-            onPressed: () {},
+          // Notifications bell with dynamic badge & tap handler
+          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: _firestore
+                .collection('notifications')
+                .where('userId', isEqualTo: _auth.currentUser?.uid ?? '')
+                .snapshots(),
+            builder: (context, notifSnap) {
+              final docs = notifSnap.data?.docs ?? [];
+              final unreadCount = docs.where((d) => d.data()['isRead'] != true && d.data()['readAt'] == null).length;
+
+              return Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  IconButton(
+                    tooltip: 'Notifications',
+                    icon: Icon(
+                      unreadCount > 0 ? Icons.notifications_active_outlined : Icons.notifications_none_outlined,
+                      color: unreadCount > 0 ? colorTeal : colorTextMuted,
+                      size: 22,
+                    ),
+                    onPressed: () => _showNotificationsSheet(docs),
+                  ),
+                  if (unreadCount > 0)
+                    Positioned(
+                      top: 6,
+                      right: 6,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFEF4444),
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                        child: Text(
+                          unreadCount > 9 ? '9+' : unreadCount.toString(),
+                          style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
 
           const SizedBox(width: 12),

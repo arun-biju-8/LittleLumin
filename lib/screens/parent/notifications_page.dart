@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'parent_theme.dart';
-import 'activity_view.dart';
+import '../../services/notification_router.dart';
 
 class NotificationsPage extends StatefulWidget {
   final FirebaseAuth? auth;
@@ -129,31 +129,13 @@ class _NotificationsPageState extends State<NotificationsPage> {
     );
   }
 
-  void _handleNotificationTap(Map<String, dynamic> data) {
-    final activityId = data['activityId'] as String?;
-    final actionRoute = data['actionRoute'] as String?;
-    final childId = data['childId'] as String?;
-
-    if (activityId != null && activityId.isNotEmpty) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ActivityView(
-            activityId: activityId,
-            childId: childId,
-          ),
-        ),
-      );
-      return;
-    }
-
-    if (actionRoute != null && actionRoute.isNotEmpty) {
-      if (actionRoute == '/home' || actionRoute == '/activities' || actionRoute == '/profile') {
-        Navigator.pop(context);
-        return;
-      }
-      Navigator.pushNamed(context, actionRoute);
-    }
+  void _handleNotificationTap(Map<String, dynamic> data, [String? docId]) {
+    NotificationRouter.handleNotificationTap(
+      context,
+      data,
+      notificationId: docId,
+      currentUserRole: 'parent',
+    );
   }
 
   Widget _buildEmptyState() {
@@ -250,7 +232,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
               if (!isRead) {
                 doc.reference.update({'isRead': true});
               }
-              _handleNotificationTap(data);
+              _handleNotificationTap(data, doc.id);
             },
             borderRadius: BorderRadius.circular(16),
             child: Padding(
@@ -328,7 +310,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                                   if (!isRead) {
                                     doc.reference.update({'isRead': true});
                                   }
-                                  _handleNotificationTap(data);
+                                  _handleNotificationTap(data, doc.id);
                                 },
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: ParentColors.primary,

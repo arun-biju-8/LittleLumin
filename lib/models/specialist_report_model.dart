@@ -67,6 +67,7 @@ class SpecialistReportModel {
   final String caseId;
   final String childId;
   final String childName;
+  final String parentId;
   final String specialistId;
   final String specialistName;
   final ReportType reportType;
@@ -81,6 +82,7 @@ class SpecialistReportModel {
   final DateTime generatedAt;
   final DateTime? finalizedAt;
   final DateTime? sharedAt;
+  final DateTime? readByParentAt;
   final String? specialistNotes;
   final DateTime? periodStartDate;
   final DateTime? periodEndDate;
@@ -98,6 +100,7 @@ class SpecialistReportModel {
     required this.caseId,
     required this.childId,
     required this.childName,
+    this.parentId = '',
     required this.specialistId,
     required this.specialistName,
     this.reportType = ReportType.progress,
@@ -112,6 +115,7 @@ class SpecialistReportModel {
     required this.generatedAt,
     this.finalizedAt,
     this.sharedAt,
+    this.readByParentAt,
     this.specialistNotes,
     this.periodStartDate,
     this.periodEndDate,
@@ -128,12 +132,14 @@ class SpecialistReportModel {
   bool get isDraft => status == SpecialistReportStatus.draft;
   bool get isFinalized => status == SpecialistReportStatus.finalized;
   bool get isShared => status == SpecialistReportStatus.shared;
+  bool get isReadByParent => readByParentAt != null;
 
   Map<String, dynamic> toMap() {
     return {
       'caseId': caseId,
       'childId': childId,
       'childName': childName,
+      'parentId': parentId,
       'specialistId': specialistId,
       'specialistName': specialistName,
       'reportType': reportType.name,
@@ -145,9 +151,11 @@ class SpecialistReportModel {
       'growthAreas': growthAreas,
       'recommendations': recommendations,
       'status': status.name,
+      'isSharedWithParent': isShared,
       'generatedAt': Timestamp.fromDate(generatedAt),
       'finalizedAt': finalizedAt != null ? Timestamp.fromDate(finalizedAt!) : null,
       'sharedAt': sharedAt != null ? Timestamp.fromDate(sharedAt!) : null,
+      'readByParentAt': readByParentAt != null ? Timestamp.fromDate(readByParentAt!) : null,
       'specialistNotes': specialistNotes,
       'periodStartDate': periodStartDate != null ? Timestamp.fromDate(periodStartDate!) : null,
       'periodEndDate': periodEndDate != null ? Timestamp.fromDate(periodEndDate!) : null,
@@ -227,6 +235,7 @@ class SpecialistReportModel {
       caseId: data['caseId'] ?? '',
       childId: data['childId'] ?? '',
       childName: data['childName'] ?? '',
+      parentId: data['parentId'] ?? '',
       specialistId: data['specialistId'] ?? '',
       specialistName: data['specialistName'] ?? '',
       reportType: parseReportType(data['reportType']),
@@ -241,6 +250,7 @@ class SpecialistReportModel {
       generatedAt: parseDate(data['generatedAt']),
       finalizedAt: parseNullableDate(data['finalizedAt']),
       sharedAt: parseNullableDate(data['sharedAt']),
+      readByParentAt: parseNullableDate(data['readByParentAt']),
       specialistNotes: data['specialistNotes'],
       periodStartDate: parseNullableDate(data['periodStartDate']),
       periodEndDate: parseNullableDate(data['periodEndDate']),
@@ -259,6 +269,7 @@ class SpecialistReportModel {
     String? title,
     ReportType? reportType,
     String? summary,
+    String? parentId,
     Map<String, double>? domainScores,
     List<String>? keyFindings,
     List<String>? strengths,
@@ -267,6 +278,7 @@ class SpecialistReportModel {
     SpecialistReportStatus? status,
     DateTime? finalizedAt,
     DateTime? sharedAt,
+    DateTime? readByParentAt,
     String? specialistNotes,
     DateTime? periodStartDate,
     DateTime? periodEndDate,
@@ -284,6 +296,7 @@ class SpecialistReportModel {
       caseId: caseId,
       childId: childId,
       childName: childName,
+      parentId: parentId ?? this.parentId,
       specialistId: specialistId,
       specialistName: specialistName,
       reportType: reportType ?? this.reportType,
@@ -298,6 +311,7 @@ class SpecialistReportModel {
       generatedAt: generatedAt,
       finalizedAt: finalizedAt ?? this.finalizedAt,
       sharedAt: sharedAt ?? this.sharedAt,
+      readByParentAt: readByParentAt ?? this.readByParentAt,
       specialistNotes: specialistNotes ?? this.specialistNotes,
       periodStartDate: periodStartDate ?? this.periodStartDate,
       periodEndDate: periodEndDate ?? this.periodEndDate,

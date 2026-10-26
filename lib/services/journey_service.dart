@@ -1,6 +1,7 @@
 // ignore_for_file: constant_identifier_names
 // lib/services/journey_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import '../models/journey_model.dart';
 import '../models/activity_model.dart';
@@ -634,6 +635,9 @@ class JourneyService {
       return _latestUpdatesCache[childId];
     }
     try {
+      if (Firebase.apps.isEmpty && _customFirestore == null) {
+        return null;
+      }
       final doc = await _firestore.collection(_collection).doc(childId).get();
       if (doc.exists && doc.data() != null) {
         final data = doc.data()!;

@@ -12,7 +12,10 @@ try:
 except ImportError:
     pass
 
-import google.generativeai as genai
+try:
+    import google.generativeai as genai
+except ImportError:
+    genai = None
 
 logger = logging.getLogger("openai_service")
 
@@ -21,7 +24,7 @@ class OpenAIService:
         self.api_key = os.getenv("GEMINI_API_KEY", "").strip()
         self.client = None
 
-        if self.api_key and self.api_key != "GEMINI_API_KEY":
+        if self.api_key and self.api_key != "GEMINI_API_KEY" and genai is not None:
             try:
                 genai.configure(api_key=self.api_key)
                 self.client = genai.GenerativeModel('models/gemini-3.6-flash')

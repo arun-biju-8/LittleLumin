@@ -315,6 +315,7 @@ class SpecialistReportService {
       caseId: caseModel.caseId,
       childId: child.childId,
       childName: child.name,
+      parentId: caseModel.parentId,
       specialistId: specialistId,
       specialistName: specialistName,
       reportType: reportType,
@@ -383,6 +384,37 @@ class SpecialistReportService {
     });
   }
 
+  /// Stream all reports shared with a specific parent
+  Stream<List<SpecialistReportModel>> getParentReportsStream(String parentId) {
+    final fs = _firestore;
+    if (fs == null || parentId.isEmpty) return Stream.value([]);
+    return fs
+        .collection(collectionName)
+        .where('parentId', isEqualTo: parentId)
+        .snapshots()
+        .map((snapshot) {
+      final list = snapshot.docs
+          .map((doc) => SpecialistReportModel.fromMap(doc.id, doc.data()))
+          .where((r) => r.status == SpecialistReportStatus.shared || r.status == SpecialistReportStatus.finalized)
+          .toList();
+      list.sort((a, b) => b.generatedAt.compareTo(a.generatedAt));
+      return list;
+    });
+  }
+
+  /// Mark report as read by parent
+  Future<void> markReportAsReadByParent(String reportId) async {
+    final fs = _firestore;
+    if (fs == null || reportId.isEmpty) return;
+    try {
+      await fs.collection(collectionName).doc(reportId).update({
+        'readByParentAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('Error marking report as read by parent: $e');
+    }
+  }
+
   /// Share report with parent and dispatch notification
   Future<void> shareReportWithParent({
     required String reportId,
@@ -396,6 +428,10 @@ class SpecialistReportService {
     if (fs == null) return;
 
     if (parentId.isNotEmpty) {
+      await fs.collection(collectionName).doc(reportId).update({
+        'parentId': parentId,
+      });
+
       await fs.collection('notifications').add({
         'userId': parentId,
         'type': 'specialist_report_shared',

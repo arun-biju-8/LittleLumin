@@ -63,6 +63,7 @@ class UserModel {
   String rating;
   String recommendationRate;
   String testimonials;
+  final List<Map<String, dynamic>> warnings;
   DateTime? updatedAt;
 
   UserModel({
@@ -100,6 +101,7 @@ class UserModel {
     this.rating = '',
     this.recommendationRate = '',
     this.testimonials = '',
+    this.warnings = const [],
     this.updatedAt,
   });
 
@@ -154,6 +156,7 @@ class UserModel {
       'rating': rating,
       'recommendationRate': recommendationRate,
       'testimonials': testimonials,
+      'warnings': warnings,
       'updatedAt': updatedAt ?? FieldValue.serverTimestamp(),
     };
   }
@@ -215,6 +218,7 @@ class UserModel {
       rating: data['rating'] ?? '',
       recommendationRate: data['recommendationRate'] ?? '',
       testimonials: data['testimonials'] ?? '',
+      warnings: (data['warnings'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? const [],
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
     );
   }
@@ -234,4 +238,9 @@ class UserModel {
   bool get isAdmin => userType == 'admin';
   bool get isParent => userType == 'parent';
   bool get isActive => status == 'active';
+  bool get isSuspended => status == 'suspended';
+  bool get isWarned => status == 'warning_issued' || status == 'warned';
+  bool get isDeactivated => status == 'deactivated' || status == 'inactive';
+  bool get isRecoveryPending => status == 'recovery_pending';
+  bool get isDeletionPending => status == 'deletion_pending';
 }

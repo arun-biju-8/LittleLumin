@@ -16,6 +16,12 @@ import '../../services/specialist_case_service.dart';
 import '../../services/contact_consent_service.dart';
 import '../../services/recommendation_service.dart';
 import '../../services/consultation_summary_service.dart';
+import '../../models/specialist_report_model.dart';
+import '../../services/specialist_report_service.dart';
+import '../../services/parent_complaint_service.dart';
+import '../../models/admin_models.dart';
+import 'complaint_submission_dialog.dart';
+import 'specialist_review_dialog.dart';
 import '../../theme/meadow_theme.dart';
 import '../../utils/validators.dart';
 import '../../widgets/global_header.dart';
@@ -23,13 +29,15 @@ import '../chat/chat_screen.dart';
 
 class LLGConnectPage extends StatefulWidget {
   final String? initialChildId;
-  final String initialSection; // 'overview', 'recommendations', 'consents', 'directory', 'summaries'
+  final String initialSection; // 'overview', 'recommendations', 'reports', 'consents', 'directory', 'summaries', 'complaints'
+  final int? initialTabIndex;
   final String? currentUserId;
 
   const LLGConnectPage({
     super.key,
     this.initialChildId,
     this.initialSection = 'overview',
+    this.initialTabIndex,
     this.currentUserId,
   });
 
@@ -44,6 +52,8 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
   final ContactConsentService _consentService = ContactConsentService();
   final RecommendationService _recommendationService = RecommendationService();
   final ConsultationSummaryService _summaryService = ConsultationSummaryService();
+  final SpecialistReportService _reportService = SpecialistReportService();
+  final ParentComplaintService _complaintService = ParentComplaintService();
 
   String? _selectedChildId;
   late String _activeSection;
@@ -64,7 +74,17 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
   void initState() {
     super.initState();
     _selectedChildId = widget.initialChildId;
-    _activeSection = widget.initialSection;
+    if (widget.initialTabIndex != null) {
+      if (widget.initialTabIndex == 1) {
+        _activeSection = 'reports';
+      } else if (widget.initialTabIndex == 2) {
+        _activeSection = 'complaints';
+      } else {
+        _activeSection = 'overview';
+      }
+    } else {
+      _activeSection = widget.initialSection;
+    }
   }
 
   @override
@@ -135,6 +155,10 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
         final childId = _selectedChildId ?? widget.initialChildId ?? '';
 
         switch (_activeSection) {
+          case 'reports':
+            return _buildReportsSection(uid);
+          case 'complaints':
+            return _buildComplaintsSection(uid);
           case 'recommendations':
             return _buildRecommendationsSection(childId);
           case 'consents':
@@ -149,6 +173,8 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildCasesSection(cases),
+                const SizedBox(height: 24),
+                _buildReportsSection(uid),
                 const SizedBox(height: 24),
                 _buildRecommendationsPreviewSection(childId),
                 const SizedBox(height: 24),
@@ -294,6 +320,8 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
             children: [
               _buildNavPill('overview', 'Overview & Guide', Icons.dashboard_outlined),
               const SizedBox(width: 8),
+              _buildNavPill('reports', 'Reports', Icons.assessment_outlined),
+              const SizedBox(width: 8),
               _buildNavPill('recommendations', 'Recommendations', Icons.lightbulb_outline),
               const SizedBox(width: 8),
               _buildNavPill(
@@ -306,6 +334,8 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
               _buildNavPill('directory', 'Find Specialists', Icons.person_search_outlined),
               const SizedBox(width: 8),
               _buildNavPill('summaries', 'Session Summaries', Icons.assignment_outlined),
+              const SizedBox(width: 8),
+              _buildNavPill('complaints', 'Complaints', Icons.shield_outlined),
             ],
           ),
         );
@@ -627,6 +657,43 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
                   icon: const Icon(Icons.cancel_outlined, size: 14, color: MeadowColors.error),
                   label: const Text('Withdraw Consent', style: TextStyle(color: MeadowColors.error, fontSize: 12)),
                 ),
+            ],
+          ),
+
+          // Additional parent actions: Rate Specialist & Report Concern
+          const SizedBox(height: 12),
+          const Divider(color: MeadowColors.borderLight, height: 1),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              if (c.status == CaseStatus.active || c.status == CaseStatus.accepted || c.status == CaseStatus.completed) ...[
+                TextButton.icon(
+                  onPressed: () => SpecialistReviewDialog.show(
+                    context,
+                    parentId: c.parentId,
+                    parentName: c.parentName,
+                    specialistId: c.specialistId,
+                    specialistName: c.specialistName,
+                    caseId: c.caseId,
+                  ),
+                  icon: const Icon(Icons.star_outline_rounded, size: 16, color: MeadowColors.warning),
+                  label: const Text('Rate Specialist', style: TextStyle(color: MeadowColors.warning, fontSize: 12, fontWeight: FontWeight.bold)),
+                ),
+                const SizedBox(width: 8),
+              ],
+              TextButton.icon(
+                onPressed: () => ComplaintSubmissionDialog.show(
+                  context,
+                  parentId: c.parentId,
+                  parentName: c.parentName,
+                  parentEmail: _auth.currentUser?.email ?? '',
+                  specialistId: c.specialistId,
+                  specialistName: c.specialistName,
+                  caseId: c.caseId,
+                ),
+                icon: const Icon(Icons.report_problem_outlined, size: 15, color: MeadowColors.textSecondary),
+                label: const Text('Report Concern', style: TextStyle(color: MeadowColors.textSecondary, fontSize: 12)),
+              ),
             ],
           ),
 
@@ -1380,7 +1447,12 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
         }
 
         final docs = snapshot.data?.docs ?? [];
-        final availableDocs = docs.where((d) => !activeOrPendingIds.contains(d.id)).toList();
+        final availableDocs = docs.where((d) {
+          final data = d.data() as Map<String, dynamic>;
+          final status = (data['status'] as String? ?? 'active').toLowerCase();
+          if (status == 'suspended' || status == 'deactivated') return false;
+          return !activeOrPendingIds.contains(d.id);
+        }).toList();
 
         if (availableDocs.isEmpty) {
           return Container(
@@ -1480,6 +1552,8 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
                       '$qualification • $experience experience',
                       style: MeadowTypography.caption.copyWith(color: MeadowColors.textSecondary),
                     ),
+                    const SizedBox(height: 4),
+                    _buildRatingRow(data),
                   ],
                 ),
               ),
@@ -2239,6 +2313,463 @@ class _LLGConnectPageState extends State<LLGConnectPage> {
           ],
         ),
       ),
+    );
+  }
+
+  // =========================================================================
+  // RATINGS, REPORTS & COMPLAINTS SECTIONS
+  // =========================================================================
+
+  Widget _buildRatingRow(Map<String, dynamic> data) {
+    final rating = (data['rating'] as num?)?.toDouble() ?? 0.0;
+    final ratingCount = (data['ratingCount'] as num?)?.toInt() ?? 0;
+
+    if (ratingCount > 0) {
+      return Row(
+        children: [
+          const Icon(Icons.star_rounded, size: 16, color: MeadowColors.warning),
+          const SizedBox(width: 4),
+          Text(
+            rating.toStringAsFixed(1),
+            style: MeadowTypography.label.copyWith(fontSize: 12, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '($ratingCount ${ratingCount == 1 ? 'review' : 'reviews'})',
+            style: MeadowTypography.caption.copyWith(color: MeadowColors.textSecondary, fontSize: 11),
+          ),
+        ],
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: MeadowColors.borderLight.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.star_outline_rounded, size: 12, color: Colors.grey.shade600),
+          const SizedBox(width: 4),
+          Text(
+            'Not yet rated',
+            style: GoogleFonts.plusJakartaSans(fontSize: 10, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReportsSection(String parentId) {
+    return StreamBuilder<List<SpecialistReportModel>>(
+      stream: _reportService.getParentReportsStream(parentId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()));
+        }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Text('Error loading reports: ${snapshot.error}', style: MeadowTypography.body),
+          );
+        }
+
+        final reports = snapshot.data ?? [];
+
+        if (reports.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              color: MeadowColors.surface,
+              borderRadius: BorderRadius.circular(MeadowRadius.xl),
+              border: Border.all(color: MeadowColors.borderLight),
+            ),
+            child: Column(
+              children: [
+                const Icon(Icons.description_outlined, size: 40, color: MeadowColors.textSecondary),
+                const SizedBox(height: 12),
+                Text('No Specialist Reports Yet', style: MeadowTypography.h3),
+                const SizedBox(height: 6),
+                Text(
+                  'When your assigned learning guide or developmental specialist finalizes and shares an evaluation report, it will appear here for your review.',
+                  textAlign: TextAlign.center,
+                  style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textSecondary),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.assessment_rounded, color: MeadowColors.primary, size: 22),
+                const SizedBox(width: 8),
+                Text('Specialist Developmental Reports', style: MeadowTypography.h2),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Official clinical and progress evaluations prepared by your assigned guides.',
+              style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textSecondary),
+            ),
+            const SizedBox(height: 14),
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: reports.length,
+              separatorBuilder: (_, index) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final report = reports[index];
+                final isUnread = !report.isReadByParent;
+
+                return Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isUnread ? MeadowColors.primarySurface.withOpacity(0.5) : MeadowColors.surface,
+                    borderRadius: BorderRadius.circular(MeadowRadius.xl),
+                    border: Border.all(
+                      color: isUnread ? MeadowColors.primary : MeadowColors.borderLight,
+                      width: isUnread ? 1.5 : 1,
+                    ),
+                    boxShadow: MeadowShadows.card,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    report.title,
+                                    style: MeadowTypography.label.copyWith(fontSize: 15, fontWeight: FontWeight.bold),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (isUnread) ...[
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: MeadowColors.primary,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: const Text('NEW', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          Text(
+                            DateFormat('MMM d, y').format(report.generatedAt),
+                            style: MeadowTypography.caption.copyWith(color: MeadowColors.textSecondary),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Author: ${report.specialistName} • Child: ${report.childName}',
+                        style: MeadowTypography.caption.copyWith(color: MeadowColors.textSecondary),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        report.summary,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: MeadowTypography.body.copyWith(fontSize: 13),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              _reportService.markReportAsReadByParent(report.id);
+                              _showReportDetailsDialog(report);
+                            },
+                            icon: const Icon(Icons.visibility_outlined, size: 16),
+                            label: const Text('Open & Read Report'),
+                            style: MeadowButtons.small(),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showReportDetailsDialog(SpecialistReportModel report) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: Colors.white,
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: const BoxDecoration(
+                color: MeadowColors.primarySurface,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.assessment_rounded, color: MeadowColors.primary, size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(report.title, style: MeadowTypography.h3.copyWith(fontSize: 16)),
+                  Text(
+                    'Authored by ${report.specialistName} • ${DateFormat('MMM d, y').format(report.generatedAt)}',
+                    style: MeadowTypography.caption.copyWith(color: MeadowColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 580,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Summary Box
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: MeadowColors.primarySurface.withOpacity(0.4),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: MeadowColors.borderLight),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Executive Summary', style: MeadowTypography.label.copyWith(fontSize: 13, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      Text(report.summary, style: MeadowTypography.body.copyWith(fontSize: 13, height: 1.4)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Strengths
+                if (report.strengths.isNotEmpty) ...[
+                  Text('Developmental Strengths', style: MeadowTypography.label.copyWith(fontSize: 14, fontWeight: FontWeight.bold, color: MeadowColors.success)),
+                  const SizedBox(height: 6),
+                  ...report.strengths.map((s) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.check_circle_outline, size: 16, color: MeadowColors.success),
+                        const SizedBox(width: 6),
+                        Expanded(child: Text(s, style: MeadowTypography.body.copyWith(fontSize: 12))),
+                      ],
+                    ),
+                  )),
+                  const SizedBox(height: 14),
+                ],
+
+                // Growth Areas
+                if (report.growthAreas.isNotEmpty) ...[
+                  Text('Targeted Growth Areas', style: MeadowTypography.label.copyWith(fontSize: 14, fontWeight: FontWeight.bold, color: MeadowColors.warning)),
+                  const SizedBox(height: 6),
+                  ...report.growthAreas.map((g) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.trending_up, size: 16, color: MeadowColors.warning),
+                        const SizedBox(width: 6),
+                        Expanded(child: Text(g, style: MeadowTypography.body.copyWith(fontSize: 12))),
+                      ],
+                    ),
+                  )),
+                  const SizedBox(height: 14),
+                ],
+
+                // Specialist Recommendations
+                if (report.recommendations.isNotEmpty) ...[
+                  Text('Specialist Recommendations', style: MeadowTypography.label.copyWith(fontSize: 14, fontWeight: FontWeight.bold, color: MeadowColors.primary)),
+                  const SizedBox(height: 6),
+                  ...report.recommendations.map((r) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.lightbulb_outline, size: 16, color: MeadowColors.primary),
+                        const SizedBox(width: 6),
+                        Expanded(child: Text(r, style: MeadowTypography.body.copyWith(fontSize: 12))),
+                      ],
+                    ),
+                  )),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: MeadowButtons.small(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildComplaintsSection(String parentId) {
+    return StreamBuilder<List<ParentComplaintModel>>(
+      stream: _complaintService.getParentComplaintsStream(parentId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()));
+        }
+
+        final complaints = snapshot.data ?? [];
+
+        if (complaints.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              color: MeadowColors.surface,
+              borderRadius: BorderRadius.circular(MeadowRadius.xl),
+              border: Border.all(color: MeadowColors.borderLight),
+            ),
+            child: Column(
+              children: [
+                const Icon(Icons.shield_outlined, size: 40, color: MeadowColors.textSecondary),
+                const SizedBox(height: 12),
+                Text('No Concerns or Complaints Filed', style: MeadowTypography.h3),
+                const SizedBox(height: 6),
+                Text(
+                  'If you ever experience issues regarding professional conduct, missed sessions, or safety concerns with a learning guide, you can file a confidential report from your consultation card.',
+                  textAlign: TextAlign.center,
+                  style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textSecondary),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.shield_outlined, color: MeadowColors.primary, size: 22),
+                const SizedBox(width: 8),
+                Text('My Filed Concerns & Complaints', style: MeadowTypography.h2),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Confidential reports submitted for administrative review.',
+              style: MeadowTypography.body.copyWith(fontSize: 12, color: MeadowColors.textSecondary),
+            ),
+            const SizedBox(height: 14),
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: complaints.length,
+              separatorBuilder: (_, index) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final complaint = complaints[index];
+
+                Color badgeBg = Colors.grey.shade200;
+                Color badgeFg = Colors.black87;
+                String statusText = complaint.status.replaceAll('_', ' ').toUpperCase();
+
+                if (complaint.isPending) {
+                  badgeBg = const Color(0xFFFEF3C7);
+                  badgeFg = const Color(0xFFD97706);
+                } else if (complaint.isUnderInvestigation) {
+                  badgeBg = const Color(0xFFE0E7FF);
+                  badgeFg = const Color(0xFF4338CA);
+                } else if (complaint.isResolved) {
+                  badgeBg = const Color(0xFFD1FAE5);
+                  badgeFg = const Color(0xFF059669);
+                }
+
+                return Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: MeadowColors.surface,
+                    borderRadius: BorderRadius.circular(MeadowRadius.xl),
+                    border: Border.all(color: MeadowColors.borderLight),
+                    boxShadow: MeadowShadows.card,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            complaint.categoryDisplayName,
+                            style: MeadowTypography.label.copyWith(fontSize: 14, fontWeight: FontWeight.bold),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(color: badgeBg, borderRadius: BorderRadius.circular(8)),
+                            child: Text(
+                              statusText,
+                              style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.bold, color: badgeFg),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Specialist: ${complaint.specialistName} • Submitted: ${DateFormat('MMM d, y').format(complaint.createdAt)}',
+                        style: MeadowTypography.caption.copyWith(color: MeadowColors.textSecondary),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(complaint.description, style: MeadowTypography.body.copyWith(fontSize: 13)),
+                      if (complaint.resolutionSummary != null && complaint.resolutionSummary!.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFD1FAE5).withOpacity(0.4),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFF059669).withOpacity(0.3)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Administrative Resolution:', style: MeadowTypography.caption.copyWith(fontWeight: FontWeight.bold, color: const Color(0xFF059669))),
+                              const SizedBox(height: 2),
+                              Text(complaint.resolutionSummary!, style: MeadowTypography.body.copyWith(fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 }

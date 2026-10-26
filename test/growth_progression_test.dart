@@ -336,7 +336,7 @@ void main() {
 
       expect(find.text('Unlock Requirement: Level 1 Mastery'), findsOneWidget);
       expect(find.text('3 of 6 Mastered'), findsWidgets);
-      expect(find.text('Continue Learning in Level 1'), findsWidgets);
+      expect(find.text('Practise Activities to Unlock Level 2'), findsWidgets);
     });
 
     testWidgets('LevelDetailScreen renders overview, all 6 domains, and progression checklist', (tester) async {

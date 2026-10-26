@@ -1,7 +1,8 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Depends, status
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from app.services.openai_service import OpenAIService
+from app.core.security import get_optional_user
 
 router = APIRouter(prefix="/api/ai", tags=["AI Generation"])
 openai_service = OpenAIService()
@@ -18,9 +19,13 @@ class GenerateStoryRequest(BaseModel):
     age_years: Optional[int] = Field(default=4, ge=2, le=10, description="Target child age")
 
 @router.post("/generate-activity", status_code=status.HTTP_200_OK)
-async def generate_activity(req: GenerateActivityRequest) -> Dict[str, Any]:
+async def generate_activity(
+    req: GenerateActivityRequest,
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_user)
+) -> Dict[str, Any]:
     """
     Generate an age-appropriate, screen-free activity using OpenAI/Gemini.
+    Accessible anonymously by parents and optionally attaches user identity if authenticated.
     """
     try:
         res = openai_service.generate_activity(
@@ -44,9 +49,13 @@ async def generate_activity(req: GenerateActivityRequest) -> Dict[str, Any]:
         )
 
 @router.post("/generate-story", status_code=status.HTTP_200_OK)
-async def generate_story(req: GenerateStoryRequest) -> Dict[str, Any]:
+async def generate_story(
+    req: GenerateStoryRequest,
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_user)
+) -> Dict[str, Any]:
     """
     Generate a personalized story with a moral lesson using OpenAI/Gemini.
+    Accessible anonymously by parents and optionally attaches user identity if authenticated.
     """
     try:
         res = openai_service.generate_story(

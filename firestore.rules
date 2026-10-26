@@ -1,27 +1,705 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /flagState/{childId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
+
+    // =========================================================================
+    // HELPER FUNCTIONS
+    // =========================================================================
+    function isAuthenticated() {
+      return request.auth != null;
     }
 
-    match /flags/{flagId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null;
+    function isUser(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    // Secure Admin check: checks Firebase Auth custom claims or trusted adminUsers collection.
+    // Does NOT trust client-editable fields on the user document.
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.get('admin', false) == true ||
+        request.auth.token.get('role', '') == 'admin' ||
+        exists(/databases/$(database)/documents/adminUsers/$(request.auth.uid))
+      );
+    }
+
+    // Verified specialist role: either by token claim or verified profile
+    function isSpecialistUser() {
+      return isAuthenticated() && (
+        isAdmin() ||
+        request.auth.token.get('role', '') in ['llg', 'specialist', 'clinical_specialist', 'clinical_professional'] ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('userType', '') in ['llg', 'specialist', 'clinical_specialist', 'clinical_professional'] &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isVerified', false) == true)
+      );
+    }
+
+    // Clinical professional role: verified clinical specialist
+    function isClinicalSpecialist() {
+      return isAuthenticated() && (
+        isAdmin() ||
+        request.auth.token.get('role', '') in ['clinical_specialist', 'clinical_professional'] ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('userType', '') in ['clinical_specialist', 'clinical_professional'] &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isVerified', false) == true)
+      );
+    }
+
+    // Strict Parent Ownership
+    function isParentOfChild(childId) {
+      return isAuthenticated() && (
+        isAdmin() ||
+        (exists(/databases/$(database)/documents/children/$(childId)) &&
+         get(/databases/$(database)/documents/children/$(childId)).data.get('parentId', '') == request.auth.uid)
+      );
+    }
+
+    // Specialist with active, unrevoked, strictly unexpired consent case
+    // Denies access if consentExpiresAt is missing, malformed, expired, or revoked
+    function hasActiveSpecialistCase(childId) {
+      return isSpecialistUser() &&
+        exists(/databases/$(database)/documents/specialistCases/$(childId + '_' + request.auth.uid)) &&
+        get(/databases/$(database)/documents/specialistCases/$(childId + '_' + request.auth.uid)).data.get('status', '') in ['accepted', 'active'] &&
+        get(/databases/$(database)/documents/specialistCases/$(childId + '_' + request.auth.uid)).data.get('revokedAt', null) == null &&
+        get(/databases/$(database)/documents/specialistCases/$(childId + '_' + request.auth.uid)).data.get('consentExpiresAt', null) != null &&
+        get(/databases/$(database)/documents/specialistCases/$(childId + '_' + request.auth.uid)).data.get('consentExpiresAt', null) is timestamp &&
+        get(/databases/$(database)/documents/specialistCases/$(childId + '_' + request.auth.uid)).data.get('consentExpiresAt', null) > request.time;
+    }
+
+    function getCaseCategories(childId) {
+      return get(/databases/$(database)/documents/specialistCases/$(childId + '_' + request.auth.uid)).data.get(
+        'authorizedDataCategories',
+        get(/databases/$(database)/documents/specialistCases/$(childId + '_' + request.auth.uid)).data.get('consentCategories', [])
+      );
+    }
+
+    // Granular category checks for specialist data access
+    function specialistHasScoresAccess(childId) {
+      return hasActiveSpecialistCase(childId) && (
+        'all' in getCaseCategories(childId) ||
+        'domain_scores' in getCaseCategories(childId) ||
+        'skill_scores' in getCaseCategories(childId) ||
+        'milestones' in getCaseCategories(childId)
+      );
+    }
+
+    function specialistHasActivitiesAccess(childId) {
+      return hasActiveSpecialistCase(childId) && (
+        'all' in getCaseCategories(childId) ||
+        'activity_history' in getCaseCategories(childId) ||
+        'journey_progress' in getCaseCategories(childId) ||
+        'journeys' in getCaseCategories(childId)
+      );
+    }
+
+    function specialistHasObservationsAccess(childId) {
+      return hasActiveSpecialistCase(childId) && (
+        'all' in getCaseCategories(childId) ||
+        'observations' in getCaseCategories(childId) ||
+        'flags' in getCaseCategories(childId) ||
+        'feedback' in getCaseCategories(childId)
+      );
+    }
+
+    function specialistHasChildProfileAccess(childId) {
+      return hasActiveSpecialistCase(childId) && (
+        'all' in getCaseCategories(childId) ||
+        'child_profile' in getCaseCategories(childId)
+      );
+    }
+
+    // Verify target specialist's trusted verification status before case creation
+    function isTargetSpecialistVerified(specialistId) {
+      return (
+        (exists(/databases/$(database)/documents/users/$(specialistId)) &&
+         get(/databases/$(database)/documents/users/$(specialistId)).data.get('isVerified', false) == true &&
+         get(/databases/$(database)/documents/users/$(specialistId)).data.get('userType', '') in ['llg', 'specialist', 'clinical_specialist', 'clinical_professional']) ||
+        (exists(/databases/$(database)/documents/llgProfiles/$(specialistId)) &&
+         get(/databases/$(database)/documents/llgProfiles/$(specialistId)).data.get('isVerified', false) == true)
+      );
+    }
+
+    // Category whitelist validation for consent grant schema
+    function isValidConsentCategoryList(categories) {
+      return categories is list &&
+        categories.size() > 0 &&
+        categories.hasOnly([
+          'all', 'child_profile', 'domain_scores', 'skill_scores',
+          'milestones', 'activity_history', 'journey_progress',
+          'journeys', 'observations', 'flags', 'feedback'
+        ]);
+    }
+
+    // =========================================================================
+    // ADMIN USERS (Restricted collection for authoritative admin UIDs)
+    // =========================================================================
+    match /adminUsers/{adminId} {
+      allow read, write: if isAdmin();
+    }
+
+    // =========================================================================
+    // USERS COLLECTION (Anti-Privilege Escalation & Scoped Nested Paths)
+    // =========================================================================
+    match /users/{userId} {
+      // Private user profile: only the user themselves or an administrator can read
+      allow read: if isUser(userId) || isAdmin();
+      
+      // Self-registration: prevent privilege escalation (cannot set admin, verified status, or elevated roles)
+      allow create: if isAdmin() || (
+        isUser(userId) &&
+        request.resource.data.get('userType', 'parent') in ['parent', 'user', 'specialist', 'llg'] &&
+        request.resource.data.get('isVerified', false) == false &&
+        request.resource.data.get('verificationStatus', '') != 'verified' &&
+        !('role' in request.resource.data) &&
+        !('admin' in request.resource.data)
+      );
+
+      // Updates: user cannot alter role, verification status, or administrative fields
+      allow update: if isAdmin() || (
+        isUser(userId) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'userType', 'isVerified', 'verificationStatus', 'verifiedAt', 'role', 'admin'
+        ])
+      );
+
+      allow delete: if isAdmin();
+
+      // Nested subcollections: explicit users/{userId}/activities/{activityId} path without permissive wildcards
+      match /activities/{activityId} {
+        allow read, write: if isUser(userId) || isAdmin();
+      }
+    }
+
+    // =========================================================================
+    // CHILDREN COLLECTION (Strict Parent Ownership & Scope-Gated Specialist Access)
+    // =========================================================================
+    match /children/{childId} {
+      // Direct specialist read of full child document is only permitted if parent explicitly authorised full child_profile.
+      // Otherwise, specialists access sanitised case summaries or backend endpoints.
+      allow read: if isParentOfChild(childId) || 
+                     (isAuthenticated() && specialistHasChildProfileAccess(childId)) || 
+                     isAdmin();
+      allow create: if isAuthenticated() && (request.resource.data.parentId == request.auth.uid || isAdmin());
+      // Prevent transferring parentId to another user
+      allow update: if (isParentOfChild(childId) && request.resource.data.parentId == resource.data.parentId) || isAdmin();
+      allow delete: if isParentOfChild(childId) || isAdmin();
+    }
+
+    // =========================================================================
+    // SPECIALIST CASES & CONSENT (DPDP Lifecycle, Expiry, Transition Lockdown)
+    // =========================================================================
+    match /specialistCases/{caseId} {
+      allow read: if isAuthenticated() && (
+        request.auth.uid == resource.data.parentId ||
+        request.auth.uid == resource.data.specialistId ||
+        isAdmin()
+      );
+
+      // Create: only parent can initiate; must own child, status MUST be 'pending', deterministic ID, valid expiry timestamp, verified specialist, purpose, notice version, valid categories
+      allow create: if isAuthenticated() && (
+        isAdmin() || (
+          caseId == request.resource.data.childId + '_' + request.resource.data.specialistId &&
+          request.auth.uid == request.resource.data.parentId &&
+          request.resource.data.specialistId != request.auth.uid &&
+          isParentOfChild(request.resource.data.childId) &&
+          request.resource.data.status == 'pending' &&
+          request.resource.data.get('revokedAt', null) == null &&
+          request.resource.data.get('consentExpiresAt', null) != null &&
+          request.resource.data.consentExpiresAt is timestamp &&
+          request.resource.data.consentExpiresAt > request.time &&
+          isTargetSpecialistVerified(request.resource.data.specialistId) &&
+          request.resource.data.get('purpose', '') is string &&
+          request.resource.data.get('purpose', '').size() >= 3 &&
+          request.resource.data.get('purpose', '').size() <= 500 &&
+          (request.resource.data.get('consentNoticeVersion', request.resource.data.get('consent_notice_version', '')) is string &&
+           request.resource.data.get('consentNoticeVersion', request.resource.data.get('consent_notice_version', '')).size() > 0) &&
+          isValidConsentCategoryList(request.resource.data.get('authorizedDataCategories', request.resource.data.get('consentCategories', [])))
+        )
+      );
+
+      // Update: parent can only revoke; verified specialist can only transition lifecycle
+      // Specialist cannot modify consent categories, expiry, purpose, or IDs
+      allow update: if isAuthenticated() && (
+        isAdmin() || (
+          // Parent revocation
+          request.auth.uid == resource.data.parentId &&
+          request.resource.data.status == 'revoked' &&
+          request.resource.data.get('revokedAt', null) != null &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status', 'revokedAt', 'statusUpdatedAt', 'revocationReason', 'updatedAt'
+          ])
+        ) || (
+          // Specialist lifecycle transition
+          request.auth.uid == resource.data.specialistId &&
+          isSpecialistUser() &&
+          resource.data.parentId != request.auth.uid &&
+          resource.data.get('revokedAt', null) == null &&
+          resource.data.get('consentExpiresAt', null) != null &&
+          resource.data.consentExpiresAt is timestamp &&
+          resource.data.consentExpiresAt > request.time &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status', 'statusUpdatedAt', 'acceptedAt', 'declinedAt', 'declineReason', 'completedAt', 'resolutionNotes', 'updatedAt'
+          ]) &&
+          (
+            (resource.data.status == 'pending' && request.resource.data.status in ['accepted', 'declined']) ||
+            (resource.data.status in ['accepted', 'active'] && request.resource.data.status in ['active', 'completed'])
+          )
+        )
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // =========================================================================
+    // OBSERVATIONS (Clinical vs Educational Role Separation, Immutable Audit)
+    // =========================================================================
+    match /llgObservations/{obsId} {
+      allow read: if isAuthenticated() && (
+        request.auth.uid == resource.data.llgId ||
+        isParentOfChild(resource.data.childId) ||
+        specialistHasObservationsAccess(resource.data.childId) ||
+        isAdmin()
+      );
+
+      // Create: Specialist with active unexpired consented case for observations
+      allow create: if isAuthenticated() &&
+        isSpecialistUser() &&
+        request.auth.uid == request.resource.data.llgId &&
+        specialistHasObservationsAccess(request.resource.data.childId) &&
+        request.resource.data.keys().hasOnly([
+          'childId', 'llgId', 'llgName', 'authorRole', 'isClinicalGrade',
+          'flagEventId', 'observation', 'recommendations', 'severity',
+          'referralNeeded', 'recordedAt', 'isImmutable'
+        ]) &&
+        (
+          isClinicalSpecialist() ?
+            request.resource.data.get('severity', 'guidance') in ['guidance', 'mild', 'moderate', 'high', 'critical'] :
+            (!(request.resource.data.get('severity', 'guidance') in ['critical', 'high']) &&
+             request.resource.data.get('referralNeeded', false) == false &&
+             request.resource.data.get('isClinicalGrade', false) == false)
+        );
+
       allow update, delete: if false; // Immutable audit log
     }
 
-    match /recommendedActivities/{childId}/domains/{domain} {
-      allow read, write: if request.auth != null;
+    // =========================================================================
+    // SPECIALIST PROFILES & VERIFICATION
+    // =========================================================================
+    match /llgProfiles/{llgId} {
+      // Verified specialist directory is readable by authenticated users; unverified private to self/admin
+      allow read: if (isAuthenticated() && resource.data.get('isVerified', false) == true) ||
+                     isUser(llgId) ||
+                     isAdmin();
+
+      allow create: if isAdmin() || (
+        isUser(llgId) &&
+        request.resource.data.get('isVerified', false) == false &&
+        request.resource.data.get('verificationStatus', '') != 'verified'
+      );
+
+      allow update: if isAdmin() || (
+        isUser(llgId) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'isVerified', 'verificationStatus', 'approvedAt', 'verifiedAt'
+        ])
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    match /llgCertificateVerifications/{verifyId} {
+      // Sensitive certificates restricted to the specialist themselves and admin
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.llgId || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    // =========================================================================
+    // SCORE EVENTS, SKILL PROFILES, SCORE LEDGER & JOURNEY PROGRESS
+    // =========================================================================
+    match /scoreEvents/{eventId} {
+      allow read: if isParentOfChild(resource.data.childId) || 
+                     specialistHasScoresAccess(resource.data.childId) || 
+                     isAdmin();
+      // Authoritative growth data: deny direct client writes to prevent score fabrication.
+      // Score calculation & ledger creation occur strictly via backend operations using Firebase Admin SDK.
+      allow write: if false;
+    }
+
+    match /skillProfiles/{childId} {
+      allow read: if isParentOfChild(childId) || specialistHasScoresAccess(childId) || isAdmin();
+      // Authoritative skill mastery: deny direct client writes.
+      // Recomputed server-side via trusted backend operations using Firebase Admin SDK.
+      allow write: if false;
+    }
+
+    match /scoreLedger/{childId} {
+      allow read: if isParentOfChild(childId) || specialistHasScoresAccess(childId) || isAdmin();
+      allow write: if false; // Authoritative score ledger writes strictly via backend Admin SDK.
+      
+      match /events/{eventId} {
+        allow read: if isParentOfChild(childId) || specialistHasScoresAccess(childId) || isAdmin();
+        allow write: if false;
+      }
+    }
+
+    match /journeyProgress/{childId} {
+      allow read: if isParentOfChild(childId) || specialistHasActivitiesAccess(childId) || isAdmin();
+      // Authoritative mastery and progression: deny direct client writes.
+      // Progression calculation & level unlocking occur strictly via backend operations using Firebase Admin SDK.
+      allow write: if false;
+    }
+
+    match /journeys/{childId} {
+      allow read: if isParentOfChild(childId) || specialistHasActivitiesAccess(childId) || isAdmin();
+      allow write: if isParentOfChild(childId) || isAdmin();
+    }
+
+    match /rewards/{childId} {
+      allow read: if isParentOfChild(childId) || specialistHasActivitiesAccess(childId) || isAdmin();
+      allow write: if isParentOfChild(childId) || isAdmin();
+    }
+
+    // =========================================================================
+    // SAVED ACTIVITIES & STORIES (Personal bookmarks per parent & child)
+    // =========================================================================
+    match /savedActivities/{activityId} {
+      allow read, delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid &&
+        isParentOfChild(request.resource.data.childId);
+      allow update: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == request.auth.uid;
+    }
+
+    match /savedStories/{storyId} {
+      allow read, delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid &&
+        isParentOfChild(request.resource.data.childId);
+      allow update: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == request.auth.uid;
+    }
+
+    // =========================================================================
+    // FLAGS & FLAG STATE
+    // =========================================================================
+    match /flagState/{childId} {
+      allow read: if isParentOfChild(childId) || specialistHasObservationsAccess(childId) || isAdmin();
+      allow write: if isParentOfChild(childId) || isAdmin();
+    }
+
+    match /flags/{flagId} {
+      allow read: if isAuthenticated() && (
+        isParentOfChild(resource.data.childId) ||
+        specialistHasObservationsAccess(resource.data.childId) ||
+        isAdmin()
+      );
+      allow create: if isAuthenticated() && (
+        isParentOfChild(request.resource.data.childId) ||
+        specialistHasObservationsAccess(request.resource.data.childId) ||
+        isAdmin()
+      );
+      allow update, delete: if false; // Immutable audit log
+    }
+
+    // =========================================================================
+    // NOTIFICATIONS, TIPS, FEEDBACK & AUDIT LOGS
+    // =========================================================================
+    match /notifications/{notifId} {
+      allow read, update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      
+      // Strict notification anti-spoofing & case lifecycle verification
+      // Restricts permitted fields, verifies sender identity, recipient, child, specialist assignment, and active unexpired/unrevoked case
+      allow create: if isAuthenticated() && (
+        isAdmin() || (
+          // Field schema lockdown & sender verification
+          request.resource.data.keys().hasOnly([
+            'userId', 'childId', 'title', 'message', 'body', 'type',
+            'caseId', 'senderId', 'createdAt', 'read', 'readAt', 'data',
+            'childName', 'parentId', 'parentName'
+          ]) &&
+          request.resource.data.get('senderId', request.auth.uid) == request.auth.uid && (
+            // 1. User notifying themselves
+            request.resource.data.userId == request.auth.uid ||
+            // 2. Parent notifying assigned specialist through active/unexpired/unrevoked consultation
+            (request.resource.data.get('childId', '') is string &&
+             isParentOfChild(request.resource.data.childId) &&
+             exists(/databases/$(database)/documents/specialistCases/$(request.resource.data.childId + '_' + request.resource.data.userId)) &&
+             get(/databases/$(database)/documents/specialistCases/$(request.resource.data.childId + '_' + request.resource.data.userId)).data.parentId == request.auth.uid &&
+             get(/databases/$(database)/documents/specialistCases/$(request.resource.data.childId + '_' + request.resource.data.userId)).data.status in ['pending', 'accepted', 'active'] &&
+             get(/databases/$(database)/documents/specialistCases/$(request.resource.data.childId + '_' + request.resource.data.userId)).data.get('revokedAt', null) == null &&
+             get(/databases/$(database)/documents/specialistCases/$(request.resource.data.childId + '_' + request.resource.data.userId)).data.get('consentExpiresAt', null) != null &&
+             get(/databases/$(database)/documents/specialistCases/$(request.resource.data.childId + '_' + request.resource.data.userId)).data.consentExpiresAt is timestamp &&
+             get(/databases/$(database)/documents/specialistCases/$(request.resource.data.childId + '_' + request.resource.data.userId)).data.consentExpiresAt > request.time) ||
+            // 3. Specialist notifying parent through active/unexpired/unrevoked consultation
+            (request.resource.data.get('childId', '') is string &&
+             exists(/databases/$(database)/documents/specialistCases/$(request.resource.data.childId + '_' + request.auth.uid)) &&
+             get(/databases/$(database)/documents/specialistCases/$(request.resource.data.childId + '_' + request.auth.uid)).data.specialistId == request.auth.uid &&
+             get(/databases/$(database)/documents/specialistCases/$(request.resource.data.childId + '_' + request.auth.uid)).data.parentId == request.resource.data.userId &&
+             get(/databases/$(database)/documents/specialistCases/$(request.resource.data.childId + '_' + request.auth.uid)).data.status in ['accepted', 'active'] &&
+             get(/databases/$(database)/documents/specialistCases/$(request.resource.data.childId + '_' + request.auth.uid)).data.get('revokedAt', null) == null &&
+             get(/databases/$(database)/documents/specialistCases/$(request.resource.data.childId + '_' + request.auth.uid)).data.get('consentExpiresAt', null) != null &&
+             get(/databases/$(database)/documents/specialistCases/$(request.resource.data.childId + '_' + request.auth.uid)).data.consentExpiresAt is timestamp &&
+             get(/databases/$(database)/documents/specialistCases/$(request.resource.data.childId + '_' + request.auth.uid)).data.consentExpiresAt > request.time)
+          )
+        )
+      );
+    }
+
+    match /adminAuditLogs/{logId} {
+      // Authoritative audit integrity: Deny ALL client SDK writes (including administrator clients)
+      // to guarantee audit records cannot be forged or tampered with by any client application.
+      // Audit records are written exclusively through trusted backend operations with verified tokens.
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /tips/{tipId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /feedback/{feedbackId} {
+      allow read: if isAuthenticated() && (
+        isParentOfChild(resource.data.childId) ||
+        specialistHasObservationsAccess(resource.data.childId) ||
+        isAdmin()
+      );
+      allow create: if isAuthenticated() &&
+        isParentOfChild(request.resource.data.childId) &&
+        request.resource.data.parentId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // =========================================================================
+    // ACTIVITIES & RECOMMENDATIONS
+    // =========================================================================
+    match /activities/{activityId} {
+      allow read: if isAuthenticated();
+      // Restrict global activity publishing to authorized administrator role only
+      allow write: if isAdmin();
     }
 
     match /activeActivities/{childId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isParentOfChild(childId) || isAdmin();
     }
 
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+    match /recommendedActivities/{childId} {
+      allow read, write: if isParentOfChild(childId) || isAdmin();
+      match /domains/{domain} {
+        allow read, write: if isParentOfChild(childId) || isAdmin();
+      }
+    }
+
+    // =========================================================================
+    // PERSONALIZED LLG RECOMMENDATIONS
+    // =========================================================================
+    match /recommendations/{recommendationId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() ||
+        request.auth.uid == resource.data.parentId ||
+        request.auth.uid == resource.data.llgId ||
+        isParentOfChild(resource.data.childId) ||
+        specialistHasActivitiesAccess(resource.data.childId)
+      );
+      allow create: if isAuthenticated() && (
+        isAdmin() || (
+          isSpecialistUser() &&
+          request.auth.uid == request.resource.data.llgId &&
+          hasActiveSpecialistCase(request.resource.data.childId)
+        )
+      );
+      allow update: if isAuthenticated() && (
+        isAdmin() ||
+        (request.auth.uid == resource.data.llgId) ||
+        (request.auth.uid == resource.data.parentId && isParentOfChild(resource.data.childId))
+      );
+      allow delete: if isAdmin();
+    }
+
+    // =========================================================================
+    // SECURE TWO-WAY CONVERSATIONS & MESSAGING
+    // =========================================================================
+    match /conversations/{caseId} {
+      allow read, write: if isAuthenticated() && (
+        isAdmin() || (
+          exists(/databases/$(database)/documents/specialistCases/$(caseId)) &&
+          (request.auth.uid == get(/databases/$(database)/documents/specialistCases/$(caseId)).data.parentId ||
+           request.auth.uid == get(/databases/$(database)/documents/specialistCases/$(caseId)).data.specialistId)
+        )
+      );
+
+      match /messages/{messageId} {
+        allow read: if isAuthenticated() && (
+          isAdmin() ||
+          request.auth.uid == resource.data.senderId ||
+          request.auth.uid == resource.data.recipientId ||
+          (exists(/databases/$(database)/documents/specialistCases/$(caseId)) &&
+           (request.auth.uid == get(/databases/$(database)/documents/specialistCases/$(caseId)).data.parentId ||
+            request.auth.uid == get(/databases/$(database)/documents/specialistCases/$(caseId)).data.specialistId))
+        );
+        allow create: if isAuthenticated() && (
+          isAdmin() || (
+            request.auth.uid == request.resource.data.senderId &&
+            exists(/databases/$(database)/documents/specialistCases/$(caseId)) &&
+            (request.auth.uid == get(/databases/$(database)/documents/specialistCases/$(caseId)).data.parentId ||
+             request.auth.uid == get(/databases/$(database)/documents/specialistCases/$(caseId)).data.specialistId) &&
+            get(/databases/$(database)/documents/specialistCases/$(caseId)).data.status in ['accepted', 'active'] &&
+            get(/databases/$(database)/documents/specialistCases/$(caseId)).data.get('revokedAt', null) == null
+          )
+        );
+        allow update: if isAuthenticated() && (
+          isAdmin() || request.auth.uid == resource.data.recipientId
+        );
+        allow delete: if isAdmin();
+      }
+    }
+
+    // =========================================================================
+    // CONTACT SHARING CONSENT
+    // =========================================================================
+    match /contactConsents/{caseId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() ||
+        request.auth.uid == resource.data.parentId ||
+        request.auth.uid == resource.data.specialistId
+      );
+      allow create: if isAuthenticated() && (
+        isAdmin() || (
+          (request.auth.uid == request.resource.data.parentId || request.auth.uid == request.resource.data.specialistId) &&
+          exists(/databases/$(database)/documents/specialistCases/$(caseId)) &&
+          (request.auth.uid == get(/databases/$(database)/documents/specialistCases/$(caseId)).data.parentId ||
+           request.auth.uid == get(/databases/$(database)/documents/specialistCases/$(caseId)).data.specialistId)
+        )
+      );
+      allow update: if isAuthenticated() && (
+        isAdmin() ||
+        request.auth.uid == resource.data.parentId ||
+        request.auth.uid == resource.data.specialistId
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /contactConsentRequests/{reqId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() ||
+        request.auth.uid == resource.data.requesterId ||
+        request.auth.uid == resource.data.recipientId
+      );
+      allow create: if isAuthenticated() && (
+        isAdmin() || (
+          request.auth.uid == request.resource.data.requesterId &&
+          request.resource.data.requesterId != request.resource.data.recipientId &&
+          exists(/databases/$(database)/documents/specialistCases/$(request.resource.data.caseId))
+        )
+      );
+      allow update: if isAuthenticated() && (
+        isAdmin() ||
+        request.auth.uid == resource.data.recipientId ||
+        request.auth.uid == resource.data.requesterId
+      );
+      allow delete: if isAdmin();
+    }
+
+    // =========================================================================
+    // CONSULTATION SUMMARIES
+    // =========================================================================
+    match /consultationSummaries/{summaryId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() ||
+        request.auth.uid == resource.data.parentId ||
+        request.auth.uid == resource.data.specialistId ||
+        isParentOfChild(resource.data.childId) ||
+        specialistHasObservationsAccess(resource.data.childId)
+      );
+      allow create: if isAuthenticated() && (
+        isAdmin() || (
+          isSpecialistUser() &&
+          request.auth.uid == request.resource.data.specialistId &&
+          hasActiveSpecialistCase(request.resource.data.childId)
+        )
+      );
+      allow update, delete: if isAdmin();
+    }
+
+    // =========================================================================
+    // SPECIALIST REPORTS
+    // =========================================================================
+    match /specialistReports/{reportId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() ||
+        request.auth.uid == resource.data.parentId ||
+        request.auth.uid == resource.data.specialistId ||
+        isParentOfChild(resource.data.childId)
+      );
+      allow create: if isAuthenticated() && (
+        isAdmin() || (
+          isSpecialistUser() &&
+          request.auth.uid == request.resource.data.specialistId
+        )
+      );
+      allow update: if isAuthenticated() && (
+        isAdmin() ||
+        request.auth.uid == resource.data.specialistId ||
+        (request.auth.uid == resource.data.parentId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readByParentAt']))
+      );
+      allow delete: if isAdmin();
+    }
+
+    // =========================================================================
+    // PARENT COMPLAINTS
+    // =========================================================================
+    match /parentComplaints/{complaintId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() ||
+        request.auth.uid == resource.data.parentId
+      );
+      allow create: if isAuthenticated() && (
+        isAdmin() ||
+        request.auth.uid == request.resource.data.parentId
+      );
+      allow update, delete: if isAdmin();
+    }
+
+    // =========================================================================
+    // SPECIALIST REVIEWS
+    // =========================================================================
+    match /specialistReviews/{reviewId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() ||
+        request.auth.uid == resource.data.parentId ||
+        request.auth.uid == resource.data.specialistId ||
+        resource.data.get('isModerated', false) == false
+      );
+      allow create: if isAuthenticated() && (
+        isAdmin() || (
+          request.auth.uid == request.resource.data.parentId &&
+          request.resource.data.rating >= 1 &&
+          request.resource.data.rating <= 5
+        )
+      );
+      allow update: if isAuthenticated() && (
+        isAdmin() ||
+        (request.auth.uid == resource.data.parentId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating', 'reviewText', 'updatedAt']))
+      );
+      allow delete: if isAdmin();
+    }
+
+    // =========================================================================
+    // LLG APPEALS
+    // =========================================================================
+    match /llgAppeals/{appealId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() ||
+        request.auth.uid == resource.data.llgId
+      );
+      allow create: if isAuthenticated() && (
+        isAdmin() ||
+        request.auth.uid == request.resource.data.llgId
+      );
+      allow update, delete: if isAdmin();
     }
   }
 }

@@ -13,6 +13,7 @@ import 'screens/parent/parent_dashboard.dart';
 import 'screens/parent/ai_activity_generator.dart';
 import 'screens/admin/admin_dashboard.dart';
 import 'screens/llg/llg_dashboard.dart';
+import 'screens/llg/suspended_account_screen.dart';
 import 'screens/parent/llg_connect_page.dart';
 import 'widgets/mobile_only_gate.dart';
 import 'services/auth_service.dart';
@@ -82,6 +83,7 @@ class MyApp extends StatelessWidget {
               ),
           '/admin-dashboard': (context) => const AdminDashboard(),
           '/llg-dashboard': (context) => const LLGDashboard(),
+          '/suspended-account': (context) => const SuspendedAccountScreen(),
           '/ai-generator': (context) => const AIActivityGeneratorScreen(),
           '/llg-connect': (context) => const LLGConnectPage(),
           '/specialist-support': (context) => const LLGConnectPage(),
@@ -115,6 +117,8 @@ class AuthWrapper extends StatelessWidget {
         final role = snapshot.data ?? 'parent';
 
         switch (role) {
+          case 'suspended':
+            return const SuspendedAccountScreen();
           case 'admin':
             return const AdminDashboard();
           case 'llg':

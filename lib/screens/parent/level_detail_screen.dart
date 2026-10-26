@@ -1502,6 +1502,14 @@ class _LevelDetailScreenState extends State<LevelDetailScreen> with SingleTicker
                                   ),
                                 ),
                               ),
+                              if (isCompleted)
+                                Text(
+                                  'Completed · Tap to replay',
+                                  style: MeadowTypography.caption.copyWith(
+                                    color: MeadowColors.textSecondary,
+                                    fontSize: 10,
+                                  ),
+                                ),
                               Text(
                                 '${activity.duration} min · ${activity.difficulty}',
                                 style: MeadowTypography.caption.copyWith(color: MeadowColors.textSecondary),

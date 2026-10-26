@@ -365,6 +365,11 @@ class AuthService extends ChangeNotifier {
       final doc = await _firestore.collection('users').doc(uid).get();
       if (doc.exists) {
         final data = doc.data();
+        final status = data?['status'] as String? ?? '';
+        final isSuspended = data?['isSuspended'] as bool? ?? false;
+        if (status == 'suspended' || isSuspended) {
+          return 'suspended';
+        }
         return data?['userType'] as String? ?? 'parent';
       }
       return 'parent';
